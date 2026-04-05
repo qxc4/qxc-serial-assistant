@@ -6,12 +6,6 @@ type ParityType = 'none' | 'even' | 'odd'
 
 /** 最大保留数据条数（环形缓冲区容量） */
 const MAX_DATA_ENTRIES = 10000
-/** 是否启用断线重连 */
-const AUTO_RECONNECT_ENABLED = ref(true)
-/** 重连间隔（毫秒） */
-const RECONNECT_INTERVAL = 3000
-/** 重连最大尝试次数 */
-const MAX_RECONNECT_ATTEMPTS = 5
 
 // 状态提升为全局单例，保证跨页面切换（Router）时串口连接状态不丢失
 const isSupported = ref('serial' in navigator)
@@ -19,6 +13,12 @@ const isConnected = ref(false)
 const port = ref<SerialPort | null>(null)
 const reader = ref<ReadableStreamDefaultReader | null>(null)
 const writer = ref<WritableStreamDefaultWriter | null>(null)
+
+/** 获取重连配置 */
+const getReconnectSettings = () => {
+  const settingsStore = useSettingsStore()
+  return settingsStore.config.reconnectSettings
+}
 
 /** 字符编码类型 */
 type CharEncoding = 'utf8' | 'ascii' | 'hex' | 'gbk'
@@ -374,7 +374,8 @@ export function useSerial() {
    * 尝试重新连接
    */
   async function attemptReconnect(): Promise<boolean> {
-    if (!lastConnectConfig || !AUTO_RECONNECT_ENABLED.value) return false
+    const reconnectSettings = getReconnectSettings()
+    if (!lastConnectConfig || !reconnectSettings.enabled) return false
     
     isReconnecting.value = true
     reconnectAttempts.value++
@@ -397,11 +398,11 @@ export function useSerial() {
         return true
       }
     } catch (err) {
-      console.warn(`重连尝试 ${reconnectAttempts.value}/${MAX_RECONNECT_ATTEMPTS} 失败:`, err)
+      console.warn(`重连尝试 ${reconnectAttempts.value}/${reconnectSettings.maxAttempts} 失败:`, err)
     }
     
-    if (reconnectAttempts.value < MAX_RECONNECT_ATTEMPTS) {
-      await new Promise(r => setTimeout(r, RECONNECT_INTERVAL))
+    if (reconnectAttempts.value < reconnectSettings.maxAttempts) {
+      await new Promise(r => setTimeout(r, reconnectSettings.interval))
       return attemptReconnect()
     }
     
@@ -429,7 +430,8 @@ export function useSerial() {
           }
         }
       } catch (error: any) {
-        if (error.name === 'NetworkError' && AUTO_RECONNECT_ENABLED.value) {
+        const reconnectSettings = getReconnectSettings()
+        if (error.name === 'NetworkError' && reconnectSettings.enabled) {
           isConnected.value = false
           console.log('检测到连接断开，尝试自动重连...')
           const reconnected = await attemptReconnect()
@@ -602,7 +604,6 @@ export function useSerial() {
     send,
     clearData,
     exportData,
-    redecodeAllData,
-    AUTO_RECONNECT_ENABLED
+    redecodeAllData
   }
 }

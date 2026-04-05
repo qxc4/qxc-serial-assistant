@@ -1061,7 +1061,7 @@ const runLoop = async () => {
               <button @click="showGroupLoader = !showGroupLoader" class="py-1.5 px-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 rounded text-xs flex items-center gap-1 transition-colors">
                 <FolderOpen class="w-3 h-3"/> {{ t('serial.loadGroup') }}
               </button>
-              <button @click="cg.clearCommands()" class="py-1.5 px-2 text-slate-400 hover:text-red-500 rounded text-xs transition-colors" title="清空所有">
+              <button @click="cg.clearCommands()" class="py-1.5 px-2 text-slate-400 hover:text-red-500 rounded text-xs transition-colors" :title="t('serial.clearAll')">
                 <Trash2 class="w-3.5 h-3.5"/>
               </button>
             </div>
@@ -1085,7 +1085,7 @@ const runLoop = async () => {
               </div>
             </div>
             <div v-else-if="showGroupLoader && (cg.savedGroups.value?.length || 0) === 0" class="px-3 py-2 text-xs text-slate-400 text-center">
-              暂无已保存的指令组
+              {{ t('serial.noSavedGroups') }}
             </div>
 
             <!-- 执行日志折叠区 -->

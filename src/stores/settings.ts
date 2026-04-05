@@ -34,6 +34,12 @@ export interface UISettings {
   }
 }
 
+export interface ReconnectSettings {
+  enabled: boolean
+  interval: number
+  maxAttempts: number
+}
+
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system'
   language: 'zh-CN' | 'en-US'
@@ -43,6 +49,7 @@ export interface AppSettings {
   serialDefaults: SerialDefaults
   lastUsedPort?: PortInfo
   uiSettings: UISettings
+  reconnectSettings: ReconnectSettings
 }
 
 const DEFAULT_UI_SETTINGS: UISettings = {
@@ -61,6 +68,12 @@ const DEFAULT_UI_SETTINGS: UISettings = {
   },
 }
 
+const DEFAULT_RECONNECT_SETTINGS: ReconnectSettings = {
+  enabled: true,
+  interval: 3000,
+  maxAttempts: 5,
+}
+
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   language: 'zh-CN',
@@ -75,6 +88,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   lastUsedPort: undefined,
   uiSettings: { ...DEFAULT_UI_SETTINGS },
+  reconnectSettings: { ...DEFAULT_RECONNECT_SETTINGS },
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -111,6 +125,19 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if (!config.value.uiSettings.toolbarExpanded) {
         config.value.uiSettings.toolbarExpanded = { ...DEFAULT_UI_SETTINGS.toolbarExpanded }
+      }
+    }
+    if (!config.value.reconnectSettings) {
+      config.value.reconnectSettings = { ...DEFAULT_RECONNECT_SETTINGS }
+    } else {
+      if (config.value.reconnectSettings.enabled === undefined) {
+        config.value.reconnectSettings.enabled = DEFAULT_RECONNECT_SETTINGS.enabled
+      }
+      if (config.value.reconnectSettings.interval === undefined) {
+        config.value.reconnectSettings.interval = DEFAULT_RECONNECT_SETTINGS.interval
+      }
+      if (config.value.reconnectSettings.maxAttempts === undefined) {
+        config.value.reconnectSettings.maxAttempts = DEFAULT_RECONNECT_SETTINGS.maxAttempts
       }
     }
   }
