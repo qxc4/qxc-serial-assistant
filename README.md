@@ -14,8 +14,25 @@
 
 [![在线体验](https://img.shields.io/badge/-在线体验-1081FF?style=flat&logo=google-chrome&logoColor=white)](#-在线体验)
 [![快速开始](https://img.shields.io/badge/-快速开始-10B981?style=flat&logo=git&logoColor=white)](#-快速开始)
+[![GitHub Stars](https://img.shields.io/github/stars/qxc4/qxc-serial-assistant?style=social)](https://github.com/qxc4/qxc-serial-assistant)
+[![GitHub Forks](https://img.shields.io/github/forks/qxc4/qxc-serial-assistant?style=social)](https://github.com/qxc4/qxc-serial-assistant)
 
 </div>
+
+---
+
+## 📋 目录
+
+- [🌐 在线体验](#-在线体验)
+- [✨ 功能特性](#-功能特性)
+- [⌨️ 快捷键](#️-快捷键)
+- [🚀 快速开始](#-快速开始)
+- [💻 系统要求](#-系统要求)
+- [🏗️ 项目结构](#️-项目结构)
+- [🛠️ 技术栈](#️-技术栈)
+- [👨‍💻 开发者](#-开发者)
+- [📄 许可证](#-许可证)
+- [🙏 感谢](#-感谢)
 
 ---
 
@@ -29,7 +46,7 @@
 
 ## ✨ 功能特性
 
-### � 串口通信
+### 🔌 串口通信
 
 | 功能 | 说明 |
 |:-----|:-----|
@@ -39,7 +56,7 @@
 | `自动重连` | 断开后自动重连（最多5次） |
 | `实时统计` | 收发字节数实时显示 |
 
-### � 数据显示
+### 📊 数据显示
 
 | 功能 | 说明 |
 |:-----|:-----|
@@ -58,7 +75,7 @@
 | `指令组` | 创建、保存、加载、另存为 |
 | `执行控制` | 开始/暂停/停止执行 |
 
-### � 数据工具
+### 🛠️ 数据工具
 
 | 功能 | 说明 |
 |:-----|:-----|
@@ -66,9 +83,8 @@
 | `ASCII 表` | 完整 ASCII 字符参考 |
 | `Modbus 解析` | RTU/ASCII 协议解析 |
 | `数据图表` | 实时数据可视化 |
-| `网络调试` | TCP 客户端支持 |
 
-### � 用户体验
+### 🎨 用户体验
 
 | 功能 | 说明 |
 |:-----|:-----|
@@ -137,7 +153,6 @@ src/
 ├── composables/           # 组合式函数
 │   ├── useSerial.ts       # 串口通信
 │   ├── useChart.ts        # 数据图表
-│   ├── useNetwork.ts      # 网络通信
 │   ├── useDataParse.ts    # 数据解析
 │   ├── useCommandGroup.ts # 指令组
 │   ├── useI18n.ts         # 国际化
@@ -145,7 +160,6 @@ src/
 ├── views/                 # 页面组件
 │   ├── SerialView.vue     # 串口主界面
 │   ├── ChartView.vue      # 数据图表
-│   ├── NetworkView.vue    # 网络调试
 │   ├── ModbusView.vue     # Modbus解析
 │   ├── SettingsView.vue   # 设置页面
 │   ├── ProfileView.vue    # 开发者
