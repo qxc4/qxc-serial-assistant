@@ -40,6 +40,16 @@ export interface ReconnectSettings {
   maxAttempts: number
 }
 
+export interface ShortcutSettings {
+  send: string
+  toggleConnect: string
+  clearData: string
+  saveGroup: string
+  toggleExecution: string
+  stopExecution: string
+  showHelp: string
+}
+
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system'
   language: 'zh-CN' | 'en-US'
@@ -50,6 +60,7 @@ export interface AppSettings {
   lastUsedPort?: PortInfo
   uiSettings: UISettings
   reconnectSettings: ReconnectSettings
+  shortcutSettings: ShortcutSettings
 }
 
 const DEFAULT_UI_SETTINGS: UISettings = {
@@ -74,6 +85,16 @@ const DEFAULT_RECONNECT_SETTINGS: ReconnectSettings = {
   maxAttempts: 5,
 }
 
+const DEFAULT_SHORTCUT_SETTINGS: ShortcutSettings = {
+  send: 'Ctrl+Enter',
+  toggleConnect: 'Ctrl+Shift+C',
+  clearData: 'Ctrl+Shift+X',
+  saveGroup: 'Ctrl+S',
+  toggleExecution: 'Space',
+  stopExecution: 'Escape',
+  showHelp: '?',
+}
+
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   language: 'zh-CN',
@@ -89,6 +110,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   lastUsedPort: undefined,
   uiSettings: { ...DEFAULT_UI_SETTINGS },
   reconnectSettings: { ...DEFAULT_RECONNECT_SETTINGS },
+  shortcutSettings: { ...DEFAULT_SHORTCUT_SETTINGS },
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -138,6 +160,16 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if (config.value.reconnectSettings.maxAttempts === undefined) {
         config.value.reconnectSettings.maxAttempts = DEFAULT_RECONNECT_SETTINGS.maxAttempts
+      }
+    }
+    if (!config.value.shortcutSettings) {
+      config.value.shortcutSettings = { ...DEFAULT_SHORTCUT_SETTINGS }
+    } else {
+      const shortcuts = ['send', 'toggleConnect', 'clearData', 'saveGroup', 'toggleExecution', 'stopExecution', 'showHelp'] as const
+      for (const key of shortcuts) {
+        if (config.value.shortcutSettings[key] === undefined) {
+          config.value.shortcutSettings[key] = DEFAULT_SHORTCUT_SETTINGS[key]
+        }
       }
     }
   }
@@ -203,6 +235,11 @@ export const useSettingsStore = defineStore('settings', () => {
   const resetToDefault = () => {
     config.value = JSON.parse(JSON.stringify(DEFAULT_SETTINGS))
     showToast('已恢复默认设置')
+  }
+
+  const resetShortcuts = () => {
+    config.value.shortcutSettings = { ...DEFAULT_SHORTCUT_SETTINGS }
+    showToast('快捷键已恢复默认')
   }
 
   const exportConfig = (): string => {
@@ -282,6 +319,7 @@ export const useSettingsStore = defineStore('settings', () => {
     toastVisible,
     applyTheme,
     resetToDefault,
+    resetShortcuts,
     exportConfig,
     downloadConfig,
     importConfig,

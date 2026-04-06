@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { useI18n } from '../composables/useI18n'
 import { useFileSave } from '../composables/useFileSave'
-import { CheckCircle2, RotateCcw, Save, Heart, Download, FileJson, FileText, FolderOpen, ExternalLink } from 'lucide-vue-next'
+import { CheckCircle2, RotateCcw, Save, Heart, Download, FileJson, FileText, FolderOpen, ExternalLink, Keyboard } from 'lucide-vue-next'
 import DonateModal from '../components/DonateModal.vue'
 import SaveStatusToast from '../components/SaveStatusToast.vue'
 
@@ -13,6 +13,91 @@ const fileSave = useFileSave()
 
 /** 打赏弹窗显示状态 */
 const showDonateModal = ref(false)
+
+/** 正在编辑的快捷键 */
+const editingShortcut = ref<string | null>(null)
+
+/** 快捷键列表 */
+const shortcutList = [
+  { key: 'send', labelKey: 'serial.shortcutSend' },
+  { key: 'toggleConnect', labelKey: 'serial.shortcutConnect' },
+  { key: 'clearData', labelKey: 'serial.shortcutClear' },
+  { key: 'saveGroup', labelKey: 'serial.shortcutSave' },
+  { key: 'toggleExecution', labelKey: 'serial.shortcutPause' },
+  { key: 'stopExecution', labelKey: 'serial.shortcutStop' },
+  { key: 'showHelp', labelKey: 'serial.shortcutShowHelp' },
+]
+
+/**
+ * 开始编辑快捷键
+ */
+function startEditShortcut(key: string): void {
+  editingShortcut.value = key
+}
+
+/**
+ * 取消编辑快捷键
+ */
+function cancelEditShortcut(): void {
+  editingShortcut.value = null
+}
+
+/**
+ * 格式化快捷键显示
+ */
+function formatShortcut(shortcut: string): string {
+  return shortcut
+    .replace('Ctrl', 'Ctrl')
+    .replace('Shift', 'Shift')
+    .replace('Alt', 'Alt')
+    .replace(/\+/g, ' + ')
+}
+
+/**
+ * 处理键盘按下事件
+ */
+function handleKeyDown(event: KeyboardEvent): void {
+  if (!editingShortcut.value) return
+  
+  event.preventDefault()
+  event.stopPropagation()
+  
+  const parts: string[] = []
+  
+  if (event.ctrlKey) parts.push('Ctrl')
+  if (event.shiftKey) parts.push('Shift')
+  if (event.altKey) parts.push('Alt')
+  
+  const key = event.key.toUpperCase()
+  if (!['CONTROL', 'SHIFT', 'ALT', 'META'].includes(key)) {
+    if (key === ' ') parts.push('Space')
+    else if (key === 'ESCAPE') parts.push('Escape')
+    else if (key === 'ENTER') parts.push('Enter')
+    else if (key.length === 1) parts.push(key)
+    else parts.push(key)
+  }
+  
+  if (parts.length > 0 && !['CONTROL', 'SHIFT', 'ALT', 'META'].includes(key)) {
+    const shortcut = parts.join('+')
+    store.config.shortcutSettings[editingShortcut.value as keyof typeof store.config.shortcutSettings] = shortcut
+    editingShortcut.value = null
+  }
+}
+
+/**
+ * 重置快捷键到默认值
+ */
+function handleResetShortcuts(): void {
+  store.resetShortcuts()
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyDown)
+})
 
 const handleResetSerial = () => {
   store.config.serialDefaults = {
@@ -275,6 +360,46 @@ async function handleExportAllData(): Promise<void> {
                 <option>{{ t('settings.portNumberDesc') }}</option>
               </select>
               <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">{{ t('settings.portNumberDesc') }}</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Shortcut Settings -->
+        <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border dark:border-slate-700 shadow-sm transition-colors md:col-span-2">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <Keyboard class="w-5 h-5 text-blue-500" />
+              {{ t('settings.shortcuts') }}
+            </h2>
+            <button 
+              @click="handleResetShortcuts" 
+              class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 rounded-md text-xs transition-colors"
+            >
+              <RotateCcw class="w-3.5 h-3.5" />
+              {{ t('settings.reset') }}
+            </button>
+          </div>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">{{ t('settings.shortcutsDesc') }}</p>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div 
+              v-for="shortcut in shortcutList" 
+              :key="shortcut.key"
+              class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-lg"
+            >
+              <span class="text-sm text-slate-700 dark:text-slate-300">{{ t(shortcut.labelKey) }}</span>
+              <button
+                @click="startEditShortcut(shortcut.key)"
+                @blur="cancelEditShortcut"
+                :class="editingShortcut === shortcut.key 
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 ring-2 ring-blue-500' 
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'"
+                class="px-3 py-1.5 rounded text-xs font-mono min-w-[100px] text-center transition-colors"
+              >
+                {{ editingShortcut === shortcut.key 
+                  ? t('settings.pressKey') 
+                  : formatShortcut(store.config.shortcutSettings[shortcut.key as keyof typeof store.config.shortcutSettings]) }}
+              </button>
             </div>
           </div>
         </div>

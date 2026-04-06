@@ -11,6 +11,8 @@ export default defineConfig({
     target: 'esnext',
     sourcemap: false,
     chunkSizeWarningLimit: 1000,
+    minify: 'esbuild',
+    cssMinify: true,
     rollupOptions: {
       output: {
         manualChunks(id: string) {
@@ -20,6 +22,9 @@ export default defineConfig({
             }
             if (id.includes('lucide')) {
               return 'ui-vendor'
+            }
+            if (id.includes('@vueuse')) {
+              return 'vueuse-vendor'
             }
           }
         },
@@ -33,5 +38,8 @@ export default defineConfig({
   preview: {
     host: true,
     port: 4173,
+  },
+  optimizeDeps: {
+    include: ['vue', 'pinia', 'vue-router', 'lucide-vue-next', '@vueuse/core'],
   },
 })

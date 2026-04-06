@@ -1,10 +1,10 @@
-# QXC Serial 超联助手
+# QXC Serial 超联串口助手
 
 基于 Web Serial API 的现代浏览器端串口调试工具，支持多编码格式、指令组管理、数据导出等功能。
 
 ## 项目简介
 
-QXC Serial 超联助手是一个基于 Vue 3 + TypeScript + Vite 构建的现代化串口调试工具，利用浏览器原生的 Web Serial API 实现串口通信功能，无需安装任何驱动程序或插件。
+QXC Serial 超联串口助手是一个基于 Vue 3 + TypeScript + Vite 构建的现代化串口调试工具，利用浏览器原生的 Web Serial API 实现串口通信功能，无需安装任何驱动程序或插件。
 
 ## 功能特性
 
@@ -48,7 +48,14 @@ QXC Serial 超联助手是一个基于 Vue 3 + TypeScript + Vite 构建的现代
 - 📖 **ASCII 对照表**: 完整 ASCII 字符参考（标准 + 扩展）
 
 ### 用户体验
-- ⌨️ **快捷键支持**: 常用操作快捷键
+- ⌨️ **快捷键支持**: 
+  - `Ctrl + Enter` - 发送数据
+  - `Ctrl + Shift + C` - 连接/断开串口
+  - `Ctrl + Shift + X` - 清空接收数据
+  - `Ctrl + S` - 保存当前指令组
+  - `Space` - 开始/暂停指令组执行
+  - `Escape` - 停止指令组执行 / 关闭帮助
+  - `?` - 显示/隐藏快捷键帮助
 - 💝 **打赏功能**: 支持开发者
 - 📧 **意见反馈**: 快速提交优化建议
 

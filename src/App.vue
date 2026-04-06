@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { Terminal, Settings, User, FileDigit, Binary, Heart } from 'lucide-vue-next'
 import { useSettingsStore } from './stores/settings'
@@ -13,16 +13,26 @@ const { t } = useI18n()
 /** 打赏弹窗显示状态 */
 const showDonateModal = ref(false)
 
+/** 主题变化处理函数 */
+let themeChangeHandler: (() => void) | null = null
+
 onMounted(() => {
-  // Initialize theme on app load based on stored settings
   settingsStore.applyTheme()
   
-  // Listen for system theme changes if the user selected 'system'
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  themeChangeHandler = () => {
     if (settingsStore.config.theme === 'system') {
       settingsStore.applyTheme()
     }
-  })
+  }
+  
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeChangeHandler)
+})
+
+onUnmounted(() => {
+  if (themeChangeHandler) {
+    window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', themeChangeHandler)
+    themeChangeHandler = null
+  }
 })
 </script>
 

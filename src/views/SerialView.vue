@@ -320,48 +320,83 @@ const handleSend = () => {
 /** 是否显示快捷键帮助面板 */
 const showShortcutsHelp = ref(false)
 
+/**
+ * 解析快捷键字符串
+ */
+function parseShortcut(shortcut: string): { ctrl: boolean; shift: boolean; alt: boolean; key: string } {
+  const parts = shortcut.split('+').map(p => p.trim().toUpperCase())
+  return {
+    ctrl: parts.includes('CTRL'),
+    shift: parts.includes('SHIFT'),
+    alt: parts.includes('ALT'),
+    key: parts.find(p => !['CTRL', 'SHIFT', 'ALT'].includes(p)) || ''
+  }
+}
+
+/**
+ * 检查按键是否匹配快捷键
+ */
+function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
+  const parsed = parseShortcut(shortcut)
+  const eventKey = event.key.toUpperCase()
+  
+  const ctrlMatch = parsed.ctrl === event.ctrlKey
+  const shiftMatch = parsed.shift === event.shiftKey
+  const altMatch = parsed.alt === event.altKey
+  
+  let keyMatch = false
+  if (parsed.key === 'SPACE' && eventKey === ' ') keyMatch = true
+  else if (parsed.key === 'ESCAPE' && eventKey === 'ESCAPE') keyMatch = true
+  else if (parsed.key === 'ENTER' && eventKey === 'ENTER') keyMatch = true
+  else if (parsed.key.length === 1 && eventKey === parsed.key) keyMatch = true
+  else if (eventKey === parsed.key) keyMatch = true
+  
+  return ctrlMatch && shiftMatch && altMatch && keyMatch
+}
+
 /** 快捷键映射表 */
-const shortcuts = [
-  { key: 'Ctrl+Enter', descriptionKey: 'serial.shortcutSend', action: 'send' },
-  { key: 'Ctrl+Shift+C', descriptionKey: 'serial.shortcutConnect', action: 'connect' },
-  { key: 'Ctrl+Shift+X', descriptionKey: 'serial.shortcutClear', action: 'clearRx' },
-  { key: 'Ctrl+S', descriptionKey: 'serial.shortcutSave', action: 'saveGroup' },
-  { key: 'Space', descriptionKey: 'serial.shortcutPause', action: 'pauseResume' },
-  { key: 'Escape', descriptionKey: 'serial.shortcutStop', action: 'stopGroup' },
-  { key: '?', descriptionKey: 'serial.shortcutShowHelp', action: 'help' },
-]
+const shortcuts = computed(() => [
+  { key: settingsStore.config.shortcutSettings.send, descriptionKey: 'serial.shortcutSend', action: 'send' },
+  { key: settingsStore.config.shortcutSettings.toggleConnect, descriptionKey: 'serial.shortcutConnect', action: 'connect' },
+  { key: settingsStore.config.shortcutSettings.clearData, descriptionKey: 'serial.shortcutClear', action: 'clearRx' },
+  { key: settingsStore.config.shortcutSettings.saveGroup, descriptionKey: 'serial.shortcutSave', action: 'saveGroup' },
+  { key: settingsStore.config.shortcutSettings.toggleExecution, descriptionKey: 'serial.shortcutPause', action: 'pauseResume' },
+  { key: settingsStore.config.shortcutSettings.stopExecution, descriptionKey: 'serial.shortcutStop', action: 'stopGroup' },
+  { key: settingsStore.config.shortcutSettings.showHelp, descriptionKey: 'serial.shortcutShowHelp', action: 'help' },
+])
 
 /**
  * 处理键盘快捷键
  */
 function handleKeyboardShortcuts(event: KeyboardEvent) {
   const isInputFocused = ['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement as HTMLElement)?.tagName)
+  const shortcutsConfig = settingsStore.config.shortcutSettings
   
-  if (event.ctrlKey && event.key === 'Enter') {
+  if (matchesShortcut(event, shortcutsConfig.send)) {
     event.preventDefault()
     handleSend()
     return
   }
   
-  if (event.ctrlKey && event.shiftKey && event.key.toUpperCase() === 'C') {
+  if (matchesShortcut(event, shortcutsConfig.toggleConnect)) {
     event.preventDefault()
     toggleConnect()
     return
   }
   
-  if (event.ctrlKey && event.shiftKey && event.key.toUpperCase() === 'X') {
+  if (matchesShortcut(event, shortcutsConfig.clearData)) {
     event.preventDefault()
     clearData()
     return
   }
   
-  if (event.ctrlKey && event.key.toUpperCase() === 'S') {
+  if (matchesShortcut(event, shortcutsConfig.saveGroup)) {
     event.preventDefault()
     cg.saveCurrentGroup()
     return
   }
   
-  if (event.key === ' ' && !isInputFocused) {
+  if (matchesShortcut(event, shortcutsConfig.toggleExecution) && !isInputFocused) {
     event.preventDefault()
     if (cg.executionState.value === 'running') {
       cg.pauseExecution()
@@ -371,7 +406,7 @@ function handleKeyboardShortcuts(event: KeyboardEvent) {
     return
   }
   
-  if (event.key === 'Escape') {
+  if (matchesShortcut(event, shortcutsConfig.stopExecution)) {
     if (showShortcutsHelp.value) {
       showShortcutsHelp.value = false
     } else if (cg.executionState.value === 'running' || cg.executionState.value === 'paused') {
@@ -380,7 +415,7 @@ function handleKeyboardShortcuts(event: KeyboardEvent) {
     return
   }
   
-  if (event.key === '?' && !isInputFocused) {
+  if (matchesShortcut(event, shortcutsConfig.showHelp) && !isInputFocused) {
     event.preventDefault()
     showShortcutsHelp.value = !showShortcutsHelp.value
     return
@@ -477,16 +512,16 @@ const runLoop = async () => {
       <!-- Left Panel: Settings -->
       <div v-show="showLeftPanel" class="w-64 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex flex-col">
         <!-- Tabs -->
-        <div class="flex border-b dark:border-slate-700 text-center">
+        <div class="flex h-12 border-b dark:border-slate-700 text-center">
           <div 
-            class="flex-1 py-3 cursor-pointer border-b dark:border-slate-700-2 flex justify-center items-center gap-2"
+            class="flex-1 cursor-pointer flex justify-center items-center gap-2 border-b-2 transition-colors"
             :class="activeTab === 'serial' ? 'border-blue-600 font-semibold text-blue-600' : 'border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:bg-slate-900'"
             @click="activeTab = 'serial'"
           >
             <Usb class="w-4 h-4" /> {{ t('serial.serialTab') }}
           </div>
           <div 
-            class="flex-1 py-3 cursor-pointer border-b dark:border-slate-700-2 flex justify-center items-center gap-2 text-slate-400 hover:bg-slate-50 dark:bg-slate-900"
+            class="flex-1 cursor-pointer flex justify-center items-center gap-2 text-slate-400 hover:bg-slate-50 dark:bg-slate-900 border-b-2 border-transparent"
             @click="settingsStore.showToast(t('serial.bluetoothComingSoon'))"
           >
             <Bluetooth class="w-4 h-4" /> {{ t('serial.bluetoothTab') }}
@@ -814,17 +849,17 @@ const runLoop = async () => {
       <!-- Right Panel: Quick Commands / Command Group -->
       <div v-show="showRightPanel" class="w-[480px] shrink-0 bg-slate-50 dark:bg-slate-900 border-l dark:border-slate-700 flex flex-col">
         <!-- Right Panel Tabs -->
-        <div class="flex border-b dark:border-slate-700 bg-white dark:bg-slate-800">
+        <div class="flex h-12 border-b dark:border-slate-700 bg-white dark:bg-slate-800">
           <button
-            class="flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
-            :class="activeRightTab === 'quick' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'"
+            class="flex-1 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors border-b-2"
+            :class="activeRightTab === 'quick' ? 'text-blue-600 border-blue-600' : 'text-slate-500 hover:text-slate-700 border-transparent'"
             @click="activeRightTab = 'quick'"
           >
             <ListOrdered class="w-3.5 h-3.5"/> {{ t('serial.quickCommands') }}
           </button>
           <button
-            class="flex-1 py-2.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
-            :class="activeRightTab === 'group' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500 hover:text-slate-700'"
+            class="flex-1 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors border-b-2"
+            :class="activeRightTab === 'group' ? 'text-blue-600 border-blue-600' : 'text-slate-500 hover:text-slate-700 border-transparent'"
             @click="activeRightTab = 'group'"
           >
             <Play class="w-3.5 h-3.5"/> {{ t('serial.commandGroup') }}
