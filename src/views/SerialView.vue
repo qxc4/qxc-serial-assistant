@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted, computed } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted, computed, shallowRef } from 'vue'
 import { useSerial } from '../composables/useSerial'
 import { useCommandGroup } from '../composables/useCommandGroup'
 import { useSettingsStore } from '../stores/settings'
 import { useI18n } from '../composables/useI18n'
 import type { CommandStatus } from '../types/command-group'
 import VirtualList from '../components/VirtualList.vue'
+import { 
+  matchesShortcutFast, 
+  preparseShortcuts,
+  rafThrottle,
+  debounce 
+} from '../utils/performance'
+import { keyResponseTimer } from '../composables/usePerformanceMonitor'
 import { 
   Download, Trash2, Bluetooth,
   Usb, Plus, Play, Pause, Trash,
@@ -52,34 +59,44 @@ const virtualListRef = ref<InstanceType<typeof VirtualList> | null>(null)
 /** 搜索关键词 */
 const searchQuery = ref('')
 
-/** 根据显示模式和搜索关键词过滤接收数据 */
-const filteredReceivedData = computed(() => {
-  let result = receivedData.value
-  
-  // 按显示模式过滤
-  if (displayMode.value !== 'mixed') {
-    result = result.filter(item => {
-      if (displayMode.value === 'rx') return item.direction === 'rx'
-      if (displayMode.value === 'tx') return item.direction === 'tx'
-      return true
-    })
-  }
-  
-  // 按搜索关键词过滤
-  if (searchQuery.value.trim()) {
-    const query = searchQuery.value.toLowerCase().trim()
-    result = result.filter(item => {
-      return item.data.toLowerCase().includes(query)
-    })
-  }
-  
-  return result
+/** 防抖后的搜索关键词 */
+const debouncedSearchQuery = ref('')
+
+/** 防抖搜索处理函数 */
+const debouncedSearch = debounce((value: string) => {
+  debouncedSearchQuery.value = value
+}, 150)
+
+/** 监听搜索关键词变化 */
+watch(searchQuery, (value) => {
+  debouncedSearch(value)
 })
 
-/** 处理虚拟滚动事件 */
-function handleVirtualScroll(_scrollTop: number) {
-  // 可以在这里添加滚动相关的逻辑
-}
+/** 根据显示模式和搜索关键词过滤接收数据（优化版） */
+const filteredReceivedData = computed(() => {
+  const data = receivedData.value
+  const mode = displayMode.value
+  const query = debouncedSearchQuery.value.toLowerCase().trim()
+  const hasSearch = query.length > 0
+  const isRxMode = mode === 'rx'
+  const isTxMode = mode === 'tx'
+  
+  if (!isRxMode && !isTxMode && !hasSearch) {
+    return data
+  }
+  
+  return data.filter(item => {
+    if (isRxMode && item.direction !== 'rx') return false
+    if (isTxMode && item.direction !== 'tx') return false
+    if (hasSearch && !item.data.toLowerCase().includes(query)) return false
+    return true
+  })
+})
+
+/** 处理虚拟滚动事件（使用 raf 节流） */
+const handleVirtualScroll = rafThrottle((_scrollTop: number) => {
+  // 滚动相关逻辑
+})
 
 // 从 store 获取持久化的 UI 状态
 const displayMode = computed({
@@ -320,104 +337,98 @@ const handleSend = () => {
 /** 是否显示快捷键帮助面板 */
 const showShortcutsHelp = ref(false)
 
-/**
- * 解析快捷键字符串
- */
-function parseShortcut(shortcut: string): { ctrl: boolean; shift: boolean; alt: boolean; key: string } {
-  const parts = shortcut.split('+').map(p => p.trim().toUpperCase())
-  return {
-    ctrl: parts.includes('CTRL'),
-    shift: parts.includes('SHIFT'),
-    alt: parts.includes('ALT'),
-    key: parts.find(p => !['CTRL', 'SHIFT', 'ALT'].includes(p)) || ''
-  }
-}
+/** 缓存的快捷键解析结果 */
+const cachedShortcuts = shallowRef<Record<string, { ctrl: boolean; shift: boolean; alt: boolean; key: string }>>({})
 
-/**
- * 检查按键是否匹配快捷键
- */
-function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
-  const parsed = parseShortcut(shortcut)
-  const eventKey = event.key.toUpperCase()
-  
-  const ctrlMatch = parsed.ctrl === event.ctrlKey
-  const shiftMatch = parsed.shift === event.shiftKey
-  const altMatch = parsed.alt === event.altKey
-  
-  let keyMatch = false
-  if (parsed.key === 'SPACE' && eventKey === ' ') keyMatch = true
-  else if (parsed.key === 'ESCAPE' && eventKey === 'ESCAPE') keyMatch = true
-  else if (parsed.key === 'ENTER' && eventKey === 'ENTER') keyMatch = true
-  else if (parsed.key.length === 1 && eventKey === parsed.key) keyMatch = true
-  else if (eventKey === parsed.key) keyMatch = true
-  
-  return ctrlMatch && shiftMatch && altMatch && keyMatch
-}
+/** 监听快捷键配置变化，更新缓存 */
+watch(
+  () => settingsStore.config.shortcutSettings,
+  (newSettings) => {
+    cachedShortcuts.value = preparseShortcuts(newSettings)
+  },
+  { immediate: true, deep: true }
+)
 
 /** 快捷键映射表 */
-const shortcuts = computed(() => [
-  { key: settingsStore.config.shortcutSettings.send, descriptionKey: 'serial.shortcutSend', action: 'send' },
-  { key: settingsStore.config.shortcutSettings.toggleConnect, descriptionKey: 'serial.shortcutConnect', action: 'connect' },
-  { key: settingsStore.config.shortcutSettings.clearData, descriptionKey: 'serial.shortcutClear', action: 'clearRx' },
-  { key: settingsStore.config.shortcutSettings.saveGroup, descriptionKey: 'serial.shortcutSave', action: 'saveGroup' },
-  { key: settingsStore.config.shortcutSettings.toggleExecution, descriptionKey: 'serial.shortcutPause', action: 'pauseResume' },
-  { key: settingsStore.config.shortcutSettings.stopExecution, descriptionKey: 'serial.shortcutStop', action: 'stopGroup' },
-  { key: settingsStore.config.shortcutSettings.showHelp, descriptionKey: 'serial.shortcutShowHelp', action: 'help' },
-])
+const shortcuts = computed(() => {
+  const settings = settingsStore.config.shortcutSettings
+  return [
+    { key: settings.send, descriptionKey: 'serial.shortcutSend', action: 'send' },
+    { key: settings.toggleConnect, descriptionKey: 'serial.shortcutConnect', action: 'connect' },
+    { key: settings.clearData, descriptionKey: 'serial.shortcutClear', action: 'clearRx' },
+    { key: settings.saveGroup, descriptionKey: 'serial.shortcutSave', action: 'saveGroup' },
+    { key: settings.toggleExecution, descriptionKey: 'serial.shortcutPause', action: 'pauseResume' },
+    { key: settings.stopExecution, descriptionKey: 'serial.shortcutStop', action: 'stopGroup' },
+    { key: settings.showHelp, descriptionKey: 'serial.shortcutShowHelp', action: 'help' },
+  ]
+})
+
+/** 输入元素标签名集合 */
+const INPUT_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
 
 /**
- * 处理键盘快捷键
+ * 处理键盘快捷键（优化版）
  */
 function handleKeyboardShortcuts(event: KeyboardEvent) {
-  const isInputFocused = ['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement as HTMLElement)?.tagName)
-  const shortcutsConfig = settingsStore.config.shortcutSettings
+  keyResponseTimer.start()
   
-  if (matchesShortcut(event, shortcutsConfig.send)) {
+  const activeTag = (document.activeElement as HTMLElement)?.tagName
+  const isInputFocused = activeTag ? INPUT_TAGS.has(activeTag) : false
+  const cached = cachedShortcuts.value
+  
+  if (matchesShortcutFast(event, cached.send)) {
     event.preventDefault()
     handleSend()
+    keyResponseTimer.end()
     return
   }
   
-  if (matchesShortcut(event, shortcutsConfig.toggleConnect)) {
+  if (matchesShortcutFast(event, cached.toggleConnect)) {
     event.preventDefault()
     toggleConnect()
+    keyResponseTimer.end()
     return
   }
   
-  if (matchesShortcut(event, shortcutsConfig.clearData)) {
+  if (matchesShortcutFast(event, cached.clearData)) {
     event.preventDefault()
     clearData()
+    keyResponseTimer.end()
     return
   }
   
-  if (matchesShortcut(event, shortcutsConfig.saveGroup)) {
+  if (matchesShortcutFast(event, cached.saveGroup)) {
     event.preventDefault()
     cg.saveCurrentGroup()
+    keyResponseTimer.end()
     return
   }
   
-  if (matchesShortcut(event, shortcutsConfig.toggleExecution) && !isInputFocused) {
+  if (matchesShortcutFast(event, cached.toggleExecution) && !isInputFocused) {
     event.preventDefault()
     if (cg.executionState.value === 'running') {
       cg.pauseExecution()
     } else if (cg.executionState.value === 'paused') {
       executeCommandGroup()
     }
+    keyResponseTimer.end()
     return
   }
   
-  if (matchesShortcut(event, shortcutsConfig.stopExecution)) {
+  if (matchesShortcutFast(event, cached.stopExecution)) {
     if (showShortcutsHelp.value) {
       showShortcutsHelp.value = false
     } else if (cg.executionState.value === 'running' || cg.executionState.value === 'paused') {
       cg.stopExecution()
     }
+    keyResponseTimer.end()
     return
   }
   
-  if (matchesShortcut(event, shortcutsConfig.showHelp) && !isInputFocused) {
+  if (matchesShortcutFast(event, cached.showHelp) && !isInputFocused) {
     event.preventDefault()
     showShortcutsHelp.value = !showShortcutsHelp.value
+    keyResponseTimer.end()
     return
   }
 }

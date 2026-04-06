@@ -28,6 +28,38 @@ const receiveEncoding = ref<CharEncoding>('utf8')
 /** 发送数据编码模式 */
 const sendEncoding = ref<CharEncoding>('utf8')
 
+/** 缓存的 TextDecoder 实例 */
+const decoderCache = new Map<string, TextDecoder>()
+
+/** 获取或创建 TextDecoder */
+function getDecoder(encoding: string): TextDecoder {
+  let decoder = decoderCache.get(encoding)
+  if (!decoder) {
+    decoder = new TextDecoder(encoding)
+    decoderCache.set(encoding, decoder)
+  }
+  return decoder
+}
+
+/** 缓存的 TextEncoder 实例 */
+let textEncoder: TextEncoder | null = null
+
+/** 获取 TextEncoder */
+function getEncoder(): TextEncoder {
+  if (!textEncoder) {
+    textEncoder = new TextEncoder()
+  }
+  return textEncoder
+}
+
+/** HEX 字符映射表 */
+const HEX_CHARS = '0123456789ABCDEF'
+
+/** 字节到 HEX 字符串的快速转换 */
+function byteToHex(byte: number): string {
+  return HEX_CHARS[byte >> 4] + HEX_CHARS[byte & 0x0F]
+}
+
 // Data & Stats
 interface TimestampedData {
   timestamp: number
@@ -123,37 +155,46 @@ export function useSerial() {
   }, { deep: true })
 
   /**
-   * 根据编码模式解码字节数据
+   * 根据编码模式解码字节数据（优化版）
    */
   function decodeBytes(bytes: Uint8Array, encoding: CharEncoding): string {
+    const len = bytes.length
+    if (len === 0) return ''
+    
     switch (encoding) {
-      case 'hex':
-        return Array.from(bytes)
-          .map(b => b.toString(16).padStart(2, '0').toUpperCase())
-          .join(' ') + ' '
-      case 'ascii':
-        return Array.from(bytes)
-          .map(b => b >= 32 && b <= 126 ? String.fromCharCode(b) : '.')
-          .join('')
+      case 'hex': {
+        let result = ''
+        for (let i = 0; i < len; i++) {
+          result += byteToHex(bytes[i]) + ' '
+        }
+        return result
+      }
+      case 'ascii': {
+        let result = ''
+        for (let i = 0; i < len; i++) {
+          const b = bytes[i]
+          result += (b >= 32 && b <= 126) ? String.fromCharCode(b) : '.'
+        }
+        return result
+      }
       case 'gbk':
         try {
-          const decoder = new TextDecoder('gbk')
-          return decoder.decode(bytes)
+          return getDecoder('gbk').decode(bytes)
         } catch {
-          return new TextDecoder().decode(bytes)
+          return getDecoder('utf-8').decode(bytes)
         }
       case 'utf8':
       default:
-        return new TextDecoder().decode(bytes)
+        return getDecoder('utf-8').decode(bytes)
     }
   }
 
   /**
-   * 根据编码模式将字符串编码为字节数组
+   * 根据编码模式将字符串编码为字节数组（优化版）
    */
   function encodeString(str: string, encoding: CharEncoding): Uint8Array {
     switch (encoding) {
-      case 'hex':
+      case 'hex': {
         const hexStr = str.replace(/\s/g, '')
         const len = Math.ceil(hexStr.length / 2)
         const buffer = new Uint8Array(len)
@@ -165,18 +206,19 @@ export function useSerial() {
           }
         }
         return buffer
-      case 'ascii':
-        return new Uint8Array(str.split('').map(c => c.charCodeAt(0) & 0x7F))
-      case 'gbk':
-        try {
-          const encoder = new TextEncoder()
-          return encoder.encode(str)
-        } catch {
-          return new TextEncoder().encode(str)
+      }
+      case 'ascii': {
+        const len = str.length
+        const buffer = new Uint8Array(len)
+        for (let i = 0; i < len; i++) {
+          buffer[i] = str.charCodeAt(i) & 0x7F
         }
+        return buffer
+      }
+      case 'gbk':
       case 'utf8':
       default:
-        return new TextEncoder().encode(str)
+        return getEncoder().encode(str)
     }
   }
 

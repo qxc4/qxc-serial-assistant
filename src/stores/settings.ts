@@ -48,6 +48,7 @@ export interface ShortcutSettings {
   toggleExecution: string
   stopExecution: string
   showHelp: string
+  [key: string]: string
 }
 
 export interface AppSettings {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, shallowRef } from 'vue'
 
 interface Props {
   items: any[]
@@ -17,8 +17,8 @@ const emit = defineEmits<{
 }>()
 
 const containerRef = ref<HTMLElement | null>(null)
-const scrollTop = ref(0)
-const containerHeight = ref(0)
+const scrollTop = shallowRef(0)
+const containerHeight = shallowRef(0)
 
 const visibleCount = computed(() => {
   return Math.ceil(containerHeight.value / props.itemHeight) + props.buffer * 2
@@ -45,10 +45,25 @@ const offsetY = computed(() => {
   return startIndex.value * props.itemHeight
 })
 
+/** RAF ID 用于取消未执行的动画帧 */
+let rafId: number | null = null
+
+/** 处理滚动事件（使用 RAF 节流） */
 function handleScroll(event: Event) {
   const target = event.target as HTMLElement
-  scrollTop.value = target.scrollTop
-  emit('scroll', scrollTop.value)
+  
+  if (rafId !== null) {
+    return
+  }
+  
+  rafId = requestAnimationFrame(() => {
+    rafId = null
+    if (containerRef.value) {
+      const newScrollTop = target.scrollTop
+      scrollTop.value = newScrollTop
+      emit('scroll', newScrollTop)
+    }
+  })
 }
 
 function updateContainerHeight() {
@@ -72,6 +87,9 @@ onMounted(() => {
 onUnmounted(() => {
   if (resizeObserver) {
     resizeObserver.disconnect()
+  }
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId)
   }
 })
 
@@ -98,7 +116,7 @@ defineExpose({
   <div
     ref="containerRef"
     class="virtual-list overflow-y-auto"
-    @scroll="handleScroll"
+    @scroll.passive="handleScroll"
   >
     <div
       class="virtual-list-content"
@@ -125,6 +143,7 @@ defineExpose({
 .virtual-list {
   width: 100%;
   height: 100%;
+  will-change: transform;
 }
 
 .virtual-list-content {
@@ -136,11 +155,13 @@ defineExpose({
   top: 0;
   left: 0;
   right: 0;
+  will-change: transform;
 }
 
 .virtual-list-item {
   width: 100%;
   display: flex;
   align-items: center;
+  contain: layout style;
 }
 </style>
