@@ -693,9 +693,23 @@ export function useChart() {
   /**
    * 销毁图表
    */
+  /**
+   * 销毁图表实例并清理所有资源
+   */
   function destroyChart(): void {
     stopCollection()
     stopPlayback()
+    
+    /** 防御性清理：确保所有定时器都被清除 */
+    if (samplingTimer) {
+      clearInterval(samplingTimer)
+      samplingTimer = null
+    }
+    
+    if (playbackTimer) {
+      clearInterval(playbackTimer)
+      playbackTimer = null
+    }
     
     if (chartInstance) {
       chartInstance.dispose()
