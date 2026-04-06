@@ -131,6 +131,9 @@ let rxBuffer: Uint8Array[] = []
 let rxBufferTimer: ReturnType<typeof setTimeout> | null = null
 const RX_BUFFER_TIMEOUT = 50 // 50ms 合并窗口
 
+/** 数据接收回调列表 */
+const dataReceiveCallbacks: Array<(data: Uint8Array, direction: 'rx' | 'tx') => void> = []
+
 /** 上次成功连接的配置（用于重连） */
 let lastConnectConfig: { baudRate: number; dataBits: number; stopBits: number; parity: string } | null = null
 
@@ -258,6 +261,15 @@ export function useSerial() {
     
     dataBuffer.push(entry)
     updateReceivedData()
+    
+    // 触发数据接收回调
+    for (const callback of dataReceiveCallbacks) {
+      try {
+        callback(merged, 'rx')
+      } catch (e) {
+        console.error('数据接收回调执行错误:', e)
+      }
+    }
   }
 
   /**
@@ -526,6 +538,15 @@ export function useSerial() {
           dataBuffer.push(entry)
           updateReceivedData()
           
+          // 触发数据发送回调
+          for (const callback of dataReceiveCallbacks) {
+            try {
+              callback(buffer, 'tx')
+            } catch (e) {
+              console.error('数据发送回调执行错误:', e)
+            }
+          }
+          
           item.resolve()
         } finally {
           currentWriter.releaseLock()
@@ -623,6 +644,19 @@ export function useSerial() {
   /** 数据条数统计 */
   const dataCount = computed(() => dataBuffer.length)
 
+  /**
+   * 注册数据接收回调
+   */
+  function onDataReceive(callback: (data: Uint8Array, direction: 'rx' | 'tx') => void): () => void {
+    dataReceiveCallbacks.push(callback)
+    return () => {
+      const index = dataReceiveCallbacks.indexOf(callback)
+      if (index > -1) {
+        dataReceiveCallbacks.splice(index, 1)
+      }
+    }
+  }
+
   return {
     isSupported,
     isConnected,
@@ -646,6 +680,7 @@ export function useSerial() {
     send,
     clearData,
     exportData,
-    redecodeAllData
+    redecodeAllData,
+    onDataReceive
   }
 }

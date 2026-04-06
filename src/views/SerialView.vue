@@ -3,7 +3,9 @@ import { ref, watch, nextTick, onMounted, onUnmounted, computed, shallowRef } fr
 import { useSerial } from '../composables/useSerial'
 import { useCommandGroup } from '../composables/useCommandGroup'
 import { useSettingsStore } from '../stores/settings'
+import type { CustomProtocolConfig } from '../stores/settings'
 import { useI18n } from '../composables/useI18n'
+import { useDataParse } from '../composables/useDataParse'
 import type { CommandStatus } from '../types/command-group'
 import VirtualList from '../components/VirtualList.vue'
 import { 
@@ -19,11 +21,12 @@ import {
   PanelLeft, PanelBottom, PanelRight, Maximize,
   ListOrdered, Save, FolderOpen, Square,
   ChevronRight, Clock, AlertCircle, CheckCircle2, XCircle, Loader2,
-  Mic, Send, Columns, RefreshCw, Keyboard, Search
+  Mic, Send, Columns, RefreshCw, Keyboard, Search, FileCode, ChevronDown, ChevronUp
 } from 'lucide-vue-next'
 
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
+const dataParse = useDataParse()
 
 const { 
   isSupported, 
@@ -48,7 +51,8 @@ const {
   send, 
   clearData,
   exportData,
-  redecodeAllData
+  redecodeAllData,
+  onDataReceive
 } = useSerial()
 
 // Layout & View states - 从 store 获取持久化状态
@@ -124,12 +128,143 @@ const toolbarExpanded = computed({
   set: (val) => { settingsStore.config.uiSettings.toolbarExpanded = val }
 })
 
+// ==================== 数据解析功能 ====================
+
+/** 解析模式 */
+const parseMode = computed({
+  get: () => settingsStore.config.parseSettings.mode,
+  set: (val) => { 
+    settingsStore.config.parseSettings.mode = val
+    dataParse.setParseMode(val, baudRate.value)
+  }
+})
+
+/** 是否启用解析 */
+const parseEnabled = computed({
+  get: () => settingsStore.config.parseSettings.enabled,
+  set: (val) => { settingsStore.config.parseSettings.enabled = val }
+})
+
+/** 是否显示解析面板 */
+const showParsePanel = ref(false)
+
+/** 自定义协议配置默认值 */
+const DEFAULT_CUSTOM_PROTOCOL = {
+  frameHeader: 'AA 55',
+  frameTail: '',
+  lengthField: {
+    enabled: true,
+    offset: 2,
+    size: 1 as const,
+    includesHeader: false
+  },
+  checksum: {
+    type: 'sum' as 'none' | 'sum' | 'xor' | 'crc16' | 'crc16-modbus',
+    offset: 0
+  },
+  dataOffset: 3
+}
+
+/** 自定义协议配置 (使用 ref 以支持嵌套属性绑定) */
+const customProtocolConfig = ref<CustomProtocolConfig>({ ...DEFAULT_CUSTOM_PROTOCOL, 
+  lengthField: { ...DEFAULT_CUSTOM_PROTOCOL.lengthField },
+  checksum: { ...DEFAULT_CUSTOM_PROTOCOL.checksum }
+})
+
+/** 长度字段启用状态 (computed 用于模板响应式) */
+const lengthFieldEnabled = computed({
+  get: () => customProtocolConfig.value.lengthField.enabled,
+  set: (val: boolean) => {
+    customProtocolConfig.value = {
+      ...customProtocolConfig.value,
+      lengthField: {
+        ...customProtocolConfig.value.lengthField,
+        enabled: val
+      }
+    }
+  }
+})
+
+/** 初始化自定义协议配置 */
+function initCustomProtocolConfig() {
+  const stored = settingsStore.config.parseSettings.customProtocol
+  if (stored) {
+    customProtocolConfig.value = { ...stored,
+      lengthField: { ...stored.lengthField },
+      checksum: { ...stored.checksum }
+    }
+  }
+}
+
+/** 保存自定义协议配置 */
+function saveCustomProtocolConfig() {
+  settingsStore.config.parseSettings.customProtocol = { 
+    ...customProtocolConfig.value,
+    lengthField: { ...customProtocolConfig.value.lengthField },
+    checksum: { ...customProtocolConfig.value.checksum }
+  }
+  dataParse.setCustomProtocolConfig(customProtocolConfig.value)
+}
+
+/** 监听配置变化并保存 */
+watch(customProtocolConfig, () => {
+  saveCustomProtocolConfig()
+}, { deep: true })
+
+/** 解析结果展开状态 */
+const parseResultExpanded = ref<Record<string, boolean>>({})
+
+/**
+ * 切换解析结果展开状态
+ */
+function toggleParseResultExpand(id: string) {
+  parseResultExpanded.value[id] = !parseResultExpanded.value[id]
+}
+
+/**
+ * 清除解析结果
+ */
+function handleClearParseResults() {
+  dataParse.clearResults()
+}
+
+/**
+ * 导出解析结果
+ */
+function handleExportParseResults() {
+  const content = dataParse.exportResults('txt')
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `parse_results_${new Date().getTime()}.txt`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+  settingsStore.showToast(t('serial.exportSuccess'))
+}
+
+/**
+ * 格式化字节数组为十六进制字符串
+ */
+function formatBytes(bytes: number[]): string {
+  return bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ')
+}
+
 /**
  * 监听接收编码变化，重新解码所有数据
  */
 watch(receiveEncoding, () => {
   redecodeAllData()
 })
+
+/**
+ * 监听解析模式变化
+ */
+watch(parseMode, (newMode) => {
+  dataParse.setParseMode(newMode, baudRate.value)
+}, { immediate: true })
 
 /**
  * 指令组 composable 实例，管理指令组的完整生命周期
@@ -324,12 +459,32 @@ watch(receivedData, async () => {
 
 const handleSend = () => {
   if (sendInput.value.trim() === '') return
+  
+  if (!isConnected.value) {
+    settingsStore.showToast(t('serial.notConnected'))
+    return
+  }
+  
   let data = sendInput.value
-  // 如果不是 HEX 模式且开启了自动换行，添加 \r\n
+  
+  if (isHexSend.value) {
+    const hexData = data.replace(/\s+/g, '')
+    if (!/^[0-9A-Fa-f]*$/.test(hexData)) {
+      settingsStore.showToast(t('serial.invalidHex'))
+      return
+    }
+  }
+  
   if (!isHexSend.value && addNewline.value) {
     data += '\r\n'
   }
-  send(data, isHexSend.value)
+  
+  try {
+    send(data, isHexSend.value)
+  } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : '发送失败'
+    settingsStore.showToast(t('serial.sendFailed') + ': ' + errorMsg)
+  }
 }
 
 // ==================== 快捷键系统 ====================
@@ -435,10 +590,29 @@ function handleKeyboardShortcuts(event: KeyboardEvent) {
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeyboardShortcuts)
+  
+  // 初始化自定义协议配置
+  initCustomProtocolConfig()
+  
+  // 注册数据接收回调，用于数据解析
+  const unregisterCallback = onDataReceive((data, direction) => {
+    if (parseEnabled.value && parseMode.value !== 'none' && direction === 'rx') {
+      dataParse.parseData(data)
+    }
+  })
+  
+  // 保存取消注册函数供 onUnmounted 使用
+  ;(window as any).__unregisterDataCallback = unregisterCallback
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyboardShortcuts)
+  
+  // 取消注册数据接收回调
+  if ((window as any).__unregisterDataCallback) {
+    ;(window as any).__unregisterDataCallback()
+    delete (window as any).__unregisterDataCallback
+  }
 })
 
 // ==================== 连接与发送功能 ====================
@@ -647,6 +821,138 @@ const runLoop = async () => {
           >
             {{ t('serial.selectPort') }}
           </button>
+          
+          <!-- 数据解析配置 -->
+          <div class="mt-6 pt-4 border-t dark:border-slate-700">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="font-bold text-sm flex items-center gap-2">
+                <FileCode class="w-4 h-4" />
+                {{ t('serial.dataParse') }}
+              </h3>
+              <label class="flex items-center gap-1 cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  v-model="parseEnabled"
+                  class="w-4 h-4 rounded border-slate-300"
+                />
+                <span class="text-xs text-slate-600 dark:text-slate-400">{{ t('serial.enable') }}</span>
+              </label>
+            </div>
+            
+            <div class="flex flex-col gap-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('serial.parseMode') }}</label>
+                <select 
+                  v-model="parseMode"
+                  :disabled="!parseEnabled"
+                  class="border dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm disabled:opacity-50"
+                >
+                  <option value="none">{{ t('serial.noParse') }}</option>
+                  <optgroup label="Modbus 协议">
+                    <option value="modbus-rtu">Modbus RTU</option>
+                    <option value="modbus-ascii">Modbus ASCII</option>
+                  </optgroup>
+                  <optgroup label="显示模式">
+                    <option value="hex-display">十六进制显示</option>
+                    <option value="ascii-display">ASCII 文本显示</option>
+                  </optgroup>
+                  <optgroup label="自定义协议">
+                    <option value="custom-frame">自定义帧格式</option>
+                  </optgroup>
+                </select>
+              </div>
+              
+              <!-- 自定义协议配置 -->
+              <div v-if="parseMode === 'custom-frame'" class="space-y-2 p-2 bg-slate-50 dark:bg-slate-900 rounded border dark:border-slate-700">
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs text-slate-500">帧头 (HEX)</label>
+                  <input 
+                    v-model="customProtocolConfig.frameHeader"
+                    type="text"
+                    placeholder="如: AA 55"
+                    class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 font-mono w-full"
+                  />
+                </div>
+                
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs text-slate-500">帧尾 (HEX, 可选)</label>
+                  <input 
+                    v-model="customProtocolConfig.frameTail"
+                    type="text"
+                    placeholder="如: 0D 0A"
+                    class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 font-mono w-full"
+                  />
+                </div>
+                
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs text-slate-500">数据偏移</label>
+                  <input 
+                    v-model.number="customProtocolConfig.dataOffset"
+                    type="number"
+                    min="0"
+                    class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
+                  />
+                </div>
+                
+                <div class="flex flex-col gap-1">
+                  <label class="text-xs text-slate-500">校验方式</label>
+                  <select 
+                    v-model="customProtocolConfig.checksum.type"
+                    class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
+                  >
+                    <option value="none">无校验</option>
+                    <option value="sum">累加和</option>
+                    <option value="xor">异或</option>
+                    <option value="crc16">CRC16</option>
+                    <option value="crc16-modbus">CRC16-Modbus</option>
+                  </select>
+                </div>
+                
+                <div class="flex items-center gap-2">
+                  <input 
+                    type="checkbox"
+                    v-model="lengthFieldEnabled"
+                    class="w-3 h-3"
+                  />
+                  <label class="text-xs text-slate-500">启用长度字段</label>
+                </div>
+                
+                <div v-show="lengthFieldEnabled" class="space-y-2">
+                  <div class="flex flex-col gap-1">
+                    <label class="text-xs text-slate-500">长度偏移</label>
+                    <input 
+                      v-model.number="customProtocolConfig.lengthField.offset"
+                      type="number"
+                      min="0"
+                      class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
+                    />
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-xs text-slate-500">长度字节数</label>
+                    <select 
+                      v-model.number="customProtocolConfig.lengthField.size"
+                      class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
+                    >
+                      <option :value="1">1 字节</option>
+                      <option :value="2">2 字节</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              <button 
+                @click="showParsePanel = !showParsePanel"
+                :disabled="!parseEnabled || parseMode === 'none'"
+                class="w-full py-2 rounded border dark:border-slate-700 text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-700"
+              >
+                <FileCode class="w-4 h-4" />
+                {{ showParsePanel ? t('serial.hideParseResults') : t('serial.showParseResults') }}
+                <span v-if="dataParse.resultCount.value > 0" class="px-1.5 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
+                  {{ dataParse.resultCount.value }}
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -701,6 +1007,102 @@ const runLoop = async () => {
               </div>
             </template>
           </VirtualList>
+        </div>
+
+        <!-- 数据解析结果面板 -->
+        <div 
+          v-if="showParsePanel && parseEnabled && parseMode !== 'none'"
+          class="border-t dark:border-slate-700 bg-slate-100 dark:bg-slate-900 max-h-64 overflow-hidden flex flex-col"
+        >
+          <div class="flex items-center justify-between px-4 py-2 border-b dark:border-slate-700 bg-white dark:bg-slate-800">
+            <h3 class="font-bold text-sm flex items-center gap-2">
+              <FileCode class="w-4 h-4" />
+              {{ t('serial.parseResults') }}
+              <span class="text-xs font-normal text-slate-500">
+                ({{ dataParse.parseStats.value.successCount }}/{{ dataParse.parseStats.value.totalParsed }})
+              </span>
+            </h3>
+            <div class="flex items-center gap-2">
+              <button 
+                @click="handleExportParseResults"
+                :disabled="dataParse.resultCount.value === 0"
+                class="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
+                :title="t('serial.export')"
+              >
+                <Download class="w-4 h-4" />
+              </button>
+              <button 
+                @click="handleClearParseResults"
+                :disabled="dataParse.resultCount.value === 0"
+                class="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50"
+                :title="t('serial.clear')"
+              >
+                <Trash2 class="w-4 h-4" />
+              </button>
+              <button 
+                @click="showParsePanel = false"
+                class="p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                <XCircle class="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          
+          <div class="flex-1 overflow-y-auto p-2 space-y-2">
+            <div 
+              v-for="result in dataParse.parsedResults.value.slice(-50).reverse()" 
+              :key="result.id"
+              class="bg-white dark:bg-slate-800 rounded-lg border dark:border-slate-700 overflow-hidden"
+            >
+              <div 
+                class="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700"
+                @click="toggleParseResultExpand(result.id)"
+              >
+                <component 
+                  :is="parseResultExpanded[result.id] ? ChevronDown : ChevronUp" 
+                  class="w-4 h-4 text-slate-400"
+                />
+                <span 
+                  class="text-xs px-1.5 py-0.5 rounded"
+                  :class="result.error ? 'bg-red-100 dark:bg-red-900/30 text-red-600' : 'bg-green-100 dark:bg-green-900/30 text-green-600'"
+                >
+                  {{ result.error ? t('serial.parseError') : t('serial.parseSuccess') }}
+                </span>
+                <span class="text-xs text-slate-500">
+                  {{ new Date(result.timestamp).toLocaleTimeString() }}
+                </span>
+                <span class="text-xs text-slate-600 dark:text-slate-400 flex-1 truncate">
+                  {{ result.description || result.error }}
+                </span>
+              </div>
+              
+              <div v-if="parseResultExpanded[result.id]" class="px-3 py-2 border-t dark:border-slate-700 text-xs space-y-2">
+                <div>
+                  <span class="text-slate-500">{{ t('serial.rawData') }}:</span>
+                  <span class="ml-2 font-mono text-blue-600 dark:text-blue-400">{{ formatBytes(result.rawBytes) }}</span>
+                </div>
+                <div v-if="result.result?.frame">
+                  <span class="text-slate-500">{{ t('serial.address') }}:</span>
+                  <span class="ml-2 font-mono">{{ result.result.frame.address }}</span>
+                  <span class="text-slate-500 ml-4">{{ t('serial.functionCode') }}:</span>
+                  <span class="ml-2 font-mono">0x{{ result.result.frame.functionCode.toString(16).toUpperCase().padStart(2, '0') }}</span>
+                </div>
+                <div v-if="result.checksums && result.checksums.length > 0">
+                  <span class="text-slate-500">{{ t('serial.checksums') }}:</span>
+                  <span class="ml-2 space-x-2">
+                    <span v-for="cs in result.checksums" :key="cs.type" class="font-mono text-xs">
+                      {{ cs.type }}: <span class="text-purple-600 dark:text-purple-400">{{ cs.value }}</span>
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <div v-if="dataParse.resultCount.value === 0" class="text-center py-8 text-slate-400">
+              <FileCode class="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p class="text-xs">{{ t('serial.noParseData') }}</p>
+            </div>
+          </div>
         </div>
 
         <!-- Middle Toolbar -->
@@ -858,7 +1260,7 @@ const runLoop = async () => {
       </div>
 
       <!-- Right Panel: Quick Commands / Command Group -->
-      <div v-show="showRightPanel" class="w-[480px] shrink-0 bg-slate-50 dark:bg-slate-900 border-l dark:border-slate-700 flex flex-col">
+      <div v-show="showRightPanel" class="w-[400px] shrink-0 bg-slate-50 dark:bg-slate-900 border-l dark:border-slate-700 flex flex-col">
         <!-- Right Panel Tabs -->
         <div class="flex h-12 border-b dark:border-slate-700 bg-white dark:bg-slate-800">
           <button

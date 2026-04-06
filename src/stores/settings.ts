@@ -51,6 +51,55 @@ export interface ShortcutSettings {
   [key: string]: string
 }
 
+/** 数据解析模式 */
+export type ParseMode = 
+  | 'none' 
+  | 'modbus-rtu' 
+  | 'modbus-ascii' 
+  | 'custom-frame'
+  | 'hex-display'
+  | 'ascii-display'
+
+/** 自定义协议配置 */
+export interface CustomProtocolConfig {
+  frameHeader: string        // 帧头，十六进制字符串，如 "AA 55"
+  frameTail: string          // 帧尾，十六进制字符串，如 "0D 0A"，可选
+  lengthField: {
+    enabled: boolean
+    offset: number           // 长度字段偏移量
+    size: 1 | 2              // 长度字段字节数
+    includesHeader: boolean  // 长度是否包含帧头
+  }
+  checksum: {
+    type: 'none' | 'sum' | 'xor' | 'crc16' | 'crc16-modbus'
+    offset: number           // 校验码偏移量（相对于数据起始）
+  }
+  dataOffset: number         // 数据起始偏移量
+}
+
+/** 数据解析配置 */
+export interface ParseSettings {
+  enabled: boolean
+  mode: ParseMode
+  showParseResult: boolean
+  autoParse: boolean
+  customProtocol: CustomProtocolConfig
+}
+
+/** 图表数据通道配置 */
+export interface ChartChannelConfig {
+  enabled: boolean
+  name: string
+  color: string
+  dataSource: 'serial' | 'network' | 'manual'
+  parseRule: {
+    startByte: number
+    byteLength: number
+    byteOrder: 'big' | 'little'
+    dataType: 'uint8' | 'int8' | 'uint16' | 'int16' | 'uint32' | 'int32' | 'float'
+  }
+}
+
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system'
   language: 'zh-CN' | 'en-US'
@@ -62,6 +111,8 @@ export interface AppSettings {
   uiSettings: UISettings
   reconnectSettings: ReconnectSettings
   shortcutSettings: ShortcutSettings
+  parseSettings: ParseSettings
+  chartChannels: ChartChannelConfig[]
 }
 
 const DEFAULT_UI_SETTINGS: UISettings = {
@@ -96,6 +147,34 @@ const DEFAULT_SHORTCUT_SETTINGS: ShortcutSettings = {
   showHelp: '?',
 }
 
+const DEFAULT_PARSE_SETTINGS: ParseSettings = {
+  enabled: false,
+  mode: 'none',
+  showParseResult: true,
+  autoParse: true,
+  customProtocol: {
+    frameHeader: 'AA 55',
+    frameTail: '',
+    lengthField: {
+      enabled: true,
+      offset: 2,
+      size: 1,
+      includesHeader: false
+    },
+    checksum: {
+      type: 'sum',
+      offset: 0
+    },
+    dataOffset: 3
+  }
+}
+
+const DEFAULT_CHART_CHANNELS: ChartChannelConfig[] = [
+  { enabled: true, name: '通道1', color: '#3B82F6', dataSource: 'serial', parseRule: { startByte: 0, byteLength: 2, byteOrder: 'big', dataType: 'uint16' } },
+  { enabled: true, name: '通道2', color: '#10B981', dataSource: 'serial', parseRule: { startByte: 2, byteLength: 2, byteOrder: 'big', dataType: 'uint16' } },
+  { enabled: true, name: '通道3', color: '#F59E0B', dataSource: 'serial', parseRule: { startByte: 4, byteLength: 2, byteOrder: 'big', dataType: 'uint16' } },
+]
+
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   language: 'zh-CN',
@@ -112,6 +191,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   uiSettings: { ...DEFAULT_UI_SETTINGS },
   reconnectSettings: { ...DEFAULT_RECONNECT_SETTINGS },
   shortcutSettings: { ...DEFAULT_SHORTCUT_SETTINGS },
+  parseSettings: { ...DEFAULT_PARSE_SETTINGS },
+  chartChannels: [...DEFAULT_CHART_CHANNELS],
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -172,6 +253,12 @@ export const useSettingsStore = defineStore('settings', () => {
           config.value.shortcutSettings[key] = DEFAULT_SHORTCUT_SETTINGS[key]
         }
       }
+    }
+    if (!config.value.parseSettings) {
+      config.value.parseSettings = { ...DEFAULT_PARSE_SETTINGS }
+    }
+    if (!config.value.chartChannels || config.value.chartChannels.length === 0) {
+      config.value.chartChannels = [...DEFAULT_CHART_CHANNELS]
     }
   }
   

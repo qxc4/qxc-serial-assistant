@@ -10,6 +10,16 @@ const router = createRouter({
       component: SerialView
     },
     {
+      path: '/network',
+      name: 'network',
+      component: () => import('../views/NetworkView.vue')
+    },
+    {
+      path: '/chart',
+      name: 'chart',
+      component: () => import('../views/ChartView.vue')
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('../views/SettingsView.vue')
@@ -28,6 +38,11 @@ const router = createRouter({
       path: '/converter',
       name: 'converter',
       component: () => import('../views/NumConverterView.vue')
+    },
+    {
+      path: '/modbus',
+      name: 'modbus',
+      component: () => import('../views/ModbusView.vue')
     }
   ]
 })
