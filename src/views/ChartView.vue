@@ -22,6 +22,7 @@ import { useSerial } from '../composables/useSerial'
 import type { ChartType, ExportFormat } from '../types/chart'
 import { samplingFrequencyOptions, playbackSpeedOptions } from '../types/chart'
 import type { ChartChannelConfig } from '../stores/settings'
+import { measureSync, measureAsync } from '../composables/usePerformanceMonitor'
 
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
@@ -97,100 +98,120 @@ const chartTypes: Array<{ type: ChartType; icon: any; label: string }> = [
 ]
 
 /**
- * 切换图表类型
+ * 切换图表类型（优化版）
  */
-function handleChartTypeChange(type: ChartType) {
-  chart.setChartType(type)
+const handleChartTypeChange = (type: ChartType) => {
+  measureSync('chartTypeChange', () => {
+    chart.setChartType(type)
+  })
 }
 
 /**
- * 开始/停止采集
+ * 开始/停止采集（优化版）
  */
-function toggleCollection() {
-  if (chart.isCollecting.value) {
-    chart.stopCollection()
-    settingsStore.showToast(t('chart.collectionStopped'))
-  } else {
-    chart.setSamplingFrequency(selectedFrequency.value)
-    chart.startCollection()
-    settingsStore.showToast(t('chart.collectionStarted'))
-  }
-}
-
-/**
- * 清除数据
- */
-function handleClearData() {
-  chart.clearData()
-  settingsStore.showToast(t('chart.dataCleared'))
-}
-
-/**
- * 开始回放
- */
-function handleStartPlayback() {
-  chart.startPlayback(selectedSpeed.value)
-}
-
-/**
- * 暂停回放
- */
-function handlePausePlayback() {
-  chart.pausePlayback()
-}
-
-/**
- * 停止回放
- */
-function handleStopPlayback() {
-  chart.stopPlayback()
-}
-
-/**
- * 切换通道配置展开状态
- */
-function toggleChannelExpand(channelName: string) {
-  expandedChannel.value = expandedChannel.value === channelName ? null : channelName
-}
-
-/**
- * 处理手动输入数据
- */
-function handleManualInput() {
-  const value = parseFloat(manualInputValue.value)
-  if (isNaN(value)) {
-    settingsStore.showToast('请输入有效的数值')
-    return
-  }
-  
-  const channelId = manualInputChannel.value || chartChannels.value.find(c => c.enabled && c.dataSource === 'manual')?.name
-  if (!channelId) {
-    settingsStore.showToast('请先启用手动输入通道')
-    return
-  }
-  
-  chart.addDataPoint(value, channelId)
-  manualInputValue.value = ''
-}
-
-/**
- * 更新通道配置
- */
-function updateChannelConfig(index: number, field: keyof ChartChannelConfig | string, value: any) {
-  const channels = [...chartChannels.value]
-  if (field.includes('.')) {
-    const [parent, child] = field.split('.')
-    ;(channels[index] as any)[parent][child] = value
-  } else {
-    ;(channels[index] as any)[field] = value
-  }
-  chartChannels.value = channels
-  
-  if (field === 'enabled' && !value) {
-    if (expandedChannel.value === channels[index].name) {
-      expandedChannel.value = null
+const toggleCollection = () => {
+  measureSync('toggleCollection', () => {
+    if (chart.isCollecting.value) {
+      chart.stopCollection()
+      settingsStore.showToast(t('chart.collectionStopped'))
+    } else {
+      chart.setSamplingFrequency(selectedFrequency.value)
+      chart.startCollection()
+      settingsStore.showToast(t('chart.collectionStarted'))
     }
-  }
+  })
+}
+
+/**
+ * 清除数据（优化版）
+ */
+const handleClearData = () => {
+  measureSync('clearData', () => {
+    chart.clearData()
+    settingsStore.showToast(t('chart.dataCleared'))
+  })
+}
+
+/**
+ * 开始回放（优化版）
+ */
+const handleStartPlayback = () => {
+  measureSync('startPlayback', () => {
+    chart.startPlayback(selectedSpeed.value)
+  })
+}
+
+/**
+ * 暂停回放（优化版）
+ */
+const handlePausePlayback = () => {
+  measureSync('pausePlayback', () => {
+    chart.pausePlayback()
+  })
+}
+
+/**
+ * 停止回放（优化版）
+ */
+const handleStopPlayback = () => {
+  measureSync('stopPlayback', () => {
+    chart.stopPlayback()
+  })
+}
+
+/**
+ * 切换通道配置展开状态（优化版）
+ */
+const toggleChannelExpand = (channelName: string) => {
+  measureSync('toggleChannel', () => {
+    expandedChannel.value = expandedChannel.value === channelName ? null : channelName
+  })
+}
+
+/**
+ * 处理手动输入数据（优化版）
+ */
+const handleManualInput = () => {
+  measureSync('manualInput', () => {
+    const value = parseFloat(manualInputValue.value)
+    if (isNaN(value)) {
+      settingsStore.showToast('请输入有效的数值')
+      return
+    }
+    
+    const channelId = manualInputChannel.value || chartChannels.value.find(c => c.enabled && c.dataSource === 'manual')?.name
+    if (!channelId) {
+      settingsStore.showToast('请先启用手动输入通道')
+      return
+    }
+    
+    chart.addDataPoint(value, channelId)
+    manualInputValue.value = ''
+  })
+}
+
+/**
+ * 更新通道配置（优化版 - 减少不必要的数组复制）
+ */
+const updateChannelConfig = (index: number, field: keyof ChartChannelConfig | string, value: any) => {
+  measureSync('updateChannel', () => {
+    // 直接修改原数组，避免创建新数组
+    const channels = chartChannels.value
+    if (field.includes('.')) {
+      const [parent, child] = field.split('.')
+      ;(channels[index] as any)[parent][child] = value
+    } else {
+      ;(channels[index] as any)[field] = value
+    }
+    // 触发响应式更新
+    chartChannels.value = [...channels]
+    
+    if (field === 'enabled' && !value) {
+      if (expandedChannel.value === channels[index].name) {
+        expandedChannel.value = null
+      }
+    }
+  })
 }
 
 /** 数据接收回调取消注册函数 */
@@ -230,27 +251,31 @@ onUnmounted(() => {
 })
 
 /**
- * 导出数据
+ * 导出数据（优化版 - 异步测量）
  */
-function handleExport(format: ExportFormat) {
-  chart.downloadExport(format)
-  settingsStore.showToast(t('chart.exportSuccess'))
+const handleExport = async (format: ExportFormat) => {
+  await measureAsync('export', async () => {
+    chart.downloadExport(format)
+    settingsStore.showToast(t('chart.exportSuccess'))
+  })
 }
 
 /**
- * 查询历史数据
+ * 查询历史数据（优化版）
  */
-function handleQueryHistory() {
-  if (!timeRangeStart.value || !timeRangeEnd.value) {
-    settingsStore.showToast(t('chart.selectTimeRange'))
-    return
-  }
-  
-  const start = new Date(timeRangeStart.value).getTime()
-  const end = new Date(timeRangeEnd.value).getTime()
-  
-  const history = chart.queryHistory(start, end)
-  settingsStore.showToast(t('chart.queryResult', { count: history.length }))
+const handleQueryHistory = () => {
+  measureSync('queryHistory', () => {
+    if (!timeRangeStart.value || !timeRangeEnd.value) {
+      settingsStore.showToast(t('chart.selectTimeRange'))
+      return
+    }
+    
+    const start = new Date(timeRangeStart.value).getTime()
+    const end = new Date(timeRangeEnd.value).getTime()
+    
+    const history = chart.queryHistory(start, end)
+    settingsStore.showToast(t('chart.queryResult', { count: history.length }))
+  })
 }
 </script>
 

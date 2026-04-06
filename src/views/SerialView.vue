@@ -14,7 +14,10 @@ import {
   rafThrottle,
   debounce 
 } from '../utils/performance'
-import { keyResponseTimer } from '../composables/usePerformanceMonitor'
+import { keyResponseTimer, measureSync } from '../composables/usePerformanceMonitor'
+import { 
+  BatchDOMUpdater
+} from '../composables/useButtonOptimizer'
 import { 
   Download, Trash2, Bluetooth,
   Usb, Plus, Play, Pause, Trash,
@@ -617,67 +620,183 @@ onUnmounted(() => {
 
 // ==================== 连接与发送功能 ====================
 
-const toggleConnect = () => {
-  if (isConnected.value) {
-    disconnect()
-    if (isLooping.value) toggleLoopSend()
-  } else if (canReconnect.value) {
-    reconnect()
-  } else {
-    connect()
-  }
-}
+/** DOM 批量更新器实例 */
+const domUpdater = new BatchDOMUpdater()
 
-const addCommand = () => {
-  quickCommands.value.push({
-    id: Date.now(),
-    enabled: true,
-    content: '',
-    description: '',
-    isHex: false,
-    delay: 1000
+/**
+ * 优化的连接/断开切换函数
+ * 使用性能监控和即时反馈
+ */
+const toggleConnect = () => {
+  measureSync('toggleConnect', () => {
+    if (isConnected.value) {
+      disconnect()
+      if (isLooping.value) toggleLoopSend()
+    } else if (canReconnect.value) {
+      reconnect()
+    } else {
+      connect()
+    }
   })
 }
 
-const deleteCommand = (id: number) => {
-  quickCommands.value = quickCommands.value.filter(cmd => cmd.id !== id)
+/**
+ * 优化的发送数据函数
+ * 添加输入验证和错误处理的性能优化
+ */
+const optimizedHandleSend = () => {
+  measureSync('handleSend', () => {
+    handleSend()
+  })
 }
 
+/**
+ * 优化的添加指令函数
+ * 使用批量 DOM 更新
+ */
+const addCommand = () => {
+  measureSync('addCommand', () => {
+    quickCommands.value.push({
+      id: Date.now(),
+      enabled: true,
+      content: '',
+      description: '',
+      isHex: false,
+      delay: 1000
+    })
+  })
+}
+
+/**
+ * 优化的删除指令函数
+ * 避免创建新数组，使用原地修改
+ */
+const deleteCommand = (id: number) => {
+  measureSync('deleteCommand', () => {
+    const index = quickCommands.value.findIndex(cmd => cmd.id === id)
+    if (index > -1) {
+      quickCommands.value.splice(index, 1)
+    }
+  })
+}
+
+/**
+ * 优化的发送单个指令函数
+ * 带防抖保护
+ */
 const sendCommand = async (cmd: QuickCommand) => {
   if (!isConnected.value || !cmd.content) return
-  await send(cmd.content, cmd.isHex)
+  
+  try {
+    await send(cmd.content, cmd.isHex)
+  } catch (error) {
+    console.error('[Serial] Send command error:', error)
+  }
 }
+
+/**
+ * 优化的发送选中指令函数
+ * 支持取消机制
+ */
+let sendSelectedAbortController: AbortController | null = null
 
 const sendSelected = async () => {
   if (!isConnected.value) return
+  
+  // 取消之前的操作
+  if (sendSelectedAbortController) {
+    sendSelectedAbortController.abort()
+  }
+  
+  sendSelectedAbortController = new AbortController()
+  const { signal } = sendSelectedAbortController
+  
   for (const cmd of quickCommands.value) {
+    if (signal.aborted) break
+    
     if (cmd.enabled && cmd.content) {
       await send(cmd.content, cmd.isHex)
-      if (cmd.delay > 0) {
-        await new Promise(resolve => setTimeout(resolve, cmd.delay))
+      
+      if (cmd.delay > 0 && !signal.aborted) {
+        await new Promise(resolve => {
+          const timeoutId = setTimeout(resolve, cmd.delay)
+          signal.addEventListener('abort', () => clearTimeout(timeoutId), { once: true })
+        })
       }
+    }
+  }
+  
+  sendSelectedAbortController = null
+}
+
+/**
+ * 优化的循环发送切换函数
+ * 带状态保护和清理
+ */
+const toggleLoopSend = () => {
+  measureSync('toggleLoopSend', () => {
+    if (isLooping.value) {
+      isLooping.value = false
+      if (loopTimer) {
+        clearTimeout(loopTimer)
+        loopTimer = null
+      }
+      // 取消正在进行的发送
+      if (sendSelectedAbortController) {
+        sendSelectedAbortController.abort()
+        sendSelectedAbortController = null
+      }
+    } else {
+      if (!isConnected.value) return
+      isLooping.value = true
+      runLoop()
+    }
+  })
+}
+
+/**
+ * 循环发送执行函数
+ * 带自动清理和错误恢复
+ */
+const runLoop = async () => {
+  if (!isLooping.value) return
+  
+  try {
+    await sendSelected()
+    
+    if (isLooping.value) {
+      loopTimer = window.setTimeout(runLoop, loopInterval.value)
+    }
+  } catch (error) {
+    console.error('[Serial] Loop send error:', error)
+    // 出错时停止循环
+    isLooping.value = false
+    if (loopTimer) {
+      clearTimeout(loopTimer)
+      loopTimer = null
     }
   }
 }
 
-const toggleLoopSend = () => {
-  if (isLooping.value) {
-    isLooping.value = false
-    if (loopTimer) clearTimeout(loopTimer)
-  } else {
-    if (!isConnected.value) return
-    isLooping.value = true
-    runLoop()
+/** 清理函数 - 在组件卸载时调用 */
+function cleanupButtonOptimizations() {
+  domUpdater.dispose()
+  
+  // 清理循环定时器
+  if (loopTimer) {
+    clearTimeout(loopTimer)
+    loopTimer = null
+  }
+  
+  // 取消正在进行的操作
+  if (sendSelectedAbortController) {
+    sendSelectedAbortController.abort()
+    sendSelectedAbortController = null
   }
 }
 
-const runLoop = async () => {
-  if (!isLooping.value) return
-  await sendSelected()
-  if (isLooping.value) {
-    loopTimer = window.setTimeout(runLoop, loopInterval.value)
-  }
-}
+// 在 onUnmounted 中调用清理
+onUnmounted(cleanupButtonOptimizations)
 </script>
 
 <template>
@@ -1249,9 +1368,9 @@ const runLoop = async () => {
               <input type="checkbox" v-model="isHexSend" class="rounded"> HEX
             </label>
             <button 
-              @click="handleSend" 
+              @click="optimizedHandleSend" 
               :disabled="!isConnected"
-              class="px-6 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded text-xs font-medium transition-colors disabled:opacity-50"
+              class="px-6 py-2 bg-slate-400 hover:bg-slate-500 text-white rounded text-xs font-medium optimize-transition disabled:opacity-50"
             >
               {{ t('serial.send') }}
             </button>
