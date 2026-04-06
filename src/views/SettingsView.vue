@@ -3,7 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useSettingsStore } from '../stores/settings'
 import { useI18n } from '../composables/useI18n'
 import { useFileSave } from '../composables/useFileSave'
-import { CheckCircle2, RotateCcw, Save, Heart, Download, FileJson, FileText, FolderOpen, ExternalLink, Keyboard } from 'lucide-vue-next'
+import { CheckCircle2, RotateCcw, Save, Heart, Download, FileJson, FileText, FolderOpen, ExternalLink, Keyboard, Copy, Check } from 'lucide-vue-next'
 import DonateModal from '../components/DonateModal.vue'
 import SaveStatusToast from '../components/SaveStatusToast.vue'
 
@@ -17,6 +17,12 @@ const showDonateModal = ref(false)
 /** 正在编辑的快捷键 */
 const editingShortcut = ref<string | null>(null)
 
+/** 邮箱已复制提示 */
+const emailCopied = ref(false)
+
+/** 开发者邮箱 */
+const developerEmail = '2986427953@qq.com'
+
 /** 快捷键列表 */
 const shortcutList = [
   { key: 'send', labelKey: 'serial.shortcutSend' },
@@ -27,6 +33,21 @@ const shortcutList = [
   { key: 'stopExecution', labelKey: 'serial.shortcutStop' },
   { key: 'showHelp', labelKey: 'serial.shortcutShowHelp' },
 ]
+
+/**
+ * 复制邮箱到剪贴板
+ */
+async function copyEmail(): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(developerEmail)
+    emailCopied.value = true
+    setTimeout(() => {
+      emailCopied.value = false
+    }, 2000)
+  } catch {
+    console.error('Failed to copy email')
+  }
+}
 
 /**
  * 开始编辑快捷键
@@ -420,6 +441,25 @@ async function handleExportAllData(): Promise<void> {
               >
                 {{ t('settings.sendSuggestion') }}
               </a>
+            </div>
+
+            <!-- 邮箱显示与复制 -->
+            <div class="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-900 rounded-lg">
+              <div class="flex-1">
+                <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">{{ t('settings.developerEmail') }}</div>
+                <div class="text-sm font-mono text-slate-700 dark:text-slate-300">{{ developerEmail }}</div>
+              </div>
+              <button 
+                @click="copyEmail"
+                class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all"
+                :class="emailCopied 
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' 
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-600'"
+              >
+                <Check v-if="emailCopied" class="w-3.5 h-3.5" />
+                <Copy v-else class="w-3.5 h-3.5" />
+                {{ emailCopied ? t('settings.copied') : t('settings.copy') }}
+              </button>
             </div>
 
             <!-- 打赏开发者 -->
