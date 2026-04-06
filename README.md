@@ -1,5 +1,7 @@
 # QXC Serial 超联串口助手
 
+🌐 **在线体验**: [https://qxc-serial.top](https://qxc-serial.top)
+
 基于 Web Serial API 的现代浏览器端串口调试工具，支持多编码格式、指令组管理、数据导出等功能。
 
 ## 项目简介
