@@ -10,11 +10,6 @@ const router = createRouter({
       component: SerialView
     },
     {
-      path: '/network',
-      name: 'network',
-      component: () => import('../views/NetworkView.vue')
-    },
-    {
       path: '/chart',
       name: 'chart',
       component: () => import('../views/ChartView.vue')

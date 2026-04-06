@@ -848,16 +848,16 @@ const runLoop = async () => {
                   class="border dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm disabled:opacity-50"
                 >
                   <option value="none">{{ t('serial.noParse') }}</option>
-                  <optgroup label="Modbus 协议">
-                    <option value="modbus-rtu">Modbus RTU</option>
-                    <option value="modbus-ascii">Modbus ASCII</option>
+                  <optgroup :label="t('serial.modbusProtocol')">
+                    <option value="modbus-rtu">{{ t('serial.modbusRtu') }}</option>
+                    <option value="modbus-ascii">{{ t('serial.modbusAscii') }}</option>
                   </optgroup>
-                  <optgroup label="显示模式">
-                    <option value="hex-display">十六进制显示</option>
-                    <option value="ascii-display">ASCII 文本显示</option>
+                  <optgroup :label="t('serial.displayModeGroup')">
+                    <option value="hex-display">{{ t('serial.hexDisplay') }}</option>
+                    <option value="ascii-display">{{ t('serial.asciiDisplay') }}</option>
                   </optgroup>
-                  <optgroup label="自定义协议">
-                    <option value="custom-frame">自定义帧格式</option>
+                  <optgroup :label="t('serial.customProtocol')">
+                    <option value="custom-frame">{{ t('serial.customFrame') }}</option>
                   </optgroup>
                 </select>
               </div>
@@ -865,7 +865,7 @@ const runLoop = async () => {
               <!-- 自定义协议配置 -->
               <div v-if="parseMode === 'custom-frame'" class="space-y-2 p-2 bg-slate-50 dark:bg-slate-900 rounded border dark:border-slate-700">
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">帧头 (HEX)</label>
+                  <label class="text-xs text-slate-500">{{ t('serial.frameHeader') }}</label>
                   <input 
                     v-model="customProtocolConfig.frameHeader"
                     type="text"
@@ -875,7 +875,7 @@ const runLoop = async () => {
                 </div>
                 
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">帧尾 (HEX, 可选)</label>
+                  <label class="text-xs text-slate-500">{{ t('serial.frameTail') }}</label>
                   <input 
                     v-model="customProtocolConfig.frameTail"
                     type="text"
@@ -885,7 +885,7 @@ const runLoop = async () => {
                 </div>
                 
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">数据偏移</label>
+                  <label class="text-xs text-slate-500">{{ t('serial.dataOffset') }}</label>
                   <input 
                     v-model.number="customProtocolConfig.dataOffset"
                     type="number"
@@ -895,16 +895,16 @@ const runLoop = async () => {
                 </div>
                 
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">校验方式</label>
+                  <label class="text-xs text-slate-500">{{ t('serial.checksumMethod') }}</label>
                   <select 
                     v-model="customProtocolConfig.checksum.type"
                     class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
                   >
-                    <option value="none">无校验</option>
-                    <option value="sum">累加和</option>
-                    <option value="xor">异或</option>
-                    <option value="crc16">CRC16</option>
-                    <option value="crc16-modbus">CRC16-Modbus</option>
+                    <option value="none">{{ t('serial.noChecksum') }}</option>
+                    <option value="sum">{{ t('serial.sumChecksum') }}</option>
+                    <option value="xor">{{ t('serial.xorChecksum') }}</option>
+                    <option value="crc16">{{ t('serial.crc16Checksum') }}</option>
+                    <option value="crc16-modbus">{{ t('serial.crc16ModbusChecksum') }}</option>
                   </select>
                 </div>
                 
@@ -914,12 +914,12 @@ const runLoop = async () => {
                     v-model="lengthFieldEnabled"
                     class="w-3 h-3"
                   />
-                  <label class="text-xs text-slate-500">启用长度字段</label>
+                  <label class="text-xs text-slate-500">{{ t('serial.enableLengthField') }}</label>
                 </div>
                 
                 <div v-show="lengthFieldEnabled" class="space-y-2">
                   <div class="flex flex-col gap-1">
-                    <label class="text-xs text-slate-500">长度偏移</label>
+                    <label class="text-xs text-slate-500">{{ t('serial.lengthOffset') }}</label>
                     <input 
                       v-model.number="customProtocolConfig.lengthField.offset"
                       type="number"
@@ -928,13 +928,13 @@ const runLoop = async () => {
                     />
                   </div>
                   <div class="flex flex-col gap-1">
-                    <label class="text-xs text-slate-500">长度字节数</label>
+                    <label class="text-xs text-slate-500">{{ t('serial.lengthBytes') }}</label>
                     <select 
                       v-model.number="customProtocolConfig.lengthField.size"
                       class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
                     >
-                      <option :value="1">1 字节</option>
-                      <option :value="2">2 字节</option>
+                      <option :value="1">{{ t('serial.oneByte') }}</option>
+                      <option :value="2">{{ t('serial.twoBytes') }}</option>
                     </select>
                   </div>
                 </div>

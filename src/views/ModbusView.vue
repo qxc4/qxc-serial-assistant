@@ -85,37 +85,37 @@ const expandedResult = ref<string | null>(null)
 let parser: ModbusParser | null = null
 
 /** 数据类型选项 */
-const dataTypeOptions: { value: DataType; label: string; bytes: number }[] = [
-  { value: 'uint16', label: 'UINT16 (无符号16位)', bytes: 2 },
-  { value: 'int16', label: 'INT16 (有符号16位)', bytes: 2 },
-  { value: 'uint32', label: 'UINT32 (无符号32位)', bytes: 4 },
-  { value: 'int32', label: 'INT32 (有符号32位)', bytes: 4 },
-  { value: 'float32', label: 'FLOAT32 (单精度浮点)', bytes: 4 }
-]
+const dataTypeOptions = computed<{ value: DataType; label: string; bytes: number }[]>(() => [
+  { value: 'uint16', label: t('modbus.uint16'), bytes: 2 },
+  { value: 'int16', label: t('modbus.int16'), bytes: 2 },
+  { value: 'uint32', label: t('modbus.uint32'), bytes: 4 },
+  { value: 'int32', label: t('modbus.int32'), bytes: 4 },
+  { value: 'float32', label: t('modbus.float32'), bytes: 4 }
+])
 
 /** 字节序选项 */
-const byteOrderOptions: { value: ByteOrder; label: string }[] = [
-  { value: 'ABCD', label: 'ABCD (大端)' },
-  { value: 'DCBA', label: 'DCBA (小端)' },
-  { value: 'BADC', label: 'BADC (中大端)' },
-  { value: 'CDAB', label: 'CDAB (中小端)' }
-]
+const byteOrderOptions = computed<{ value: ByteOrder; label: string }[]>(() => [
+  { value: 'ABCD', label: t('modbus.abcd') },
+  { value: 'DCBA', label: t('modbus.dcba') },
+  { value: 'BADC', label: t('modbus.badc') },
+  { value: 'CDAB', label: t('modbus.cdab') }
+])
 
 /** 功能码选项 */
-const functionCodeOptions = [
-  { value: 1, label: '0x01 - 读线圈', needsQuantity: true },
-  { value: 2, label: '0x02 - 读离散输入', needsQuantity: true },
-  { value: 3, label: '0x03 - 读保持寄存器', needsQuantity: true },
-  { value: 4, label: '0x04 - 读输入寄存器', needsQuantity: true },
-  { value: 5, label: '0x05 - 写单个线圈', needsValue: true },
-  { value: 6, label: '0x06 - 写单个寄存器', needsValue: true },
-  { value: 15, label: '0x0F - 写多个线圈', needsValue: true },
-  { value: 16, label: '0x10 - 写多个寄存器', needsValue: true }
-]
+const functionCodeOptions = computed(() => [
+  { value: 1, label: t('modbus.fc01'), needsQuantity: true },
+  { value: 2, label: t('modbus.fc02'), needsQuantity: true },
+  { value: 3, label: t('modbus.fc03'), needsQuantity: true },
+  { value: 4, label: t('modbus.fc04'), needsQuantity: true },
+  { value: 5, label: t('modbus.fc05'), needsValue: true },
+  { value: 6, label: t('modbus.fc06'), needsValue: true },
+  { value: 15, label: t('modbus.fc15'), needsValue: true },
+  { value: 16, label: t('modbus.fc16'), needsValue: true }
+])
 
 /** 当前选中的功能码配置 */
 const selectedFunctionCode = computed(() => {
-  return functionCodeOptions.find(fc => fc.value === buildSettings.value.functionCode)
+  return functionCodeOptions.value.find(fc => fc.value === buildSettings.value.functionCode)
 })
 
 /**

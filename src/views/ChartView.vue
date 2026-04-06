@@ -54,21 +54,21 @@ const manualInputValue = ref('')
 const manualInputChannel = ref('')
 
 /** 数据类型选项 */
-const dataTypeOptions = [
-  { value: 'uint8', label: 'uint8 (1字节)' },
-  { value: 'int8', label: 'int8 (1字节)' },
-  { value: 'uint16', label: 'uint16 (2字节)' },
-  { value: 'int16', label: 'int16 (2字节)' },
-  { value: 'uint32', label: 'uint32 (4字节)' },
-  { value: 'int32', label: 'int32 (4字节)' },
-  { value: 'float', label: 'float (4字节)' }
-]
+const dataTypeOptions = computed(() => [
+  { value: 'uint8', label: t('chart.uint8') },
+  { value: 'int8', label: t('chart.int8') },
+  { value: 'uint16', label: t('chart.uint16') },
+  { value: 'int16', label: t('chart.int16') },
+  { value: 'uint32', label: t('chart.uint32') },
+  { value: 'int32', label: t('chart.int32') },
+  { value: 'float', label: t('chart.float') }
+])
 
 /** 字节顺序选项 */
-const byteOrderOptions = [
-  { value: 'big', label: '大端 (Big Endian)' },
-  { value: 'little', label: '小端 (Little Endian)' }
-]
+const byteOrderOptions = computed(() => [
+  { value: 'big', label: t('chart.bigEndian') },
+  { value: 'little', label: t('chart.littleEndian') }
+])
 
 /** 图表通道配置 */
 const chartChannels = computed({
@@ -363,21 +363,21 @@ function handleQueryHistory() {
               
               <div v-if="channel.enabled && expandedChannel === channel.name" class="p-2 border-t dark:border-slate-700 space-y-2">
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">数据源</label>
+                  <label class="text-xs text-slate-500">{{ t('chart.dataSource') }}</label>
                   <select 
                     :value="channel.dataSource"
                     @change="updateChannelConfig(index, 'dataSource', ($event.target as HTMLSelectElement).value)"
                     class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800"
                   >
-                    <option value="serial">串口数据</option>
-                    <option value="network">网络数据</option>
-                    <option value="manual">手动输入</option>
+                    <option value="serial">{{ t('chart.serialData') }}</option>
+                    <option value="network">{{ t('chart.networkData') }}</option>
+                    <option value="manual">{{ t('chart.manualInput') }}</option>
                   </select>
                 </div>
                 
                 <div class="flex gap-2">
                   <div class="flex-1 flex flex-col gap-1">
-                    <label class="text-xs text-slate-500">起始字节</label>
+                    <label class="text-xs text-slate-500">{{ t('chart.startByte') }}</label>
                     <input 
                       type="number"
                       :value="channel.parseRule.startByte"
@@ -387,7 +387,7 @@ function handleQueryHistory() {
                     />
                   </div>
                   <div class="flex-1 flex flex-col gap-1">
-                    <label class="text-xs text-slate-500">数据类型</label>
+                    <label class="text-xs text-slate-500">{{ t('chart.dataTypeLabel') }}</label>
                     <select 
                       :value="channel.parseRule.dataType"
                       @change="updateChannelConfig(index, 'parseRule.dataType', ($event.target as HTMLSelectElement).value)"
@@ -399,7 +399,7 @@ function handleQueryHistory() {
                 </div>
                 
                 <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">字节顺序</label>
+                  <label class="text-xs text-slate-500">{{ t('chart.byteOrderLabel') }}</label>
                   <select 
                     :value="channel.parseRule.byteOrder"
                     @change="updateChannelConfig(index, 'parseRule.byteOrder', ($event.target as HTMLSelectElement).value)"
