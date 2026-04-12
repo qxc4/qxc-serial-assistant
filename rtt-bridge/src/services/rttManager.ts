@@ -1,4 +1,4 @@
-import { RttAdapter, RttConnectConfig, ProbeInfo, RttChannelInfo } from '../core/adapter.js'
+import { RttAdapter, RttConnectConfig, ProbeInfo, RttChannelInfo, BackendCapabilities } from '../core/adapter.js'
 import { ProbeRsAdapter } from '../adapters/probe_rs.js'
 import { OpenOCDAdapter } from '../adapters/openocd.js'
 import { JLinkAdapter } from '../adapters/jlink.js'
@@ -23,6 +23,19 @@ export class RttManager {
    */
   get activeBackend(): string | null {
     return this.currentAdapter?.name ?? null
+  }
+
+  /**
+   * 检查所有后端能力
+   * @returns 所有后端的能力信息
+   */
+  static async checkAllCapabilities(): Promise<BackendCapabilities[]> {
+    const [probeRs, openocd, jlink] = await Promise.all([
+      ProbeRsAdapter.checkCapabilities(),
+      OpenOCDAdapter.checkCapabilities(),
+      JLinkAdapter.checkCapabilities(),
+    ])
+    return [probeRs, openocd, jlink]
   }
 
   /**

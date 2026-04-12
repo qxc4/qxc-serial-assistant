@@ -31,6 +31,24 @@ export interface RttChannelInfo {
   mode: 'text' | 'binary'
 }
 
+/** 后端能力信息 */
+export interface BackendCapabilities {
+  /** 后端名称 */
+  name: string
+  /** 是否可用（工具已安装） */
+  available: boolean
+  /** 版本信息 */
+  version?: string
+  /** 不可用原因 */
+  reason?: string
+  /** 安装指引 */
+  installGuide?: string
+  /** 所需配置项 */
+  requiredConfig: string[]
+  /** 可选配置项 */
+  optionalConfig: string[]
+}
+
 /** Adapter 连接配置基类 */
 export interface AdapterConfig {
   backend: string
@@ -39,6 +57,8 @@ export interface AdapterConfig {
 /** probe-rs 连接配置 */
 export interface ProbeRsAdapterConfig extends AdapterConfig {
   backend: 'probe-rs'
+  /** ELF 文件路径 (probe-rs v0.31+ 必需) */
+  elfPath: string
   chip: string
   protocol: 'Swd' | 'Jtag'
   probe?: string
@@ -75,6 +95,20 @@ export abstract class RttAdapter extends EventEmitter {
 
   /** 是否已连接 */
   abstract get isConnected(): boolean
+
+  /**
+   * 检查后端能力（工具是否安装、版本等）
+   * @returns 后端能力信息
+   */
+  static async checkCapabilities(): Promise<BackendCapabilities> {
+    return {
+      name: 'unknown',
+      available: false,
+      reason: '未实现能力检测',
+      requiredConfig: [],
+      optionalConfig: [],
+    }
+  }
 
   /**
    * 建立 RTT 连接

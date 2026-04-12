@@ -79,6 +79,7 @@ describe('RTT Store', () => {
   describe('连接操作', () => {
     it('connect 应该调用 rttService.connectRtt', () => {
       const store = useRttStore()
+      store.elfPath = '/path/to/firmware.elf'
       store.connect()
       expect(rttService.connectWs).toHaveBeenCalled()
       expect(rttService.connectRtt).toHaveBeenCalledTimes(1)
@@ -86,12 +87,22 @@ describe('RTT Store', () => {
 
     it('connect 时应将状态设为 connecting', () => {
       const store = useRttStore()
+      store.elfPath = '/path/to/firmware.elf'
       store.connect()
       expect(store.connectionState).toBe('connecting')
     })
 
+    it('connect 时 elfPath 为空应设为 error 状态', () => {
+      const store = useRttStore()
+      store.elfPath = ''
+      store.connect()
+      expect(store.connectionState).toBe('error')
+      expect(store.errorMessage).toContain('ELF')
+    })
+
     it('连接中或已连接时不应重复连接', () => {
       const store = useRttStore()
+      store.elfPath = '/path/to/firmware.elf'
       store.connect()
       vi.clearAllMocks()
       store.connect()
@@ -112,6 +123,7 @@ describe('RTT Store', () => {
       const config = store.buildConnectConfig()
       expect(config.backend).toBe('probe-rs')
       expect(config.probeRs).toEqual({
+        elfPath: '',
         chip: 'STM32F407VGTx',
         protocol: 'Swd',
         probe: undefined,
@@ -237,18 +249,37 @@ describe('RTT Store', () => {
   })
 
   describe('logStats', () => {
-    it('应该正确统计日志条目', () => {
+    it('应该通过增量计数器正确统计日志条目', () => {
       const store = useRttStore()
-      store.logs = [
-        { id: 1, timestamp: Date.now(), level: 'info', channel: 0, text: 'info' },
-        { id: 2, timestamp: Date.now(), level: 'error', channel: 0, text: 'err' },
-        { id: 3, timestamp: Date.now(), level: 'warn', channel: 0, text: 'warn' },
-        { id: 4, timestamp: Date.now(), level: 'warn', channel: 0, text: 'warn2' },
-      ] as RttLogEntry[]
+      const baseTs = Date.now()
+
+      // 通过 addToBatch + flushBatch 模拟正常数据流
+      store.addToBatch({ id: 1, timestamp: baseTs, level: 'info', channel: 0, text: 'info' })
+      store.addToBatch({ id: 2, timestamp: baseTs, level: 'error', channel: 0, text: 'err' })
+      store.addToBatch({ id: 3, timestamp: baseTs, level: 'warn', channel: 0, text: 'warn' })
+      store.addToBatch({ id: 4, timestamp: baseTs, level: 'warn', channel: 0, text: 'warn2' })
+      store.flushBatch()
 
       expect(store.logStats.total).toBe(4)
       expect(store.logStats.errors).toBe(1)
       expect(store.logStats.warnings).toBe(2)
+    })
+
+    it('初始状态计数器应为零', () => {
+      const store = useRttStore()
+      expect(store.logStats.total).toBe(0)
+      expect(store.logStats.errors).toBe(0)
+      expect(store.logStats.warnings).toBe(0)
+    })
+
+    it('clearLogs 应重置计数器', () => {
+      const store = useRttStore()
+      store.addToBatch({ id: 1, timestamp: Date.now(), level: 'error', channel: 0, text: 'err' })
+      store.flushBatch()
+      store.clearLogs()
+      expect(store.logStats.total).toBe(0)
+      expect(store.logStats.errors).toBe(0)
+      expect(store.logStats.warnings).toBe(0)
     })
   })
 
@@ -316,6 +347,110 @@ describe('RTT Store', () => {
       store.cleanup()
       expect(rttService.disconnectWs).toHaveBeenCalled()
       expect(store.connectionState).toBe('disconnected')
+    })
+  })
+
+  describe('批量缓冲区', () => {
+    it('addToBatch 应将日志加入缓冲区', () => {
+      const store = useRttStore()
+      store.addToBatch({ id: 1, timestamp: Date.now(), level: 'info', channel: 0, text: 'test' })
+      store.flushBatch()
+      expect(store.logs).toHaveLength(1)
+      expect(store.logs[0].text).toBe('test')
+    })
+
+    it('flushBatch 应合并缓冲区到主日志', () => {
+      const store = useRttStore()
+      const ts = Date.now()
+      store.addToBatch({ id: 1, timestamp: ts, level: 'info', channel: 0, text: 'msg1' })
+      store.addToBatch({ id: 2, timestamp: ts, level: 'error', channel: 0, text: 'msg2' })
+      store.addToBatch({ id: 3, timestamp: ts, level: 'warn', channel: 1, text: 'msg3' })
+      store.flushBatch()
+
+      expect(store.logs).toHaveLength(3)
+      expect(store.logStats.errors).toBe(1)
+      expect(store.logStats.warnings).toBe(1)
+    })
+
+    it('日志超过上限时应淘汰旧日志', () => {
+      const store = useRttStore()
+      const ts = Date.now()
+
+      // 添加超过 MAX_LOG_ENTRIES 的日志
+      for (let i = 0; i < 50010; i++) {
+        store.addToBatch({
+          id: i + 1,
+          timestamp: ts + i,
+          level: i % 100 === 0 ? 'error' : 'info',
+          channel: 0,
+          text: `log ${i}`,
+        })
+      }
+      store.flushBatch()
+
+      // 日志数量应被裁剪到 LOG_TRIM_TARGET (40000)
+      expect(store.logs.length).toBeLessThanOrEqual(45000)
+      expect(store.logs.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('validateConfig', () => {
+    it('probe-rs 后端 elfPath 为空时应返回错误', () => {
+      const store = useRttStore()
+      store.backend = 'probe-rs'
+      store.elfPath = ''
+      const error = store.validateConfig()
+      expect(error).toContain('ELF')
+    })
+
+    it('probe-rs 后端 chipModel 为空时应返回错误', () => {
+      const store = useRttStore()
+      store.backend = 'probe-rs'
+      store.elfPath = '/path/to/firmware.elf'
+      store.chipModel = ''
+      const error = store.validateConfig()
+      expect(error).toContain('芯片型号')
+    })
+
+    it('openocd 后端缺少主机地址时应返回错误', () => {
+      const store = useRttStore()
+      store.backend = 'openocd'
+      store.openocdHost = ''
+      const error = store.validateConfig()
+      expect(error).toContain('主机地址')
+    })
+
+    it('jlink 后端缺少端口时应返回错误', () => {
+      const store = useRttStore()
+      store.backend = 'jlink'
+      store.jlinkPort = 0
+      const error = store.validateConfig()
+      expect(error).toContain('端口号')
+    })
+
+    it('webusb 后端无需额外配置验证', () => {
+      const store = useRttStore()
+      store.backend = 'webusb'
+      const error = store.validateConfig()
+      expect(error).toBe('')
+    })
+
+    it('配置正确时应返回空字符串', () => {
+      const store = useRttStore()
+      store.backend = 'probe-rs'
+      store.elfPath = '/path/to/firmware.elf'
+      store.chipModel = 'STM32F407VGTx'
+      const error = store.validateConfig()
+      expect(error).toBe('')
+    })
+  })
+
+  describe('buildConnectConfig webusb', () => {
+    it('应该为 webusb 生成正确的配置', () => {
+      const store = useRttStore()
+      store.backend = 'webusb'
+      const config = store.buildConnectConfig()
+      expect(config.backend).toBe('webusb')
     })
   })
 })

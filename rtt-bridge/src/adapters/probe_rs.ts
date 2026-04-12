@@ -1,25 +1,6 @@
 import { spawn, ChildProcess } from 'child_process'
-import { RttAdapter, RttConnectConfig, ProbeRsAdapterConfig, ProbeInfo, RttChannelInfo, RttDataPayload } from '../core/adapter.js'
-
-/** 日志级别正则匹配模式 */
-const LOG_LEVEL_PATTERNS: Array<{ pattern: RegExp; level: RttDataPayload['level'] }> = [
-  { pattern: /\bERROR\b|\bFATAL\b|\bCRITICAL\b/i, level: 'error' },
-  { pattern: /\bWARN\b|\bWARNING\b/i, level: 'warn' },
-  { pattern: /\bDEBUG\b|\bDBG\b/i, level: 'debug' },
-  { pattern: /\bTRACE\b/i, level: 'trace' },
-]
-
-/**
- * 从日志文本中推断日志级别
- * @param text 日志文本
- * @returns 推断的日志级别
- */
-function inferLogLevel(text: string): RttDataPayload['level'] {
-  for (const { pattern, level } of LOG_LEVEL_PATTERNS) {
-    if (pattern.test(text)) return level
-  }
-  return 'info'
-}
+import { RttAdapter, RttConnectConfig, ProbeRsAdapterConfig, ProbeInfo, RttChannelInfo, RttDataPayload, BackendCapabilities } from '../core/adapter.js'
+import { inferLogLevel } from '../core/logLevel.js'
 
 /**
  * probe-rs 适配器实现
@@ -38,6 +19,72 @@ export class ProbeRsAdapter extends RttAdapter {
   }
 
   /**
+   * 检查 probe-rs 是否已安装
+   */
+  static async checkCapabilities(): Promise<BackendCapabilities> {
+    return new Promise((resolve) => {
+      try {
+        const proc = spawn('probe-rs', ['--version'], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        })
+
+        let stdout = ''
+        let stderr = ''
+
+        proc.stdout?.on('data', (chunk: Buffer) => {
+          stdout += chunk.toString('utf8')
+        })
+
+        proc.stderr?.on('data', (chunk: Buffer) => {
+          stderr += chunk.toString('utf8')
+        })
+
+        proc.on('close', (code) => {
+          if (code === 0) {
+            const version = stdout.trim() || stderr.trim()
+            resolve({
+              name: 'probe-rs',
+              available: true,
+              version: version.split('\n')[0],
+              requiredConfig: ['elfPath', 'chip'],
+              optionalConfig: ['protocol', 'probe', 'frequency', 'rttScanRange'],
+            })
+          } else {
+            resolve({
+              name: 'probe-rs',
+              available: false,
+              reason: 'probe-rs 未安装或不在 PATH 中',
+              installGuide: '请访问 https://probe.rs/docs/getting-started/installation 下载安装，或将 probe-rs 添加到系统 PATH',
+              requiredConfig: ['elfPath', 'chip'],
+              optionalConfig: ['protocol', 'probe', 'frequency', 'rttScanRange'],
+            })
+          }
+        })
+
+        proc.on('error', () => {
+          resolve({
+            name: 'probe-rs',
+            available: false,
+            reason: 'probe-rs 未安装或不在 PATH 中',
+            installGuide: '请访问 https://probe.rs/docs/getting-started/installation 下载安装，或将 probe-rs 添加到系统 PATH',
+            requiredConfig: ['elfPath', 'chip'],
+            optionalConfig: ['protocol', 'probe', 'frequency', 'rttScanRange'],
+          })
+        })
+      } catch {
+        resolve({
+          name: 'probe-rs',
+          available: false,
+          reason: 'probe-rs 未安装或不在 PATH 中',
+          installGuide: '请访问 https://probe.rs/docs/getting-started/installation 下载安装，或将 probe-rs 添加到系统 PATH',
+          requiredConfig: ['elfPath', 'chip'],
+          optionalConfig: ['protocol', 'probe', 'frequency', 'rttScanRange'],
+        })
+      }
+    })
+  }
+
+  /**
    * 建立 probe-rs RTT 连接
    * @param config probe-rs 连接配置
    */
@@ -49,12 +96,20 @@ export class ProbeRsAdapter extends RttAdapter {
     const rsConfig = config as ProbeRsAdapterConfig
     this._config = rsConfig
 
+    // probe-rs v0.31+ 使用 'attach' 命令
+    // attach 需要 ELF 文件路径
+    if (!rsConfig.elfPath) {
+      this.emit('error', new Error('probe-rs 需要 ELF 文件路径。请在配置中提供 ELF 文件路径，或使用 WebUSB 直连模式。'))
+      return
+    }
+
     const args = [
-      'rtt',
-      '--chip', rsConfig.chip,
-      '--protocol', rsConfig.protocol,
+      'attach',
+      rsConfig.elfPath,
     ]
 
+    if (rsConfig.chip) args.push('--chip', rsConfig.chip)
+    if (rsConfig.protocol) args.push('--protocol', rsConfig.protocol)
     if (rsConfig.probe) args.push('--probe', rsConfig.probe)
     if (rsConfig.frequency) args.push('--speed', String(rsConfig.frequency))
     if (rsConfig.rttScanRange) args.push('--rtt-scan-range', rsConfig.rttScanRange)

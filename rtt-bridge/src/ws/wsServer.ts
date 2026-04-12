@@ -1,6 +1,10 @@
 import { WebSocketServer, WebSocket } from 'ws'
 import { RttManager } from '../services/rttManager.js'
-import { RttConnectConfig, RttDataPayload, RttChannelInfo, RttLogLevel } from '../core/adapter.js'
+import { RttConnectConfig, RttDataPayload, RttChannelInfo, RttLogLevel, BackendCapabilities } from '../core/adapter.js'
+import { exec } from 'child_process'
+import { promisify } from 'util'
+
+const execAsync = promisify(exec)
 
 /** 发送给客户端的 RTT 数据格式 */
 interface RttClientData {
@@ -13,15 +17,17 @@ interface RttClientData {
 
 /** 客户端消息类型 */
 interface ClientMessage {
-  type: 'connect' | 'disconnect' | 'send' | 'list_probes'
+  type: 'connect' | 'disconnect' | 'send' | 'list_probes' | 'select_file' | 'check_capabilities' | 'ping'
   config?: RttConnectConfig
   data?: string
   channel?: number
+  /** 文件过滤器 */
+  filters?: Array<{ name: string; extensions: string[] }>
 }
 
 /** 服务端消息类型 */
 interface ServerMessage {
-  type: 'connected' | 'disconnected' | 'rtt_data' | 'error' | 'probe_list' | 'channels'
+  type: 'connected' | 'disconnected' | 'rtt_data' | 'error' | 'probe_list' | 'channels' | 'file_selected' | 'capabilities' | 'pong'
   data?: RttClientData
   probes?: Array<{
     identifier: string
@@ -34,10 +40,13 @@ interface ServerMessage {
   channels?: RttChannelInfo[]
   error?: string
   backend?: string
+  /** 选中的文件路径 */
+  filePath?: string
+  /** 后端能力列表 */
+  capabilities?: BackendCapabilities[]
 }
 
-/** 日志 ID 计数器 */
-let logIdCounter = 0
+/** 日志 ID 计数器（实例级别，避免全局状态污染） */
 
 /**
  * WebSocket RTT 服务器
@@ -47,6 +56,7 @@ export class RttWsServer {
   private wss: WebSocketServer
   private manager: RttManager
   private clients: Set<WebSocket> = new Set()
+  private logIdCounter = 0
 
   constructor(port: number = 19022) {
     this.manager = new RttManager()
@@ -117,11 +127,36 @@ export class RttWsServer {
       case 'list_probes':
         this.handleListProbes(ws)
         break
+      case 'select_file':
+        this.handleSelectFile(ws, msg.filters)
+        break
+      case 'check_capabilities':
+        this.handleCheckCapabilities(ws)
+        break
+      case 'ping':
+        this.sendToClient(ws, { type: 'pong' as ServerMessageType })
+        break
       default:
         this.sendToClient(ws, {
           type: 'error',
           error: `未知消息类型: ${(msg as ClientMessage).type}`,
         })
+    }
+  }
+
+  /**
+   * 处理能力检测请求
+   * @param ws WebSocket 实例
+   */
+  private async handleCheckCapabilities(ws: WebSocket): Promise<void> {
+    try {
+      const capabilities = await RttManager.checkAllCapabilities()
+      this.sendToClient(ws, { type: 'capabilities', capabilities })
+    } catch (err) {
+      this.sendToClient(ws, {
+        type: 'error',
+        error: `能力检测失败: ${err instanceof Error ? err.message : String(err)}`,
+      })
     }
   }
 
@@ -196,6 +231,73 @@ export class RttWsServer {
       this.sendToClient(ws, {
         type: 'error',
         error: `获取探针列表失败: ${err instanceof Error ? err.message : String(err)}`,
+      })
+    }
+  }
+
+  /**
+   * 处理文件选择请求
+   * @param ws WebSocket 实例
+   * @param filters 文件过滤器
+   */
+  private async handleSelectFile(ws: WebSocket, filters?: Array<{ name: string; extensions: string[] }>): Promise<void> {
+    try {
+      // 构建过滤器字符串
+      let filterStr = 'ELF/AXF Files (*.elf;*.axf;*.out)|*.elf;*.axf;*.out|All Files (*.*)|*.*'
+      if (filters && filters.length > 0) {
+        filterStr = filters.map(f => `${f.name} (${f.extensions.map(e => `*.${e}`).join('; ')})|${f.extensions.map(e => `*.${e}`).join(';')}`).join('|')
+      }
+
+      // 使用 PowerShell 脚本文件方式避免引号转义问题
+      // 添加 TopMost 属性使窗口置顶
+      const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Filter = "${filterStr}"
+$dialog.Title = "选择 ELF 文件"
+$dialog.RestoreDirectory = $true
+$dialog.ShowHelp = $true
+
+# 创建一个临时窗体用于置顶显示对话框
+$form = New-Object System.Windows.Forms.Form
+$form.TopMost = $true
+$form.WindowState = "Minimized"
+$form.ShowInTaskbar = $false
+$form.Opacity = 0
+$form.Show() | Out-Null
+
+# 显示对话框
+$result = $dialog.ShowDialog($form)
+$form.Close()
+
+if ($result -eq "OK") {
+  Write-Output $dialog.FileName
+}
+`.trim()
+
+      // 写入临时脚本文件
+      const fs = await import('fs')
+      const os = await import('os')
+      const path = await import('path')
+      const tmpFile = path.join(os.tmpdir(), `select-file-${Date.now()}.ps1`)
+
+      await fs.promises.writeFile(tmpFile, psScript, 'utf8')
+
+      try {
+        const { stdout } = await execAsync(`powershell -ExecutionPolicy Bypass -File "${tmpFile}"`)
+        const filePath = stdout.trim()
+
+        if (filePath) {
+          this.sendToClient(ws, { type: 'file_selected', filePath })
+        }
+      } finally {
+        // 清理临时文件
+        await fs.promises.unlink(tmpFile).catch(() => {})
+      }
+    } catch (err) {
+      this.sendToClient(ws, {
+        type: 'error',
+        error: `文件选择失败: ${err instanceof Error ? err.message : String(err)}`,
       })
     }
   }

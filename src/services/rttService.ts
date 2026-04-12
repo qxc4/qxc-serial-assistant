@@ -5,8 +5,10 @@ import type {
   RttChannel,
   ClientMessage,
   ServerMessage,
+  ServerMessageType,
   RttServiceConfig,
   RttBackend,
+  BackendCapabilities,
 } from '../types/rtt'
 
 /** 默认服务配置 */
@@ -15,6 +17,8 @@ const DEFAULT_CONFIG: RttServiceConfig = {
   autoReconnect: true,
   reconnectInterval: 3000,
   maxReconnectAttempts: 5,
+  heartbeatInterval: 30000,
+  heartbeatTimeout: 10000,
 }
 
 /** 事件回调类型 */
@@ -25,6 +29,8 @@ export interface RttServiceCallbacks {
   onError?: (error: string) => void
   onProbeList?: (probes: ProbeInfo[]) => void
   onChannels?: (channels: RttChannel[]) => void
+  onFileSelected?: (filePath: string) => void
+  onCapabilities?: (capabilities: BackendCapabilities[]) => void
 }
 
 /**
@@ -39,6 +45,8 @@ class RttService {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private isIntentionalDisconnect = false
   private _isWsConnected = false
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
+  private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(config: Partial<RttServiceConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
@@ -76,11 +84,17 @@ class RttService {
     this.ws.onopen = () => {
       this._isWsConnected = true
       this.reconnectAttempts = 0
+      this.startHeartbeat()
     }
 
     this.ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data as string) as ServerMessage
+        // 处理心跳响应
+        if (msg.type === 'pong' as ServerMessageType) {
+          this.clearHeartbeatTimeout()
+          return
+        }
         this.handleServerMessage(msg)
       } catch {
         // 忽略解析失败的消息
@@ -89,6 +103,7 @@ class RttService {
 
     this.ws.onclose = () => {
       this._isWsConnected = false
+      this.stopHeartbeat()
       this.callbacks.onDisconnected?.()
 
       if (!this.isIntentionalDisconnect && this.config.autoReconnect) {
@@ -107,6 +122,7 @@ class RttService {
   disconnectWs(): void {
     this.isIntentionalDisconnect = true
     this.clearReconnectTimer()
+    this.stopHeartbeat()
 
     if (this.ws) {
       this.ws.close()
@@ -144,6 +160,21 @@ class RttService {
   }
 
   /**
+   * 请求选择文件
+   * @param filters 文件过滤器
+   */
+  selectFile(filters?: Array<{ name: string; extensions: string[] }>): void {
+    this.send({ type: 'select_file', filters })
+  }
+
+  /**
+   * 请求检测后端能力
+   */
+  checkCapabilities(): void {
+    this.send({ type: 'check_capabilities' })
+  }
+
+  /**
    * 处理服务端消息
    */
   private handleServerMessage(msg: ServerMessage): void {
@@ -167,6 +198,14 @@ class RttService {
         break
       case 'channels':
         this.callbacks.onChannels?.(msg.channels ?? [])
+        break
+      case 'file_selected':
+        if (msg.filePath) {
+          this.callbacks.onFileSelected?.(msg.filePath)
+        }
+        break
+      case 'capabilities':
+        this.callbacks.onCapabilities?.(msg.capabilities ?? [])
         break
     }
   }
@@ -206,6 +245,47 @@ class RttService {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
+    }
+  }
+
+  /**
+   * 启动心跳检测
+   * 定期发送 ping 消息，超时未收到 pong 则触发重连
+   */
+  private startHeartbeat(): void {
+    this.stopHeartbeat()
+    if (this.config.heartbeatInterval <= 0) return
+
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'ping' }))
+        // 设置心跳超时
+        this.heartbeatTimeoutTimer = setTimeout(() => {
+          console.warn('[RTT Service] 心跳超时，关闭连接')
+          this.ws?.close()
+        }, this.config.heartbeatTimeout)
+      }
+    }, this.config.heartbeatInterval)
+  }
+
+  /**
+   * 停止心跳检测
+   */
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer)
+      this.heartbeatTimer = null
+    }
+    this.clearHeartbeatTimeout()
+  }
+
+  /**
+   * 清除心跳超时定时器
+   */
+  private clearHeartbeatTimeout(): void {
+    if (this.heartbeatTimeoutTimer) {
+      clearTimeout(this.heartbeatTimeoutTimer)
+      this.heartbeatTimeoutTimer = null
     }
   }
 

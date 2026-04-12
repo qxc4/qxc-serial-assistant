@@ -1,7 +1,10 @@
 import { storeToRefs } from 'pinia'
 import { onMounted, onUnmounted } from 'vue'
-import { useRttStore } from '../stores/rtt'
+import { useRttStore, BACKEND_REQUIREMENTS } from '../stores/rtt'
 import { rttService } from '../services/rttService'
+
+// 重新导出 BACKEND_REQUIREMENTS 供外部使用
+export { BACKEND_REQUIREMENTS }
 
 /**
  * RTT Composable
@@ -26,12 +29,14 @@ export function useRtt() {
     isPaused,
     autoScroll,
     errorMessage,
+    elfPath,
     chipModel,
     protocol,
     openocdHost,
     openocdPort,
     jlinkHost,
     jlinkPort,
+    backendCapabilities,
   } = storeToRefs(store)
 
   onMounted(() => {
@@ -57,12 +62,14 @@ export function useRtt() {
     isPaused,
     autoScroll,
     errorMessage,
+    elfPath,
     chipModel,
     protocol,
     openocdHost,
     openocdPort,
     jlinkHost,
     jlinkPort,
+    backendCapabilities,
 
     connect: store.connect,
     disconnect: store.disconnect,
@@ -71,9 +78,14 @@ export function useRtt() {
     setFilter: store.setFilter,
     togglePause: store.togglePause,
     refreshProbes: store.refreshProbes,
+    selectElfFile: store.selectElfFile,
+    checkCapabilities: store.checkCapabilities,
+    getCurrentBackendCapability: store.getCurrentBackendCapability,
+    isCurrentBackendAvailable: store.isCurrentBackendAvailable,
     exportLogs: store.exportLogs,
     exportSession: store.exportSession,
     cleanup: store.cleanup,
     flushBatch: store.flushBatch,
+    validateConfig: store.validateConfig,
   }
 }
