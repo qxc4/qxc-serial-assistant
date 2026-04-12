@@ -10,7 +10,7 @@
 
 ### 🔧 基于 Web Serial API 的现代浏览器端串口调试工具
 
-*跨平台支持 | 多编码格式 | 指令组管理 | 数据可视化*
+*跨平台支持 | 多编码格式 | 指令组管理 | RTT调试 | 数据可视化*
 
 [![在线体验](https://img.shields.io/badge/-在线体验-1081FF?style=flat&logo=google-chrome&logoColor=white)](#-在线体验)
 [![快速开始](https://img.shields.io/badge/-快速开始-10B981?style=flat&logo=git&logoColor=white)](#-快速开始)
@@ -27,6 +27,8 @@
 - [✨ 功能特性](#-功能特性)
 - [⌨️ 快捷键](#️-快捷键)
 - [🚀 快速开始](#-快速开始)
+- [📡 RTT 调试](#-rtt-调试)
+- [🌐 Web 部署](#-web-部署)
 - [💻 系统要求](#-系统要求)
 - [🏗️ 项目结构](#️-项目结构)
 - [🛠️ 技术栈](#️-技术栈)
@@ -83,6 +85,7 @@
 | `ASCII 表` | 完整 ASCII 字符参考 |
 | `Modbus 解析` | RTU/ASCII 协议解析 |
 | `数据图表` | 实时数据可视化 |
+| `RTT 调试` | 实时传输日志调试 |
 
 ### 🎨 用户体验
 
@@ -137,6 +140,99 @@ npm run test
 
 ---
 
+## 📡 RTT 调试
+
+RTT (Real Time Transfer) 是 SEGGER 提供的高速调试输出技术，本项目支持通过多种后端进行 RTT 调试。
+
+### 支持的后端
+
+| 后端 | 说明 |
+|:-----|:-----|
+| `probe-rs` | 开源调试工具，支持多种调试探针 |
+| `OpenOCD` | 通过 OpenOCD 的 RTT 服务器连接 |
+| `J-Link` | 通过 J-Link 调试器的 RTT 功能 |
+
+### 启动 RTT Bridge
+
+```bash
+cd rtt-bridge
+npm install
+npm run dev
+```
+
+RTT Bridge 默认监听 `ws://localhost:19022`。
+
+### 使用步骤
+
+1. 启动 RTT Bridge 后端服务
+2. 在前端选择 RTT 调试页面
+3. 选择后端类型并配置参数
+4. 点击连接开始调试
+
+---
+
+## 🌐 Web 部署
+
+### 静态部署
+
+构建后的 `dist` 目录可直接部署到任何静态服务器：
+
+```bash
+npm run build
+```
+
+### Nginx 配置示例
+
+```nginx
+server {
+    listen 80;
+    server_name qxc-serial.top;
+    root /var/www/qxc-serial/dist;
+    index index.html;
+
+    # SPA 路由支持
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 静态资源缓存
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Gzip 压缩
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+    gzip_min_length 1000;
+}
+```
+
+### Vercel 部署
+
+项目根目录创建 `vercel.json`：
+
+```json
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
+```
+
+### Netlify 部署
+
+项目根目录创建 `netlify.toml`：
+
+```toml
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+```
+
+---
+
 ## 💻 系统要求
 
 | 要求 | 说明 |
@@ -156,19 +252,37 @@ src/
 │   ├── useDataParse.ts    # 数据解析
 │   ├── useCommandGroup.ts # 指令组
 │   ├── useI18n.ts         # 国际化
+│   ├── useRtt.ts          # RTT 调试
 │   └── useFileSave.ts     # 文件保存
 ├── views/                 # 页面组件
 │   ├── SerialView.vue     # 串口主界面
 │   ├── ChartView.vue      # 数据图表
 │   ├── ModbusView.vue     # Modbus解析
+│   ├── RttView.vue        # RTT调试
 │   ├── SettingsView.vue   # 设置页面
 │   ├── ProfileView.vue    # 开发者
 │   ├── AsciiView.vue      # ASCII表
 │   └── NumConverterView.vue # 数制转换
 ├── components/             # 公共组件
 ├── stores/                # Pinia 状态
+│   ├── settings.ts        # 设置存储
+│   └── rtt.ts             # RTT 存储
+├── services/              # 服务层
+│   └── rttService.ts      # RTT WebSocket 服务
 ├── types/                 # TypeScript 类型
 └── utils/                 # 工具函数
+
+rtt-bridge/                # RTT Bridge 后端
+├── src/
+│   ├── adapters/          # 调试探针适配器
+│   │   ├── probe_rs.ts    # probe-rs 适配器
+│   │   ├── openocd.ts     # OpenOCD 适配器
+│   │   └── jlink.ts       # J-Link 适配器
+│   ├── services/          # 服务
+│   │   └── rttManager.ts  # RTT 管理器
+│   └── ws/                # WebSocket 服务
+│       └── wsServer.ts    # WebSocket 服务器
+└── package.json
 ```
 
 ---
@@ -184,6 +298,7 @@ src/
 | Pinia | 3.x | 状态管理 |
 | ECharts | 6.x | 数据可视化 |
 | Lucide | 1.x | 图标库 |
+| Node.js | 18+ | RTT Bridge 后端 |
 
 ---
 
