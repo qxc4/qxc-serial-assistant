@@ -57,10 +57,21 @@ export default defineConfig({
     hmr: {
       overlay: true,
     },
+    // WebUSB 需要的安全头（开发环境）
+    headers: {
+      // 允许跨域隔离（WebUSB 某些场景需要）
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
   preview: {
     host: true,
     port: 4173,
+    // WebUSB 需要的安全头（预览环境）
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
   optimizeDeps: {
     include: [
@@ -72,12 +83,5 @@ export default defineConfig({
     ],
     // 强制预构建
     force: false,
-  },
-  // 性能优化
-  esbuild: {
-    // 启用压缩
-    minifyIdentifiers: true,
-    minifySyntax: true,
-    minifyWhitespace: true,
   },
 })

@@ -6,6 +6,9 @@ import { rttService } from '../services/rttService'
 // 重新导出 BACKEND_REQUIREMENTS 供外部使用
 export { BACKEND_REQUIREMENTS }
 
+/** WebSocket 连接引用计数，防止重复连接/断开 */
+let wsRefCount = 0
+
 /**
  * RTT Composable
  * 轻量封装，负责 WebSocket 连接管理和 Vue 生命周期集成
@@ -40,11 +43,20 @@ export function useRtt() {
   } = storeToRefs(store)
 
   onMounted(() => {
-    rttService.connectWs()
+    wsRefCount++
+    // 只在第一个消费者挂载时建立 WebSocket 连接
+    if (wsRefCount === 1) {
+      rttService.connectWs()
+    }
   })
 
   onUnmounted(() => {
     store.flushBatch()
+    wsRefCount = Math.max(0, wsRefCount - 1)
+    // 最后一个消费者卸载时断开 WebSocket 连接
+    if (wsRefCount === 0) {
+      rttService.disconnectWs()
+    }
   })
 
   return {

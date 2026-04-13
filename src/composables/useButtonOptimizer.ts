@@ -161,11 +161,14 @@ export function useInstantFeedbackButton<T extends (...args: any[]) => Promise<a
   } = {}
 ) {
   const { feedbackDuration = 150, ...buttonOptions } = options
-  
+
   const { handleClick, buttonState, cleanup } = useOptimizedButton(handler, buttonOptions)
 
   /** 是否显示反馈效果 */
   const showFeedback = ref(false)
+
+  /** 反馈定时器 */
+  let feedbackTimer: ReturnType<typeof setTimeout> | null = null
 
   /**
    * 带即时反馈的点击处理
@@ -173,21 +176,35 @@ export function useInstantFeedbackButton<T extends (...args: any[]) => Promise<a
   async function handleWithFeedback(...args: Parameters<T>) {
     // 立即显示反馈
     showFeedback.value = true
-    
+
+    // 清除之前的反馈定时器
+    if (feedbackTimer) {
+      clearTimeout(feedbackTimer)
+    }
+
     // 执行处理
     await handleClick(...args)
-    
+
     // 延迟隐藏反馈
-    setTimeout(() => {
+    feedbackTimer = setTimeout(() => {
       showFeedback.value = false
+      feedbackTimer = null
     }, feedbackDuration)
+  }
+
+  function cleanupFeedback() {
+    cleanup()
+    if (feedbackTimer) {
+      clearTimeout(feedbackTimer)
+      feedbackTimer = null
+    }
   }
 
   return {
     handleClick: handleWithFeedback,
     buttonState,
     showFeedback,
-    cleanup
+    cleanup: cleanupFeedback
   }
 }
 

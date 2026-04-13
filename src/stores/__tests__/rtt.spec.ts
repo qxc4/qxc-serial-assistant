@@ -237,12 +237,12 @@ describe('RTT Store', () => {
   describe('errorLogs', () => {
     it('应该只返回错误级别的日志', () => {
       const store = useRttStore()
-      store.logs = [
-        { id: 1, timestamp: Date.now(), level: 'info', channel: 0, text: 'info' },
-        { id: 2, timestamp: Date.now(), level: 'error', channel: 0, text: 'err1' },
-        { id: 3, timestamp: Date.now(), level: 'warn', channel: 0, text: 'warn' },
-        { id: 4, timestamp: Date.now(), level: 'error', channel: 0, text: 'err2' },
-      ] as RttLogEntry[]
+      // 通过 addToBatch + flushBatch 添加日志，确保计数器正确更新
+      store.addToBatch({ timestamp: Date.now(), level: 'info', channel: 0, text: 'info' })
+      store.addToBatch({ timestamp: Date.now(), level: 'error', channel: 0, text: 'err1' })
+      store.addToBatch({ timestamp: Date.now(), level: 'warn', channel: 0, text: 'warn' })
+      store.addToBatch({ timestamp: Date.now(), level: 'error', channel: 0, text: 'err2' })
+      store.flushBatch()
 
       expect(store.errorLogs).toHaveLength(2)
     })

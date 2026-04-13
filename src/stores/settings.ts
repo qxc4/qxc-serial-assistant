@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { useStorage } from '@vueuse/core'
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch } from 'vue'
 
 export interface SerialDefaults {
   baudRate: number
@@ -52,10 +52,10 @@ export interface ShortcutSettings {
 }
 
 /** 数据解析模式 */
-export type ParseMode = 
-  | 'none' 
-  | 'modbus-rtu' 
-  | 'modbus-ascii' 
+export type ParseMode =
+  | 'none'
+  | 'modbus-rtu'
+  | 'modbus-ascii'
   | 'custom-frame'
   | 'hex-display'
   | 'ascii-display'
@@ -195,77 +195,45 @@ const DEFAULT_SETTINGS: AppSettings = {
   chartChannels: [...DEFAULT_CHART_CHANNELS],
 }
 
-export const useSettingsStore = defineStore('settings', () => {
-  const config = useStorage<AppSettings>('qxc-serial-settings', { ...DEFAULT_SETTINGS })
-  
-  /** 确保配置中包含所有必需字段（处理旧版本配置升级） */
-  function ensureConfigFields() {
-    if (!config.value.uiSettings) {
-      config.value.uiSettings = { ...DEFAULT_UI_SETTINGS }
-    } else {
-      if (config.value.uiSettings.displayMode === undefined) {
-        config.value.uiSettings.displayMode = DEFAULT_UI_SETTINGS.displayMode
+/** 深度合并默认值，确保所有字段存在 */
+function deepMergeDefaults<T extends Record<string, any>>(target: T, defaults: T): T {
+  const result = { ...defaults }
+  for (const key of Object.keys(target)) {
+    if (target[key] !== undefined) {
+      if (
+        typeof target[key] === 'object' && target[key] !== null &&
+        typeof defaults[key] === 'object' && defaults[key] !== null &&
+        !Array.isArray(target[key]) && !Array.isArray(defaults[key])
+      ) {
+        (result as any)[key] = deepMergeDefaults(target[key], defaults[key])
+      } else {
+        (result as any)[key] = target[key]
       }
-      if (config.value.uiSettings.receiveEncoding === undefined) {
-        config.value.uiSettings.receiveEncoding = DEFAULT_UI_SETTINGS.receiveEncoding
-      }
-      if (config.value.uiSettings.sendEncoding === undefined) {
-        config.value.uiSettings.sendEncoding = DEFAULT_UI_SETTINGS.sendEncoding
-      }
-      if (config.value.uiSettings.showTimestamp === undefined) {
-        config.value.uiSettings.showTimestamp = DEFAULT_UI_SETTINGS.showTimestamp
-      }
-      if (config.value.uiSettings.autoScroll === undefined) {
-        config.value.uiSettings.autoScroll = DEFAULT_UI_SETTINGS.autoScroll
-      }
-      if (config.value.uiSettings.showLeftPanel === undefined) {
-        config.value.uiSettings.showLeftPanel = DEFAULT_UI_SETTINGS.showLeftPanel
-      }
-      if (config.value.uiSettings.showRightPanel === undefined) {
-        config.value.uiSettings.showRightPanel = DEFAULT_UI_SETTINGS.showRightPanel
-      }
-      if (config.value.uiSettings.showBottomPanel === undefined) {
-        config.value.uiSettings.showBottomPanel = DEFAULT_UI_SETTINGS.showBottomPanel
-      }
-      if (!config.value.uiSettings.toolbarExpanded) {
-        config.value.uiSettings.toolbarExpanded = { ...DEFAULT_UI_SETTINGS.toolbarExpanded }
-      }
-    }
-    if (!config.value.reconnectSettings) {
-      config.value.reconnectSettings = { ...DEFAULT_RECONNECT_SETTINGS }
-    } else {
-      if (config.value.reconnectSettings.enabled === undefined) {
-        config.value.reconnectSettings.enabled = DEFAULT_RECONNECT_SETTINGS.enabled
-      }
-      if (config.value.reconnectSettings.interval === undefined) {
-        config.value.reconnectSettings.interval = DEFAULT_RECONNECT_SETTINGS.interval
-      }
-      if (config.value.reconnectSettings.maxAttempts === undefined) {
-        config.value.reconnectSettings.maxAttempts = DEFAULT_RECONNECT_SETTINGS.maxAttempts
-      }
-    }
-    if (!config.value.shortcutSettings) {
-      config.value.shortcutSettings = { ...DEFAULT_SHORTCUT_SETTINGS }
-    } else {
-      const shortcuts = ['send', 'toggleConnect', 'clearData', 'saveGroup', 'toggleExecution', 'stopExecution', 'showHelp'] as const
-      for (const key of shortcuts) {
-        if (config.value.shortcutSettings[key] === undefined) {
-          config.value.shortcutSettings[key] = DEFAULT_SHORTCUT_SETTINGS[key]
-        }
-      }
-    }
-    if (!config.value.parseSettings) {
-      config.value.parseSettings = { ...DEFAULT_PARSE_SETTINGS }
-    }
-    if (!config.value.chartChannels || config.value.chartChannels.length === 0) {
-      config.value.chartChannels = [...DEFAULT_CHART_CHANNELS]
     }
   }
-  
+  return result
+}
+
+/** 允许导入的配置字段白名单 */
+const ALLOWED_IMPORT_KEYS = new Set([
+  'theme', 'language', 'notificationsEnabled', 'autoConnect', 'privacyAnalytics',
+  'serialDefaults', 'lastUsedPort', 'uiSettings', 'reconnectSettings',
+  'shortcutSettings', 'parseSettings', 'chartChannels',
+])
+
+export const useSettingsStore = defineStore('settings', () => {
+  const config = useStorage<AppSettings>('qxc-serial-settings', { ...DEFAULT_SETTINGS })
+
+  /** 确保配置中包含所有必需字段（处理旧版本配置升级） */
+  function ensureConfigFields() {
+    config.value = deepMergeDefaults(config.value, DEFAULT_SETTINGS)
+  }
+
   ensureConfigFields()
-  
+
   const toastMessage = ref('')
   const toastVisible = ref(false)
+  let toastTimer: ReturnType<typeof setTimeout> | null = null
   let systemThemeMq: MediaQueryList | null = null
   let systemThemeHandler: ((e: MediaQueryListEvent) => void) | null = null
 
@@ -280,9 +248,10 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  // theme 是字符串，不需要 deep: true
   watch(() => config.value.theme, () => {
     applyTheme()
-  }, { deep: true })
+  })
 
   const listenSystemThemeChange = () => {
     if (systemThemeMq) return
@@ -303,20 +272,19 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  onMounted(() => {
-    applyTheme()
-    listenSystemThemeChange()
-  })
-
-  onUnmounted(() => {
-    stopListenSystemThemeChange()
-  })
+  // Pinia store 不支持 onMounted/onUnmounted，改为在 store 首次使用时初始化
+  applyTheme()
+  listenSystemThemeChange()
 
   const showToast = (msg: string) => {
     toastMessage.value = msg
     toastVisible.value = true
-    setTimeout(() => {
+    if (toastTimer) {
+      clearTimeout(toastTimer)
+    }
+    toastTimer = setTimeout(() => {
       toastVisible.value = false
+      toastTimer = null
     }, 2500)
   }
 
@@ -342,17 +310,32 @@ export const useSettingsStore = defineStore('settings', () => {
     link.href = url
     link.download = `qxc-serial-config-${new Date().toISOString().slice(0, 10)}.json`
     document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    try {
+      link.click()
+    } finally {
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    }
     showToast('配置文件已导出')
   }
 
   const importConfig = (jsonStr: string): boolean => {
     try {
-      const parsed = JSON.parse(jsonStr) as Partial<AppSettings>
-      if (!parsed || typeof parsed !== 'object') return false
-      Object.assign(config.value, parsed)
+      const parsed = JSON.parse(jsonStr)
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        showToast('配置文件格式错误')
+        return false
+      }
+      // 白名单过滤，只保留已知字段
+      const filtered: Record<string, any> = {}
+      for (const key of Object.keys(parsed)) {
+        if (ALLOWED_IMPORT_KEYS.has(key)) {
+          filtered[key] = parsed[key]
+        }
+      }
+      // 深度合并默认值确保完整性
+      const merged = deepMergeDefaults(filtered as Partial<AppSettings>, DEFAULT_SETTINGS) as AppSettings
+      config.value = merged
       showToast('配置导入成功')
       return true
     } catch {
@@ -362,43 +345,17 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   const clearAllData = () => {
-    const defaultSettings = {
-      theme: 'system' as const,
-      language: 'zh-CN' as const,
-      notificationsEnabled: true,
-      autoConnect: false,
-      privacyAnalytics: false,
-      serialDefaults: {
-        baudRate: 9600,
-        dataBits: 8,
-        stopBits: 1,
-        parity: 'none' as const,
-      },
-      lastUsedPort: undefined,
-      uiSettings: { ...DEFAULT_UI_SETTINGS },
-    }
-    
-    config.value.theme = defaultSettings.theme
-    config.value.language = defaultSettings.language
-    config.value.notificationsEnabled = defaultSettings.notificationsEnabled
-    config.value.autoConnect = defaultSettings.autoConnect
-    config.value.privacyAnalytics = defaultSettings.privacyAnalytics
-    config.value.lastUsedPort = defaultSettings.lastUsedPort
-    
-    config.value.serialDefaults = {
-      baudRate: defaultSettings.serialDefaults.baudRate,
-      dataBits: defaultSettings.serialDefaults.dataBits as 8 | 7,
-      stopBits: defaultSettings.serialDefaults.stopBits as 1 | 2,
-      parity: defaultSettings.serialDefaults.parity
-    }
-    
-    config.value.uiSettings = { ...DEFAULT_UI_SETTINGS }
-    
-    setTimeout(() => {
-      localStorage.setItem('qxc-serial-settings', JSON.stringify(defaultSettings))
-    }, 10)
-    
+    config.value = JSON.parse(JSON.stringify(DEFAULT_SETTINGS))
     showToast('本地数据已清除')
+  }
+
+  /** 清理系统主题监听器（应用卸载时调用） */
+  const cleanup = () => {
+    stopListenSystemThemeChange()
+    if (toastTimer) {
+      clearTimeout(toastTimer)
+      toastTimer = null
+    }
   }
 
   return {
@@ -413,5 +370,6 @@ export const useSettingsStore = defineStore('settings', () => {
     importConfig,
     clearAllData,
     showToast,
+    cleanup,
   }
 })

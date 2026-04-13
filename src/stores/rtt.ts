@@ -153,8 +153,8 @@ export const useRttStore = defineStore('rtt', () => {
   /** 后端能力信息 */
   const backendCapabilities = ref<BackendCapabilities[]>([])
 
-  /** 批量更新缓冲区 */
-  const batchBuffer = ref<RttLogEntry[]>([])
+  /** 批量更新缓冲区（内部实现细节，不需要响应式） */
+  let batchBuffer: RttLogEntry[] = []
 
   /** 批量更新定时器 */
   let batchTimer: ReturnType<typeof setTimeout> | null = null
@@ -176,12 +176,14 @@ export const useRttStore = defineStore('rtt', () => {
     const hasLevelFilter = levels.length < 5
     const hasChannelFilter = filterChannels.length > 0
     const hasSearch = searchText.trim().length > 0
-    const lowerSearch = searchText.toLowerCase().trim()
 
+    // 无任何过滤条件时直接返回原数组
     if (!hasLevelFilter && !hasChannelFilter && !hasSearch) {
       return logs.value
     }
 
+    // 合并所有过滤条件为单次遍历
+    const lowerSearch = hasSearch ? searchText.toLowerCase().trim() : ''
     return logs.value.filter((entry) => {
       if (hasLevelFilter && !levels.includes(entry.level)) return false
       if (hasChannelFilter && !filterChannels.includes(entry.channel)) return false
@@ -190,14 +192,15 @@ export const useRttStore = defineStore('rtt', () => {
     })
   })
 
-  /** 仅错误日志 */
-  const errorLogs = computed(() => {
-    return logs.value.filter((entry) => entry.level === 'error')
-  })
-
   /** 日志统计（使用增量计数器，O(1) 复杂度） */
   const logStats = computed(() => {
     return { total: logs.value.length, errors: errorCount, warnings: warnCount }
+  })
+
+  /** 仅错误日志（仅在有错误时过滤） */
+  const errorLogs = computed(() => {
+    if (errorCount === 0) return []
+    return logs.value.filter((entry) => entry.level === 'error')
   })
 
   /** 是否已连接 */
@@ -252,9 +255,9 @@ export const useRttStore = defineStore('rtt', () => {
    * @param entry 日志条目
    */
   function addToBatch(entry: RttLogEntry): void {
-    batchBuffer.value.push({ ...entry, id: ++logIdCounter })
+    batchBuffer.push({ ...entry, id: ++logIdCounter })
 
-    if (batchBuffer.value.length >= BATCH_SIZE) {
+    if (batchBuffer.length >= BATCH_SIZE) {
       flushBatch()
     } else if (!batchTimer) {
       batchTimer = setTimeout(flushBatch, BATCH_INTERVAL)
@@ -271,10 +274,10 @@ export const useRttStore = defineStore('rtt', () => {
       batchTimer = null
     }
 
-    if (batchBuffer.value.length === 0) return
+    if (batchBuffer.length === 0) return
 
-    const newEntries = batchBuffer.value
-    batchBuffer.value = []
+    const newEntries = batchBuffer
+    batchBuffer = []
 
     // 增量更新统计计数器
     for (let i = 0; i < newEntries.length; i++) {

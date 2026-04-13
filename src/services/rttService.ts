@@ -101,12 +101,13 @@ class RttService {
       }
     }
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event: CloseEvent) => {
       this._isWsConnected = false
       this.stopHeartbeat()
       this.callbacks.onDisconnected?.()
 
-      if (!this.isIntentionalDisconnect && this.config.autoReconnect) {
+      // 正常关闭 (code 1000) 不触发自动重连
+      if (!this.isIntentionalDisconnect && this.config.autoReconnect && event.code !== 1000) {
         this.attemptReconnect()
       }
     }
@@ -259,6 +260,8 @@ class RttService {
     this.heartbeatTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'ping' }))
+        // 清除上一次的超时定时器，避免泄漏
+        this.clearHeartbeatTimeout()
         // 设置心跳超时
         this.heartbeatTimeoutTimer = setTimeout(() => {
           console.warn('[RTT Service] 心跳超时，关闭连接')
