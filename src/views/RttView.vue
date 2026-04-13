@@ -985,8 +985,9 @@ watch(
             <!-- 下拉菜单 -->
             <div
               v-if="showDownloadDropdown"
-              class="absolute right-0 top-full mt-1 z-50 flex flex-col gap-1 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 min-w-[160px]"
+              class="absolute right-0 top-full mt-1 z-50 flex flex-col gap-1 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 min-w-[180px]"
             >
+              <div class="px-2 py-1 text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider">启动脚本</div>
               <button
                 @click="downloadStartBat(); showDownloadDropdown = false"
                 class="flex items-center gap-2 px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
@@ -1005,6 +1006,21 @@ watch(
                 </svg>
                 Linux/Mac (.sh)
               </button>
+              <div class="my-1 border-t border-slate-200 dark:border-slate-700"></div>
+              <div class="px-2 py-1 text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider">源码下载</div>
+              <a
+                href="https://github.com/qxc4/qxc-serial-assistant/tree/main/rtt-bridge"
+                target="_blank"
+                rel="noopener noreferrer"
+                @click="showDownloadDropdown = false"
+                class="flex items-center gap-2 px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-green-50 dark:hover:bg-green-900/30 hover:text-green-600 dark:hover:text-green-400 transition-colors"
+              >
+                <Download class="w-4 h-4 text-green-500" />
+                RTT Bridge 源码
+              </a>
+              <div class="px-2 py-1 text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
+                需要自行安装 Node.js 环境
+              </div>
             </div>
           </div>
 
