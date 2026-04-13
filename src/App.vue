@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
-import { Terminal, Settings, User, FileDigit, Binary, Heart, LineChart, Cpu } from 'lucide-vue-next'
+import { Terminal, Settings, User, FileDigit, Binary, Heart, LineChart, Cpu, Activity } from 'lucide-vue-next'
 import { useSettingsStore } from './stores/settings'
 import { useI18n } from './composables/useI18n'
 import DonateModal from './components/DonateModal.vue'
@@ -65,6 +65,18 @@ onUnmounted(() => {
       >
         <Cpu class="w-6 h-6 shrink-0 transition-transform group-hover:scale-110" aria-hidden="true" />
         <span class="text-[10px] font-medium tracking-wide w-full text-center whitespace-nowrap px-1">{{ t('nav.modbus') }}</span>
+      </router-link>
+
+      <router-link 
+        to="/rtt" 
+        class="group flex flex-col items-center justify-center gap-1.5 p-2.5 rounded-xl transition-all duration-200 w-[88px]"
+        :class="route.path === '/rtt' ? 'bg-blue-600 text-white shadow-md shadow-blue-900/50 scale-105' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 active:scale-95'"
+        :title="t('nav.rtt')"
+        :aria-label="t('nav.rtt')"
+        :aria-current="route.path === '/rtt' ? 'page' : undefined"
+      >
+        <Activity class="w-6 h-6 shrink-0 transition-transform group-hover:scale-110" aria-hidden="true" />
+        <span class="text-[10px] font-medium tracking-wide w-full text-center whitespace-nowrap px-1">{{ t('nav.rtt') }}</span>
       </router-link>
 
       <router-link 

@@ -141,11 +141,13 @@ export function useFileSave() {
       link.download = fileName
       link.style.display = 'none'
 
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      try {
+        document.body.appendChild(link)
+        link.click()
+      } finally {
+        document.body.removeChild(link)
+        URL.revokeObjectURL(url)
+      }
 
       lastSavedPath.value = fileName
       saveStatus.value = 'success'
@@ -202,17 +204,24 @@ export function useFileSave() {
    */
   function openFile(content: string | Blob, fileType: keyof typeof FILE_TYPES = 'json'): void {
     try {
-      const blob = content instanceof Blob 
-        ? content 
+      const blob = content instanceof Blob
+        ? content
         : new Blob([content], { type: getMimeType(fileType) })
 
       const url = URL.createObjectURL(blob)
-      
-      /** 在新标签页打开 */
+
       const newWindow = window.open(url, '_blank')
-      
+
       if (!newWindow) {
         lastError.value = '无法打开新窗口，请检查浏览器弹窗设置'
+        URL.revokeObjectURL(url)
+      } else {
+        // 新窗口加载完成后释放 Blob URL
+        newWindow.addEventListener('load', () => {
+          URL.revokeObjectURL(url)
+        }, { once: true })
+        // 兜底：5秒后强制释放
+        setTimeout(() => URL.revokeObjectURL(url), 5000)
       }
     } catch (err: any) {
       lastError.value = err.message || '打开文件失败'

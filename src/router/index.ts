@@ -38,6 +38,11 @@ const router = createRouter({
       path: '/modbus',
       name: 'modbus',
       component: () => import('../views/ModbusView.vue')
+    },
+    {
+      path: '/rtt',
+      name: 'rtt',
+      component: () => import('../views/RttView.vue')
     }
   ]
 })

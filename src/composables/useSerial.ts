@@ -425,41 +425,42 @@ export function useSerial() {
   }
 
   /**
-   * 尝试重新连接
+   * 尝试重新连接（迭代方式，避免递归栈溢出）
    */
   async function attemptReconnect(): Promise<boolean> {
     const reconnectSettings = getReconnectSettings()
     if (!lastConnectConfig || !reconnectSettings.enabled) return false
-    
+
     isReconnecting.value = true
-    reconnectAttempts.value++
-    
-    try {
-      const ports = await navigator.serial.getPorts()
-      if (ports.length > 0) {
-        port.value = ports[0]
-        await port.value.open({
-          baudRate: lastConnectConfig.baudRate,
-          dataBits: lastConnectConfig.dataBits as 7 | 8,
-          stopBits: lastConnectConfig.stopBits as 1 | 2,
-          parity: lastConnectConfig.parity as ParityType
-        })
-        
-        isConnected.value = true
-        isReconnecting.value = false
-        reconnectAttempts.value = 0
-        readLoop()
-        return true
+
+    while (reconnectAttempts.value < reconnectSettings.maxAttempts) {
+      reconnectAttempts.value++
+
+      try {
+        const ports = await navigator.serial.getPorts()
+        if (ports.length > 0) {
+          port.value = ports[0]
+          await port.value.open({
+            baudRate: lastConnectConfig.baudRate,
+            dataBits: lastConnectConfig.dataBits as 7 | 8,
+            stopBits: lastConnectConfig.stopBits as 1 | 2,
+            parity: lastConnectConfig.parity as ParityType
+          })
+
+          isConnected.value = true
+          isReconnecting.value = false
+          reconnectAttempts.value = 0
+          readLoop()
+          return true
+        }
+      } catch (err) {
+        console.warn(`重连尝试 ${reconnectAttempts.value}/${reconnectSettings.maxAttempts} 失败:`, err)
       }
-    } catch (err) {
-      console.warn(`重连尝试 ${reconnectAttempts.value}/${reconnectSettings.maxAttempts} 失败:`, err)
-    }
-    
-    if (reconnectAttempts.value < reconnectSettings.maxAttempts) {
+
+      // 等待重连间隔
       await new Promise(r => setTimeout(r, reconnectSettings.interval))
-      return attemptReconnect()
     }
-    
+
     isReconnecting.value = false
     return false
   }
@@ -530,7 +531,7 @@ export function useSerial() {
           
           const entry: TimestampedData = {
             timestamp: Date.now(),
-            data: item.isHex ? item.data : decodeStringForDisplay(item.data, sendEncoding.value),
+            data: item.data,
             direction: 'tx',
             rawBytes: buffer
           }
@@ -557,16 +558,6 @@ export function useSerial() {
     }
 
     isSending = false
-  }
-
-  /**
-   * 为显示目的解码字符串
-   */
-  function decodeStringForDisplay(str: string, encoding: CharEncoding): string {
-    if (encoding === 'hex') {
-      return str
-    }
-    return str
   }
 
   /**

@@ -179,7 +179,7 @@ export function stringToBytes(str: string, encoding: 'ascii' | 'utf8' | 'hex' = 
   if (encoding === 'hex') {
     const bytes: number[] = []
     for (let i = 0; i < str.length; i += 2) {
-      bytes.push(parseInt(str.substr(i, 2), 16))
+      bytes.push(parseInt(str.substring(i, i + 2), 16))
     }
     return bytes
   }
@@ -207,7 +207,7 @@ export function hexToBytes(hex: string): number[] {
   const cleanHex = hex.replace(/\s+/g, '')
   const bytes: number[] = []
   for (let i = 0; i < cleanHex.length; i += 2) {
-    bytes.push(parseInt(cleanHex.substr(i, 2), 16))
+    bytes.push(parseInt(cleanHex.substring(i, i + 2), 16))
   }
   return bytes
 }
@@ -217,6 +217,9 @@ export function hexToBytes(hex: string): number[] {
  * 注意: 浏览器环境建议使用 Web Crypto API 或 spark-md5 库
  */
 export function md5Simple(data: number[]): string {
+  // 复制输入数组，避免修改原始数据
+  const msg = [...data]
+
   const K: number[] = [
     0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
     0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
@@ -252,25 +255,25 @@ export function md5Simple(data: number[]): string {
   let c0 = 0x98badcfe
   let d0 = 0x10325476
 
-  const msgLen = data.length
+  const msgLen = msg.length
   const bitLen = msgLen * 8
-  
-  data.push(0x80)
-  while ((data.length % 64) !== 56) {
-    data.push(0x00)
-  }
-  
-  for (let i = 0; i < 8; i++) {
-    data.push((bitLen >>> (i * 8)) & 0xFF)
+
+  msg.push(0x80)
+  while ((msg.length % 64) !== 56) {
+    msg.push(0x00)
   }
 
-  for (let offset = 0; offset < data.length; offset += 64) {
+  for (let i = 0; i < 8; i++) {
+    msg.push((bitLen >>> (i * 8)) & 0xFF)
+  }
+
+  for (let offset = 0; offset < msg.length; offset += 64) {
     const M = new Uint32Array(16)
     for (let i = 0; i < 16; i++) {
-      M[i] = (data[offset + i * 4]) |
-             (data[offset + i * 4 + 1] << 8) |
-             (data[offset + i * 4 + 2] << 16) |
-             (data[offset + i * 4 + 3] << 24)
+      M[i] = (msg[offset + i * 4]) |
+             (msg[offset + i * 4 + 1] << 8) |
+             (msg[offset + i * 4 + 2] << 16) |
+             (msg[offset + i * 4 + 3] << 24)
     }
 
     let A = a0
@@ -341,6 +344,6 @@ export function calculateAllChecksums(data: number[]): ChecksumResult[] {
     { type: 'LRC', value: lrcHex(data) },
     { type: 'Checksum', value: checksum(data).toString(16).toUpperCase().padStart(2, '0') },
     { type: 'XOR', value: xorChecksum(data).toString(16).toUpperCase().padStart(2, '0') },
-    { type: 'MD5', value: md5Simple([...data]) }
+    { type: 'MD5', value: md5Simple(data) }
   ]
 }
