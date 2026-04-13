@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed, onMounted } from 'vue'
+import { onClickOutside } from '@vueuse/core'
 import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useBridgeStatus, getPlatformGuide } from '../composables/useBridgeStatus'
@@ -131,6 +132,17 @@ function dismissBridgeWarning(): void {
 
 /** 是否显示 Bridge 启动弹窗 */
 const showBridgeModal = ref(false)
+
+/** 是否显示下载脚本下拉菜单 */
+const showDownloadDropdown = ref(false)
+
+/** 下载下拉菜单容器引用 */
+const downloadDropdownRef = ref<HTMLElement | null>(null)
+
+/** 点击外部关闭下拉菜单 */
+onClickOutside(downloadDropdownRef, () => {
+  showDownloadDropdown.value = false
+})
 
 /**
  * 打开 Bridge 启动弹窗
@@ -958,6 +970,43 @@ watch(
           >
             <PanelRight class="w-3.5 h-3.5" />
           </button>
+
+          <!-- 下载启动脚本按钮 -->
+          <div ref="downloadDropdownRef" class="relative">
+            <button
+              @click="showDownloadDropdown = !showDownloadDropdown"
+              class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-all"
+              :class="showDownloadDropdown ? 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'"
+              title="下载 RTT Bridge 启动脚本"
+            >
+              <Terminal class="w-3.5 h-3.5" />
+              <span class="hidden sm:inline">启动脚本</span>
+            </button>
+            <!-- 下拉菜单 -->
+            <div
+              v-if="showDownloadDropdown"
+              class="absolute right-0 top-full mt-1 z-50 flex flex-col gap-1 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 min-w-[160px]"
+            >
+              <button
+                @click="downloadStartBat(); showDownloadDropdown = false"
+                class="flex items-center gap-2 px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              >
+                <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                </svg>
+                Windows (.bat)
+              </button>
+              <button
+                @click="downloadStartSh(); showDownloadDropdown = false"
+                class="flex items-center gap-2 px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+              >
+                <svg class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-1-6v-2h2v2h-2zm0-4V6h2v4h-2z"/>
+                </svg>
+                Linux/Mac (.sh)
+              </button>
+            </div>
+          </div>
 
           <!-- 帮助按钮 -->
           <button
