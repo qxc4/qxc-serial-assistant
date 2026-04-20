@@ -591,6 +591,9 @@ function handleKeyboardShortcuts(event: KeyboardEvent) {
   }
 }
 
+/** 数据接收回调取消注册函数 */
+let unregisterDataCallback: (() => void) | null = null
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeyboardShortcuts)
   
@@ -598,23 +601,20 @@ onMounted(() => {
   initCustomProtocolConfig()
   
   // 注册数据接收回调，用于数据解析
-  const unregisterCallback = onDataReceive((data, direction) => {
+  unregisterDataCallback = onDataReceive((data, direction) => {
     if (parseEnabled.value && parseMode.value !== 'none' && direction === 'rx') {
       dataParse.parseData(data)
     }
   })
-  
-  // 保存取消注册函数供 onUnmounted 使用
-  ;(window as any).__unregisterDataCallback = unregisterCallback
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyboardShortcuts)
   
   // 取消注册数据接收回调
-  if ((window as any).__unregisterDataCallback) {
-    ;(window as any).__unregisterDataCallback()
-    delete (window as any).__unregisterDataCallback
+  if (unregisterDataCallback) {
+    unregisterDataCallback()
+    unregisterDataCallback = null
   }
 })
 
@@ -1112,6 +1112,7 @@ onUnmounted(cleanupButtonOptimizations)
             :items="filteredReceivedData"
             :item-height="24"
             :buffer="5"
+            key-field="id"
             class="h-full p-4"
             @scroll="handleVirtualScroll"
           >

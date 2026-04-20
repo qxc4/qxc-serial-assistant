@@ -1160,6 +1160,7 @@ watch(
               :items="filteredLogs"
               :item-height="22"
               :buffer="20"
+              key-field="id"
             >
               <template #default="{ item }">
                 <div
