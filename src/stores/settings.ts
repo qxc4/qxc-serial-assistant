@@ -100,6 +100,35 @@ export interface ChartChannelConfig {
   }
 }
 
+/** 行尾字符类型 */
+export type LineEndingType = 'none' | 'rn' | 'r' | 'n' | 'custom'
+
+/** 行尾配置 */
+export interface LineEndingConfig {
+  /** 是否启用行尾自动添加 */
+  enabled: boolean
+  /** 行尾类型 */
+  type: LineEndingType
+  /** 自定义行尾字符（十六进制字符串，如 "0D 0A"） */
+  customValue: string
+}
+
+/** Shell 模式配置 */
+export interface ShellSettings {
+  /** 回显输入命令 */
+  echoCommands: boolean
+  /** 显示时间戳 */
+  showTimestamp: boolean
+  /** 危险命令确认 */
+  confirmDangerous: boolean
+  /** 最大历史记录数 */
+  maxHistory: number
+  /** 命令提示符 */
+  prompt: string
+  /** 字体大小 */
+  fontSize: number
+}
+
 export interface AppSettings {
   theme: 'light' | 'dark' | 'system'
   language: 'zh-CN' | 'en-US'
@@ -112,6 +141,8 @@ export interface AppSettings {
   reconnectSettings: ReconnectSettings
   shortcutSettings: ShortcutSettings
   parseSettings: ParseSettings
+  lineEnding: LineEndingConfig
+  shellSettings: ShellSettings
   chartChannels: ChartChannelConfig[]
 }
 
@@ -175,6 +206,21 @@ const DEFAULT_CHART_CHANNELS: ChartChannelConfig[] = [
   { enabled: true, name: '通道3', color: '#F59E0B', dataSource: 'serial', parseRule: { startByte: 4, byteLength: 2, byteOrder: 'big', dataType: 'uint16' } },
 ]
 
+const DEFAULT_LINE_ENDING: LineEndingConfig = {
+  enabled: true,
+  type: 'rn',
+  customValue: '',
+}
+
+const DEFAULT_SHELL_SETTINGS: ShellSettings = {
+  echoCommands: true,
+  showTimestamp: false,
+  confirmDangerous: true,
+  maxHistory: 500,
+  prompt: '$ ',
+  fontSize: 14,
+}
+
 const DEFAULT_SETTINGS: AppSettings = {
   theme: 'system',
   language: 'zh-CN',
@@ -192,6 +238,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   reconnectSettings: { ...DEFAULT_RECONNECT_SETTINGS },
   shortcutSettings: { ...DEFAULT_SHORTCUT_SETTINGS },
   parseSettings: { ...DEFAULT_PARSE_SETTINGS },
+  lineEnding: { ...DEFAULT_LINE_ENDING },
+  shellSettings: { ...DEFAULT_SHELL_SETTINGS },
   chartChannels: [...DEFAULT_CHART_CHANNELS],
 }
 
@@ -218,7 +266,7 @@ function deepMergeDefaults<T extends Record<string, any>>(target: T, defaults: T
 const ALLOWED_IMPORT_KEYS = new Set([
   'theme', 'language', 'notificationsEnabled', 'autoConnect', 'privacyAnalytics',
   'serialDefaults', 'lastUsedPort', 'uiSettings', 'reconnectSettings',
-  'shortcutSettings', 'parseSettings', 'chartChannels',
+  'shortcutSettings', 'parseSettings', 'lineEnding', 'shellSettings', 'chartChannels',
 ])
 
 export const useSettingsStore = defineStore('settings', () => {

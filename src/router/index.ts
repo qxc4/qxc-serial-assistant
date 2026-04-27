@@ -43,6 +43,11 @@ const router = createRouter({
       path: '/rtt',
       name: 'rtt',
       component: () => import('../views/RttView.vue')
+    },
+    {
+      path: '/shell',
+      name: 'shell',
+      component: () => import('../views/ShellView.vue')
     }
   ]
 })
