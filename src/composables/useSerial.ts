@@ -62,12 +62,17 @@ function byteToHex(byte: number): string {
 
 // Data & Stats
 interface TimestampedData {
+  /** 唯一标识符（用于 Vue 列表渲染 key） */
+  id: number
   timestamp: number
   data: string
   direction: 'rx' | 'tx'
   /** 原始字节数据（用于编码切换时重新解码） */
   rawBytes?: Uint8Array
 }
+
+/** 数据条目 ID 计数器 */
+let dataIdCounter = 0
 
 /** 环形缓冲区实现 */
 class RingBuffer<T> {
@@ -253,6 +258,7 @@ export function useSerial() {
     
     // 创建显示条目
     const entry: TimestampedData = {
+      id: ++dataIdCounter,
       timestamp: Date.now(),
       data: decodeBytes(merged, receiveEncoding.value),
       direction: 'rx',
@@ -530,6 +536,7 @@ export function useSerial() {
           await currentWriter.write(buffer)
           
           const entry: TimestampedData = {
+            id: ++dataIdCounter,
             timestamp: Date.now(),
             data: item.data,
             direction: 'tx',

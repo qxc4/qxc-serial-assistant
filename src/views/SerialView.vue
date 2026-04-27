@@ -388,7 +388,68 @@ const formatTimestamp = (timestamp: number) => {
 // Send Panel states
 const sendInput = ref('')
 const isHexSend = ref(false)
-const addNewline = ref(true) // 发送时自动添加回车换行
+
+/** 行尾配置（从 store 获取持久化状态） */
+const lineEndingConfig = computed({
+  get: () => settingsStore.config.lineEnding,
+  set: (val) => { settingsStore.config.lineEnding = val }
+})
+
+/** 行尾类型选项 */
+const lineEndingOptions = computed(() => [
+  { value: 'none' as const, label: t('serial.lineEndingNone'), preview: '' },
+  { value: 'rn' as const, label: '\\r\\n (CRLF)', preview: '\\r\\n' },
+  { value: 'r' as const, label: '\\r (CR)', preview: '\\r' },
+  { value: 'n' as const, label: '\\n (LF)', preview: '\\n' },
+  { value: 'custom' as const, label: t('serial.lineEndingCustom'), preview: '' },
+])
+
+/**
+ * 获取当前行尾字符的实际值
+ * @returns 行尾字符字符串
+ */
+function getLineEndingValue(): string {
+  const config = lineEndingConfig.value
+  if (!config.enabled) return ''
+  switch (config.type) {
+    case 'rn': return '\r\n'
+    case 'r': return '\r'
+    case 'n': return '\n'
+    case 'custom': {
+      if (!config.customValue.trim()) return ''
+      const hexStr = config.customValue.replace(/\s/g, '')
+      let result = ''
+      for (let i = 0; i < hexStr.length; i += 2) {
+        const byte = parseInt(hexStr.substring(i, i + 2), 16)
+        if (!isNaN(byte)) result += String.fromCharCode(byte)
+      }
+      return result
+    }
+    default: return ''
+  }
+}
+
+/**
+ * 获取行尾字符的预览文本
+ * @returns 预览字符串
+ */
+function getLineEndingPreview(): string {
+  const config = lineEndingConfig.value
+  if (!config.enabled) return ''
+  if (config.type === 'custom' && config.customValue.trim()) {
+    return config.customValue.trim()
+  }
+  const opt = lineEndingOptions.value.find(o => o.value === config.type)
+  return opt?.preview ?? ''
+}
+
+/** 发送数据预览（含行尾字符） */
+const sendPreview = computed(() => {
+  if (!sendInput.value) return ''
+  const ending = getLineEndingPreview()
+  if (!ending) return sendInput.value
+  return sendInput.value + ' ' + ending
+})
 
 // Quick Commands Panel
 interface QuickCommand {
@@ -478,8 +539,9 @@ const handleSend = () => {
     }
   }
   
-  if (!isHexSend.value && addNewline.value) {
-    data += '\r\n'
+  if (!isHexSend.value) {
+    const ending = getLineEndingValue()
+    if (ending) data += ending
   }
   
   try {
@@ -591,6 +653,9 @@ function handleKeyboardShortcuts(event: KeyboardEvent) {
   }
 }
 
+/** 数据接收回调取消注册函数 */
+let unregisterDataCallback: (() => void) | null = null
+
 onMounted(() => {
   window.addEventListener('keydown', handleKeyboardShortcuts)
   
@@ -598,23 +663,20 @@ onMounted(() => {
   initCustomProtocolConfig()
   
   // 注册数据接收回调，用于数据解析
-  const unregisterCallback = onDataReceive((data, direction) => {
+  unregisterDataCallback = onDataReceive((data, direction) => {
     if (parseEnabled.value && parseMode.value !== 'none' && direction === 'rx') {
       dataParse.parseData(data)
     }
   })
-  
-  // 保存取消注册函数供 onUnmounted 使用
-  ;(window as any).__unregisterDataCallback = unregisterCallback
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyboardShortcuts)
   
   // 取消注册数据接收回调
-  if ((window as any).__unregisterDataCallback) {
-    ;(window as any).__unregisterDataCallback()
-    delete (window as any).__unregisterDataCallback
+  if (unregisterDataCallback) {
+    unregisterDataCallback()
+    unregisterDataCallback = null
   }
 })
 
@@ -1112,6 +1174,7 @@ onUnmounted(cleanupButtonOptimizations)
             :items="filteredReceivedData"
             :item-height="24"
             :buffer="5"
+            key-field="id"
             class="h-full p-4"
             @scroll="handleVirtualScroll"
           >
@@ -1360,10 +1423,37 @@ onUnmounted(cleanupButtonOptimizations)
             :placeholder="t('serial.sendInputDesc')"
             class="flex-1 w-full resize-none outline-none text-sm font-mono"
           ></textarea>
-          <div class="absolute bottom-4 right-4 flex items-center gap-4">
-            <label class="flex items-center gap-1 text-xs cursor-pointer text-slate-600 dark:text-slate-400">
-              <input type="checkbox" v-model="addNewline" class="rounded"> {{ t('serial.addNewline') }}
-            </label>
+          <!-- 发送预览 -->
+          <div 
+            v-if="sendInput && lineEndingConfig.enabled && getLineEndingPreview()" 
+            class="absolute top-2 right-4 text-xs text-slate-400 dark:text-slate-500 font-mono truncate max-w-[60%]"
+          >
+            {{ t('serial.sendPreview') }}: {{ sendPreview }}
+          </div>
+          <div class="absolute bottom-4 right-4 flex items-center gap-3">
+            <!-- 行尾自动添加 -->
+            <div class="flex items-center gap-1.5">
+              <label class="flex items-center gap-1 text-xs cursor-pointer text-slate-600 dark:text-slate-400">
+                <input type="checkbox" v-model="lineEndingConfig.enabled" class="rounded"> 
+                {{ t('serial.lineEnding') }}
+              </label>
+              <select 
+                v-model="lineEndingConfig.type"
+                :disabled="!lineEndingConfig.enabled"
+                class="text-xs border dark:border-slate-700 rounded px-1.5 py-0.5 bg-white dark:bg-slate-800 outline-none disabled:opacity-50 max-w-[110px]"
+              >
+                <option v-for="opt in lineEndingOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+              <input 
+                v-if="lineEndingConfig.type === 'custom' && lineEndingConfig.enabled"
+                v-model="lineEndingConfig.customValue"
+                type="text"
+                :placeholder="t('serial.lineEndingCustomPlaceholder')"
+                class="text-xs border dark:border-slate-700 rounded px-1.5 py-0.5 bg-white dark:bg-slate-800 outline-none w-20 font-mono"
+              />
+            </div>
             <label class="flex items-center gap-1 text-xs cursor-pointer text-slate-600 dark:text-slate-400">
               <input type="checkbox" v-model="isHexSend" class="rounded"> HEX
             </label>

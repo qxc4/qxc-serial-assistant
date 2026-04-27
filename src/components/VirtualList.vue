@@ -5,11 +5,14 @@ interface Props {
   items: any[]
   itemHeight?: number
   buffer?: number
+  /** 用于生成 key 的字段名，如果未指定则使用位置索引 */
+  keyField?: string
 }
 
 const props = withDefaults(defineProps<Props>(), {
   itemHeight: 20,
   buffer: 10,
+  keyField: '',
 })
 
 const emit = defineEmits<{
@@ -44,6 +47,19 @@ const totalHeight = computed(() => {
 const offsetY = computed(() => {
   return startIndex.value * props.itemHeight
 })
+
+/**
+ * 获取列表项的唯一 key
+ * @param item 列表项数据
+ * @param index 在 visibleItems 中的索引
+ * @returns 唯一 key
+ */
+function getItemKey(item: any, index: number): string | number {
+  if (props.keyField && item && typeof item[props.keyField] !== 'undefined') {
+    return item[props.keyField]
+  }
+  return startIndex.value + index
+}
 
 /** RAF ID 用于取消未执行的动画帧 */
 let rafId: number | null = null
@@ -128,7 +144,7 @@ defineExpose({
       >
         <div
           v-for="(item, index) in visibleItems"
-          :key="startIndex + index"
+          :key="getItemKey(item, index)"
           class="virtual-list-item"
           :style="{ height: `${itemHeight}px` }"
         >
