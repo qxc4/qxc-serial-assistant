@@ -6,7 +6,16 @@
       "Bash(npx pkg:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "mcp__filesystem__read_multiple_files",
+      "mcp__filesystem__list_directory",
+      "mcp__filesystem__write_file",
+      "mcp__filesystem__create_directory",
+      "Bash(cat \"C:\\\\\\\\Users\\\\\\\\29864\\\\\\\\AppData\\\\\\\\Local\\\\\\\\Temp\\\\\\\\claude\\\\\\\\C--Users-29864-Desktop------qxc-serial-assistant\\\\\\\\9a19a872-6c2a-44ab-8996-b1cccdac0b06\\\\\\\\tasks\\\\\\\\bt3ym15xt.output\")",
+      "Bash(curl:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh release:*)",
+      "Bash(unzip -l /tmp/probe-rs.zip)"
     ]
   }
 }

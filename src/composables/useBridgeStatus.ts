@@ -59,6 +59,7 @@ export function useBridgeStatus(config: Partial<BridgeCheckConfig> = {}) {
 
       ws.onerror = () => {
         clearTimeout(timeoutId)
+        ws.close()
         resolve(false)
       }
     })
@@ -80,6 +81,7 @@ export function useBridgeStatus(config: Partial<BridgeCheckConfig> = {}) {
    * 开始定期检测
    */
   function startPolling(): void {
+    if (checkTimer) return
     performCheck()
     checkTimer = setInterval(performCheck, cfg.checkInterval)
   }

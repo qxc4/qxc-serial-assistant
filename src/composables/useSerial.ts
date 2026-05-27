@@ -147,6 +147,15 @@ const lastSelectedPort = ref<SerialPort | null>(null)
 /** 是否有可重新启用的串口 */
 const canReconnect = ref(false)
 
+/** 清空发送队列并拒绝所有待发送请求 */
+function rejectPendingSends(reason: string): void {
+  const err = new Error(reason)
+  while (sendQueue.length > 0) {
+    const pending = sendQueue.shift()
+    pending?.reject(err)
+  }
+}
+
 export function useSerial() {
   const store = useSettingsStore()
 
@@ -339,6 +348,7 @@ export function useSerial() {
   const disconnect = async () => {
     isConnected.value = false
     isReconnecting.value = false
+    rejectPendingSends('串口连接已断开')
     
     // 刷新接收缓冲区，确保最后的数据不丢失
     if (rxBufferTimer) {
@@ -444,8 +454,12 @@ export function useSerial() {
 
       try {
         const ports = await navigator.serial.getPorts()
-        if (ports.length > 0) {
-          port.value = ports[0]
+        // 优先使用上次授权且已选择的串口，避免误连到其他设备
+        const preferredPort = lastSelectedPort.value && ports.includes(lastSelectedPort.value)
+          ? lastSelectedPort.value
+          : ports[0]
+        if (preferredPort) {
+          port.value = preferredPort
           await port.value.open({
             baudRate: lastConnectConfig.baudRate,
             dataBits: lastConnectConfig.dataBits as 7 | 8,
@@ -453,12 +467,13 @@ export function useSerial() {
             parity: lastConnectConfig.parity as ParityType
           })
 
-          isConnected.value = true
-          isReconnecting.value = false
-          reconnectAttempts.value = 0
-          readLoop()
-          return true
-        }
+            isConnected.value = true
+            isReconnecting.value = false
+            reconnectAttempts.value = 0
+            lastSelectedPort.value = port.value
+            readLoop()
+            return true
+          }
       } catch (err) {
         console.warn(`重连尝试 ${reconnectAttempts.value}/${reconnectSettings.maxAttempts} 失败:`, err)
       }
@@ -565,6 +580,10 @@ export function useSerial() {
     }
 
     isSending = false
+    // 处理临界窗口：队列检查结束后若又有新任务入队，继续处理避免“卡队列”
+    if (sendQueue.length > 0) {
+      void processSendQueue()
+    }
   }
 
   /**
