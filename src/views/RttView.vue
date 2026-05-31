@@ -3,7 +3,7 @@ import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
-import { useBridgeStatus, getPlatformGuide } from '../composables/useBridgeStatus'
+import { getPlatformGuide } from '../composables/useBridgeStatus'
 import { useI18n } from '../composables/useI18n'
 import VirtualList from '../components/VirtualList.vue'
 import type { RttLogLevel, RttBackend, BackendCapabilities } from '../types/rtt'
@@ -48,17 +48,18 @@ const wsRtt = useRtt()
 // WebUSB RTT (直接连接)
 const webUsbRtt = useWebUsbRtt()
 
-// Bridge 状态检测
-const bridgeStatus = useBridgeStatus()
+// Bridge 已退出产品路线；保留离线状态对象仅用于迁移期模板兼容，避免后台轮询本地 WebSocket。
+const bridgeStatus = { status: ref<'offline' | 'online'>('offline') }
 
-/** 当前使用的后端 */
-const backend = ref<RttBackend>('probe-rs')
+/** 当前使用的后端：产品路线转向纯浏览器调试，Bridge 后端仅保留为迁移期遗留代码 */
+const backend = ref<RttBackend>('webusb')
+const legacyBridgeEnabled = false
 
 /** 是否使用 WebUSB 模式 */
 const isWebUsbMode = computed(() => backend.value === 'webusb')
 
 /** 是否需要 Bridge */
-const needsBridge = computed(() => backend.value !== 'webusb')
+const needsBridge = computed(() => legacyBridgeEnabled && backend.value !== 'webusb')
 
 /** Bridge 是否离线 */
 const isBridgeOffline = computed(() => needsBridge.value && bridgeStatus.status.value === 'offline')
@@ -497,10 +498,7 @@ const showTopConfigDetails = ref(false)
 
 /** 后端选项 */
 const backendOptions: Array<{ value: RttBackend; label: string; icon?: any }> = [
-  { value: 'webusb', label: 'WebUSB (直连)', icon: Zap },
-  { value: 'probe-rs', label: 'probe-rs' },
-  { value: 'openocd', label: 'OpenOCD' },
-  { value: 'jlink', label: 'J-Link' },
+  { value: 'webusb', label: 'WebUSB 调试工作台', icon: Zap },
 ]
 
 /** 日志级别选项 */
@@ -1282,7 +1280,7 @@ watch(
                 </h4>
 
                 <!-- 连接方式选择按钮组 -->
-                <div class="grid grid-cols-2 gap-2 mb-4">
+                <div class="grid gap-2 mb-4" :class="legacyBridgeEnabled ? 'grid-cols-2' : 'grid-cols-1'">
                   <button
                     @click="backend = 'webusb'"
                     class="p-3 rounded-lg border-2 transition-all text-left"
@@ -1298,6 +1296,7 @@ watch(
                   </button>
 
                   <button
+                    v-if="legacyBridgeEnabled"
                     @click="backend = 'probe-rs'"
                     class="p-3 rounded-lg border-2 transition-all text-left"
                     :class="backend === 'probe-rs'
@@ -1312,6 +1311,7 @@ watch(
                   </button>
 
                   <button
+                    v-if="legacyBridgeEnabled"
                     @click="backend = 'openocd'"
                     class="p-3 rounded-lg border-2 transition-all text-left"
                     :class="backend === 'openocd'
@@ -1326,6 +1326,7 @@ watch(
                   </button>
 
                   <button
+                    v-if="legacyBridgeEnabled"
                     @click="backend = 'jlink'"
                     class="p-3 rounded-lg border-2 transition-all text-left"
                     :class="backend === 'jlink'
@@ -1412,7 +1413,7 @@ watch(
               </div>
 
               <!-- RTT Bridge 启动说明 -->
-              <div class="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div v-if="legacyBridgeEnabled" class="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                 <h4 class="font-bold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2 text-sm">
                   <Terminal class="w-4 h-4" />
                   🔧 RTT Bridge 启动方式
