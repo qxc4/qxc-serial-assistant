@@ -14,6 +14,8 @@
 
 /// <reference path="../../types/webusb.d.ts" />
 
+import { RttMemorySession } from '../../debug-core/rttMemorySession'
+
 // ==================== 常量定义 ====================
 
 /** ST-Link USB 命令 */
@@ -58,12 +60,6 @@ const SWDFrequency: Record<number, number> = {
   100000: 10,
 }
 
-/** RTT 魔数 */
-const RTT_MAGIC = 'SEGGER RTT'
-
-/** RTT 控制块最大大小 */
-const RTT_CB_SIZE = 256
-
 // ==================== 类型定义 ====================
 
 /** RTT 通道信息 */
@@ -87,30 +83,6 @@ type EventCallback = (...args: unknown[]) => void
 
 // ==================== 工具函数 ====================
 
-/**
- * 从字节数组读取 32 位小端整数
- */
-function readUint32LE(data: Uint8Array, offset: number): number {
-  return (
-    data[offset] |
-    (data[offset + 1] << 8) |
-    (data[offset + 2] << 16) |
-    (data[offset + 3] << 24)
-  ) >>> 0
-}
-
-/**
- * 将 32 位整数写入字节数组（小端）
- */
-function writeUint32LE(value: number): Uint8Array {
-  return new Uint8Array([
-    value & 0xff,
-    (value >> 8) & 0xff,
-    (value >> 16) & 0xff,
-    (value >> 24) & 0xff,
-  ])
-}
-
 // ==================== ST-Link 类 ====================
 
 /**
@@ -124,8 +96,8 @@ export class JSTLink {
   private packetSize = 64
   private _isConnected = false
   private eventListeners: Map<string, Set<EventCallback>> = new Map()
-  private rttControlBlockAddress = 0
   private rttChannels: RttChannel[] = []
+  private rttSession: RttMemorySession | null = null
 
   /** 是否已连接 */
   get isConnected(): boolean {
@@ -281,7 +253,7 @@ export class JSTLink {
     this._device = null
     this._isConnected = false
     this.rttChannels = []
-    this.rttControlBlockAddress = 0
+    this.rttSession = null
   }
 
   /**
@@ -476,50 +448,30 @@ export class JSTLink {
    */
   async rttStart(searchStart: number = 0x20000000, searchEnd: number = 0x20040000): Promise<RttChannel[]> {
     this.rttChannels = []
-    this.rttControlBlockAddress = 0
+    this.rttSession = new RttMemorySession({
+      read8: (address, length) => this.readMemory8(address, length),
+      write8: (address, data) => this.writeMemory8(address, data),
+      read32: async (address, words) => {
+        const data = await this.readMemory32(address, words)
+        return new Uint32Array(data.buffer, data.byteOffset, words)
+      },
+      write32: async (address, words) => {
+        await this.writeMemory32(address, new Uint8Array(words.buffer, words.byteOffset, words.byteLength))
+      },
+    })
+    const block = await this.rttSession.scan(searchStart, searchEnd)
 
-    const magicBytes = new TextEncoder().encode(RTT_MAGIC)
+    this.rttChannels = block.upBuffers
+      .filter(buffer => buffer.size > 0)
+      .map(buffer => ({
+        number: buffer.number,
+        name: `Channel ${buffer.number}`,
+        size: buffer.size,
+        mode: 'text',
+      }))
 
-    // 搜索 RTT 控制块
-    for (let addr = searchStart; addr < searchEnd; addr += 0x1000) {
-      try {
-        const data = await this.readMemory8(addr, RTT_CB_SIZE)
-
-        // 检查魔数
-        let match = true
-        for (let i = 0; i < magicBytes.length; i++) {
-          if (data[i] !== magicBytes[i]) {
-            match = false
-            break
-          }
-        }
-
-        if (match) {
-          this.rttControlBlockAddress = addr
-
-          // 解析通道信息
-          const maxUpBuffers = readUint32LE(data, 16)
-
-          // 创建通道列表
-          for (let i = 0; i < Math.min(maxUpBuffers, 4); i++) {
-            this.rttChannels.push({
-              number: i,
-              name: `Channel ${i}`,
-              size: 1024, // 默认缓冲区大小
-              mode: 'text',
-            })
-          }
-
-          console.log(`[jstlink] RTT 控制块找到于 0x${addr.toString(16)}, ${this.rttChannels.length} 个通道`)
-          return this.rttChannels
-        }
-      } catch {
-        // 忽略读取错误，继续搜索
-        continue
-      }
-    }
-
-    throw new Error('未找到 RTT 控制块')
+    console.log(`[jstlink] RTT 控制块找到于 0x${block.address.toString(16)}, ${this.rttChannels.length} 个通道`)
+    return this.rttChannels
   }
 
   /**
@@ -527,53 +479,19 @@ export class JSTLink {
    */
   async rttStop(): Promise<void> {
     this.rttChannels = []
-    this.rttControlBlockAddress = 0
+    this.rttSession = null
   }
 
   /**
    * 读取 RTT 数据
    */
   async rttRead(channel: number): Promise<string> {
-    if (!this.rttControlBlockAddress) {
+    if (!this.rttSession) {
       return ''
     }
 
     try {
-      // 读取缓冲区描述符
-      // Up buffer descriptor starts at offset 24 + channel * 24
-      const descOffset = 24 + channel * 24
-      const descData = await this.readMemory8(this.rttControlBlockAddress + descOffset, 24)
-
-      const bufferAddr = readUint32LE(descData, 0)
-      const bufferSize = readUint32LE(descData, 4)
-      const writeIndex = readUint32LE(descData, 8)
-      const readIndex = readUint32LE(descData, 12)
-
-      if (bufferSize === 0) {
-        return ''
-      }
-
-      // 计算可读数据量
-      let available = 0
-      if (writeIndex >= readIndex) {
-        available = writeIndex - readIndex
-      } else {
-        available = bufferSize - readIndex + writeIndex
-      }
-
-      if (available === 0) {
-        return ''
-      }
-
-      // 读取数据
-      const data = await this.readMemory8(bufferAddr + readIndex, Math.min(available, 256))
-
-      // 更新读取索引
-      const newReadIndex = (readIndex + data.length) % bufferSize
-      const newReadIndexBytes = writeUint32LE(newReadIndex)
-
-      await this.writeMemory8(this.rttControlBlockAddress + descOffset + 12, newReadIndexBytes)
-
+      const data = await this.rttSession.readUpChannel(channel)
       return new TextDecoder().decode(data)
     } catch (err) {
       console.error('[jstlink] RTT 读取错误:', err)
@@ -585,30 +503,11 @@ export class JSTLink {
    * 写入 RTT 数据
    */
   async rttWrite(channel: number, data: string): Promise<void> {
-    if (!this.rttControlBlockAddress) {
+    if (!this.rttSession) {
       throw new Error('RTT 未启动')
     }
 
     const encoded = new TextEncoder().encode(data)
-
-    // Down buffer descriptor starts after up buffers
-    // 假设最多 4 个 up buffers
-    const descOffset = 24 + 4 * 24 + channel * 24
-    const descData = await this.readMemory8(this.rttControlBlockAddress + descOffset, 24)
-
-    const bufferAddr = readUint32LE(descData, 0)
-    const bufferSize = readUint32LE(descData, 4)
-    const writeIndex = readUint32LE(descData, 8)
-
-    if (bufferSize === 0) {
-      throw new Error('通道不可用')
-    }
-
-    // 写入数据
-    await this.writeMemory8(bufferAddr + writeIndex, encoded)
-
-    // 更新写入索引
-    const newWriteIndex = (writeIndex + encoded.length) % bufferSize
-    await this.writeMemory8(this.rttControlBlockAddress + descOffset + 8, writeUint32LE(newWriteIndex))
+    await this.rttSession.writeDownChannel(channel, encoded)
   }
 }

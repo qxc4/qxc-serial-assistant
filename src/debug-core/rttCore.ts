@@ -19,6 +19,18 @@ export interface RttControlBlock {
   downBuffers: RttBufferDescriptor[]
 }
 
+export function writeUint32LE(value: number): Uint8Array {
+  const bytes = new Uint8Array(4)
+  new DataView(bytes.buffer).setUint32(0, value, true)
+  return bytes
+}
+
+export function getRttDescriptorOffset(direction: 'up' | 'down', channel: number, maxUpBuffers: number): number {
+  return direction === 'up'
+    ? RTT_HEADER_SIZE + channel * RTT_DESCRIPTOR_SIZE
+    : RTT_HEADER_SIZE + maxUpBuffers * RTT_DESCRIPTOR_SIZE + channel * RTT_DESCRIPTOR_SIZE
+}
+
 function readU32(data: Uint8Array, offset: number): number {
   if (offset + 4 > data.length) {
     throw new RangeError(`RTT field at offset ${offset} is outside the provided memory block`)
