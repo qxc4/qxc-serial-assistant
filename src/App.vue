@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted, type Component } from 'vue'
+import { computed, ref, onMounted, type Component } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import {
   Activity,
@@ -120,56 +120,39 @@ function toggleLanguage(): void {
   setLocale(settingsStore.config.language === 'zh-CN' ? 'en-US' : 'zh-CN')
 }
 
-let themeChangeHandler: (() => void) | null = null
-
 onMounted(() => {
   settingsStore.applyTheme()
-
-  themeChangeHandler = () => {
-    if (settingsStore.config.theme === 'system') {
-      settingsStore.applyTheme()
-    }
-  }
-
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', themeChangeHandler)
-})
-
-onUnmounted(() => {
-  if (themeChangeHandler) {
-    window.matchMedia('(prefers-color-scheme: dark)').removeEventListener('change', themeChangeHandler)
-    themeChangeHandler = null
-  }
 })
 </script>
 
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-slate-100 text-slate-800 font-sans transition-colors duration-200 dark:bg-slate-950 dark:text-slate-200">
     <nav
-      class="flex w-[88px] shrink-0 flex-col border-r border-slate-200 bg-slate-950 px-2 py-4 text-slate-400 shadow-sm dark:border-slate-800 dark:bg-slate-950"
+      class="flex w-[68px] shrink-0 flex-col border-r border-slate-200 bg-slate-950 px-1.5 py-3 text-slate-400 shadow-sm dark:border-slate-800 dark:bg-slate-950 lg:w-[88px] lg:px-2 lg:py-4"
       aria-label="Main Navigation"
     >
-      <div class="mb-5 flex flex-col items-center gap-1 px-1 text-center">
+      <div class="mb-3 flex flex-col items-center gap-1 px-1 text-center lg:mb-5">
         <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
           <Terminal class="h-5 w-5" aria-hidden="true" />
         </div>
-        <div class="w-full truncate text-[10px] font-semibold leading-tight text-slate-100">
+        <div class="hidden w-full truncate text-[10px] font-semibold leading-tight text-slate-100 lg:block">
           {{ t('shell.appName') }}
         </div>
-        <div class="w-full truncate text-[9px] text-slate-500">
+        <div class="hidden w-full truncate text-[9px] text-slate-500 xl:block">
           {{ t('shell.appSubtitle') }}
         </div>
       </div>
 
-      <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden">
+      <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden lg:gap-4">
         <div v-for="group in navGroups" :key="group.labelKey" class="flex flex-col gap-1">
-          <div class="px-1 pb-1 text-center text-[9px] font-semibold uppercase tracking-wide text-slate-600">
+          <div class="hidden px-1 pb-1 text-center text-[9px] font-semibold uppercase tracking-wide text-slate-600 xl:block">
             {{ t(group.labelKey) }}
           </div>
           <router-link
             v-for="item in group.items"
             :key="item.path"
             :to="item.path"
-            class="group flex h-[58px] w-full flex-col items-center justify-center gap-1 rounded-lg px-1 text-center transition-colors"
+            class="group flex h-[52px] w-full flex-col items-center justify-center gap-1 rounded-lg px-1 text-center transition-colors lg:h-[58px]"
             :class="isActive(item.path)
               ? 'bg-blue-600 text-white shadow-sm'
               : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'"
@@ -178,7 +161,7 @@ onUnmounted(() => {
             :aria-current="isActive(item.path) ? 'page' : undefined"
           >
             <component :is="item.icon" class="h-5 w-5 shrink-0" aria-hidden="true" />
-            <span class="w-full truncate text-[10px] font-medium leading-tight">
+            <span class="hidden w-full truncate text-[10px] font-medium leading-tight lg:block">
               {{ t(item.titleKey) }}
             </span>
           </router-link>
@@ -188,17 +171,17 @@ onUnmounted(() => {
       <button
         type="button"
         @click="showDonateModal = true"
-        class="mt-4 flex h-[58px] w-full flex-col items-center justify-center gap-1 rounded-lg px-1 text-center text-slate-400 transition-colors hover:bg-slate-800 hover:text-pink-300"
+        class="mt-3 flex h-[52px] w-full flex-col items-center justify-center gap-1 rounded-lg px-1 text-center text-slate-400 transition-colors hover:bg-slate-800 hover:text-pink-300 lg:mt-4 lg:h-[58px]"
         :title="t('shell.donateTitle')"
         :aria-label="t('shell.donateTitle')"
       >
         <Heart class="h-5 w-5 shrink-0" aria-hidden="true" />
-        <span class="w-full truncate text-[10px] font-medium leading-tight">{{ t('nav.donate') }}</span>
+        <span class="hidden w-full truncate text-[10px] font-medium leading-tight lg:block">{{ t('nav.donate') }}</span>
       </button>
     </nav>
 
     <div class="flex min-w-0 flex-1 flex-col">
-      <header class="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-5 dark:border-slate-800 dark:bg-slate-900">
+      <header class="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-900 lg:h-16 lg:px-5">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
             <component :is="currentNavItem.icon" class="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
@@ -206,12 +189,12 @@ onUnmounted(() => {
               {{ t(currentNavItem.titleKey) }}
             </h1>
           </div>
-          <p class="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+          <p class="mt-0.5 hidden truncate text-xs text-slate-500 dark:text-slate-400 lg:block">
             {{ t(currentNavItem.descKey) }}
           </p>
         </div>
 
-        <div class="ml-4 flex shrink-0 items-center gap-3">
+        <div class="ml-3 flex shrink-0 items-center gap-2 lg:ml-4 lg:gap-3">
           <div class="hidden items-center gap-1.5 xl:flex" :aria-label="t('shell.capabilities')">
             <span
               v-for="chip in capabilityChips"

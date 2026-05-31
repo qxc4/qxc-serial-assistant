@@ -1140,29 +1140,36 @@ onUnmounted(cleanupButtonOptimizations)
       <!-- Middle Panel: Data View & Send -->
       <div class="flex-1 flex flex-col bg-white dark:bg-slate-800 min-w-0">
         <!-- Top Toolbar -->
-        <div class="h-12 border-b dark:border-slate-700 flex items-center justify-center relative bg-slate-50 dark:bg-slate-900 shrink-0">
-          <div class="relative w-64">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              v-model="searchQuery"
-              type="text"
-              :placeholder="t('serial.searchPlaceholder')"
-              class="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-shadow"
-            />
-            <button
-              v-if="searchQuery"
-              @click="searchQuery = ''"
-              class="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-            >
-              <XCircle class="w-3.5 h-3.5" />
-            </button>
-          </div>
-          <div class="absolute right-4 flex items-center gap-3 text-slate-600 dark:text-slate-400">
-            <div class="flex items-center gap-1">
-              <button @click="showLeftPanel = !showLeftPanel" :class="showLeftPanel ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400'" class="p-1 hover:bg-slate-200 rounded transition-colors" title="切换左侧栏"><PanelLeft class="w-4 h-4" /></button>
-              <button @click="showBottomPanel = !showBottomPanel" :class="showBottomPanel ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400'" class="p-1 hover:bg-slate-200 rounded transition-colors" title="切换底部栏"><PanelBottom class="w-4 h-4" /></button>
-              <button @click="showRightPanel = !showRightPanel" :class="showRightPanel ? 'text-slate-900 dark:text-slate-100' : 'text-slate-400'" class="p-1 hover:bg-slate-200 rounded transition-colors" title="切换右侧栏"><PanelRight class="w-4 h-4" /></button>
-              <button @click="showLeftPanel = false; showRightPanel = false; showBottomPanel = false" class="p-1 text-slate-400 hover:text-slate-900 dark:text-slate-100 hover:bg-slate-200 rounded transition-colors" title="最大化视图"><Maximize class="w-4 h-4" /></button>
+        <div class="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900 shrink-0 px-3 py-2">
+          <div class="flex items-center gap-2">
+            <div class="relative min-w-0 flex-1 max-w-sm">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                v-model="searchQuery"
+                type="text"
+                :placeholder="t('serial.searchPlaceholder')"
+                class="w-full pl-9 pr-7 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-shadow"
+              />
+              <button
+                v-if="searchQuery"
+                @click="searchQuery = ''"
+                class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                <XCircle class="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div class="hidden md:flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 px-2 py-1 rounded bg-white dark:bg-slate-800 border dark:border-slate-700">
+              <span>{{ filteredReceivedData.length }}</span>
+              <span>/</span>
+              <span>{{ dataCount.toLocaleString() }}</span>
+            </div>
+
+            <div class="flex items-center gap-1 text-slate-600 dark:text-slate-400">
+              <button @click="showLeftPanel = !showLeftPanel" :class="showLeftPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换左侧栏"><PanelLeft class="w-4 h-4" /></button>
+              <button @click="showBottomPanel = !showBottomPanel" :class="showBottomPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换底部栏"><PanelBottom class="w-4 h-4" /></button>
+              <button @click="showRightPanel = !showRightPanel" :class="showRightPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换右侧栏"><PanelRight class="w-4 h-4" /></button>
+              <button @click="showLeftPanel = false; showRightPanel = false; showBottomPanel = false" class="p-1.5 text-slate-400 hover:text-slate-900 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="最大化视图"><Maximize class="w-4 h-4" /></button>
             </div>
           </div>
         </div>
@@ -1288,7 +1295,7 @@ onUnmounted(cleanupButtonOptimizations)
         </div>
 
         <!-- Middle Toolbar -->
-        <div class="px-4 py-2 flex items-center gap-2 flex-wrap border-t dark:border-slate-700 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900 shrink-0">
+        <div class="px-3 py-1.5 flex items-center gap-2 flex-wrap border-t dark:border-slate-700 border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900 shrink-0">
           <!-- Display Mode Group -->
           <div class="flex items-center gap-1">
             <button 
@@ -1378,7 +1385,7 @@ onUnmounted(cleanupButtonOptimizations)
             </button>
             <Transition name="slide">
               <div v-show="toolbarExpanded.options" class="flex gap-1 items-center">
-                <span class="text-[10px] text-slate-500 dark:text-slate-400 px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded">
+                <span class="text-[10px] text-slate-500 dark:text-slate-400 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded">
                   {{ dataCount.toLocaleString() }} {{ t('serial.entries') }}
                 </span>
                 <button 
