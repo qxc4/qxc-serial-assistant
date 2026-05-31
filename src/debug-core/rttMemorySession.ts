@@ -7,16 +7,14 @@ import {
   type RttControlBlock,
   writeUint32LE,
 } from './rttCore'
+import { normalizeRttScanRange, type RttScanRangeInput } from './rttScanRange'
 
 const RTT_MAGIC_BYTES = new TextEncoder().encode('SEGGER RTT')
 const DEFAULT_SCAN_CHUNK_SIZE = 1024
 const DEFAULT_SCAN_STEP_SIZE = 16
 const CONTROL_BLOCK_READ_SIZE = 512
 
-export interface RttScanOptions {
-  chunkSize?: number
-  stepSize?: number
-}
+export type RttScanOptions = Pick<RttScanRangeInput, 'chunkSize' | 'stepSize'>
 
 export class RttMemorySession implements RttSession {
   controlBlock: RttControlBlock | null = null
@@ -27,12 +25,17 @@ export class RttMemorySession implements RttSession {
   }
 
   async scan(searchStart: number, searchEnd: number, options: RttScanOptions = {}): Promise<RttControlBlock> {
-    const chunkSize = options.chunkSize ?? DEFAULT_SCAN_CHUNK_SIZE
-    const stepSize = options.stepSize ?? DEFAULT_SCAN_STEP_SIZE
+    const range = normalizeRttScanRange({
+      start: searchStart,
+      end: searchEnd,
+      chunkSize: options.chunkSize ?? DEFAULT_SCAN_CHUNK_SIZE,
+      stepSize: options.stepSize ?? DEFAULT_SCAN_STEP_SIZE,
+    })
+    const { chunkSize, stepSize } = range
 
-    for (let address = searchStart; address < searchEnd; address += stepSize) {
+    for (let address = range.start; address < range.end; address += stepSize) {
       const readAddress = address
-      const length = Math.min(chunkSize, searchEnd - readAddress)
+      const length = Math.min(chunkSize, range.end - readAddress)
       if (length < RTT_MAGIC_BYTES.length) break
 
       const chunk = await this.memory.read8(readAddress, length)

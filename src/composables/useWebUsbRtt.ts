@@ -27,6 +27,7 @@ import type {
   RttChannel,
   WebUsbProbeType,
 } from '../types/rtt'
+import { normalizeRttScanRange, type RttScanRangeInput } from '../debug-core/rttScanRange'
 
 // ==================== jstlink 类型定义 ====================
 
@@ -189,6 +190,12 @@ export function useWebUsbRtt() {
 
   /** SWD/JTAG 时钟频率 */
   const frequency = ref(DEFAULT_FREQUENCY)
+
+  /** RTT 控制块扫描范围 */
+  const scanRange = ref(normalizeRttScanRange({
+    start: RTT_SEARCH_START,
+    end: RTT_SEARCH_END,
+  }))
 
   /** RTT 通道列表 */
   const channels = ref<RttChannel[]>([])
@@ -510,7 +517,7 @@ export function useWebUsbRtt() {
       state.value = 'scanning'
       console.log('[WebUSB-RTT] 开始扫描 RTT 控制块...')
 
-      const rttChannels = await jstlink.rttStart(RTT_SEARCH_START, RTT_SEARCH_END)
+      const rttChannels = await jstlink.rttStart(scanRange.value.start, scanRange.value.end)
 
       if (!rttChannels || rttChannels.length === 0) {
         setError(
@@ -630,6 +637,10 @@ export function useWebUsbRtt() {
     isPaused.value = !isPaused.value
   }
 
+  function setScanRange(range: RttScanRangeInput): void {
+    scanRange.value = normalizeRttScanRange(range)
+  }
+
   // ==================== 生命周期钩子 ====================
 
   // 监听 USB 设备断开事件（保存引用以便清理）
@@ -669,6 +680,7 @@ export function useWebUsbRtt() {
     probe,
     error,
     frequency,
+    scanRange,
     channels,
     logs,
     isPaused,
@@ -685,5 +697,6 @@ export function useWebUsbRtt() {
     clearLogs,
     togglePause,
     clearError,
+    setScanRange,
   }
 }
