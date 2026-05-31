@@ -755,7 +755,7 @@ watch(
 
           <button
             @click="showTopConfigDetails = !showTopConfigDetails"
-            class="flex items-center gap-1 px-2.5 py-1 rounded text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            class="flex items-center gap-1 px-2.5 py-1 rounded text-xs border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             :title="showTopConfigDetails ? '收起高级配置' : '展开高级配置'"
           >
             <component :is="showTopConfigDetails ? ChevronUp : ChevronDown" class="w-3.5 h-3.5" />
@@ -810,26 +810,27 @@ watch(
           </button>
 
           <!-- 统计信息 -->
-          <div class="ml-auto flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500">
+          <div class="ml-auto flex items-center gap-1.5 text-[11px]">
             <span
               v-if="needsBridge"
-              class="flex items-center gap-1"
+              class="flex items-center gap-1 px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
               :title="bridgeStatus.status.value === 'online' ? 'RTT Bridge 已连接' : 'RTT Bridge 未运行'"
             >
               <Wifi v-if="bridgeStatus.status.value === 'online'" class="w-3.5 h-3.5 text-green-500" />
               <WifiOff v-else class="w-3.5 h-3.5 text-yellow-500 animate-pulse" />
+              <span>{{ bridgeStatus.status.value === 'online' ? 'Bridge 在线' : 'Bridge 离线' }}</span>
             </span>
-            <span>{{ logStats.total }} {{ t('rtt.entries') }}</span>
-            <span v-if="logStats.errors > 0" class="text-red-500 dark:text-red-400">
+            <span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ logStats.total }} {{ t('rtt.entries') }}</span>
+            <span v-if="logStats.errors > 0" class="px-2 py-1 rounded bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400">
               {{ logStats.errors }} {{ t('rtt.errors') }}
             </span>
-            <span v-if="logStats.warnings > 0" class="text-yellow-500 dark:text-yellow-400">
+            <span v-if="logStats.warnings > 0" class="px-2 py-1 rounded bg-yellow-50 dark:bg-yellow-900/20 text-yellow-500 dark:text-yellow-400">
               {{ logStats.warnings }} {{ t('rtt.warnings') }}
             </span>
           </div>
         </div>
 
-        <div v-if="showTopConfigDetails" class="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-3 flex-wrap">
+        <div v-if="showTopConfigDetails" class="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-3 flex-wrap rounded-md bg-slate-50/70 dark:bg-slate-800/30 px-2.5 py-2">
           <!-- probe-rs 配置 -->
           <template v-if="backend === 'probe-rs'">
             <!-- ELF 文件路径 -->

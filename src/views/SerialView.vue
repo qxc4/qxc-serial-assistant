@@ -310,6 +310,10 @@ const showGroupLoader = ref(false)
 
 /** 是否展开执行日志面板 */
 const showExecLog = ref(false)
+const executionLogPreviewLimit = 120
+const recentExecutionLogs = computed(() =>
+  (cg.executionLogs.value || []).slice(-executionLogPreviewLimit).reverse()
+)
 
 /** 保存确认对话框状态 */
 const showSaveConfirm = ref(false)
@@ -1758,21 +1762,34 @@ onUnmounted(cleanupButtonOptimizations)
                 @click="showExecLog = !showExecLog"
                 class="w-full px-3 py-1.5 flex items-center justify-between text-xs text-slate-500 hover:text-slate-700 transition-colors"
               >
-                <span class="flex items-center gap-1">
+                <span class="flex items-center gap-1.5">
                   <AlertCircle class="w-3 h-3"/>
-                  {{ t('serial.execLog') }} ({{ (cg.executionLogs.value || []).length }})
+                  {{ t('serial.execLog') }}
+                  <span class="rounded bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 text-[10px] text-slate-500 dark:text-slate-300">
+                    {{ (cg.executionLogs.value || []).length }}
+                  </span>
                 </span>
-                <ChevronRight class="w-3 h-3 transition-transform" :class="{ 'rotate-90': showExecLog }"/>
+                <span class="flex items-center gap-2">
+                  <button
+                    v-if="(cg.executionLogs.value || []).length > 0"
+                    @click.stop="cg.clearLogs()"
+                    class="px-1.5 py-0.5 rounded text-[10px] text-slate-400 hover:text-red-500 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+                    :title="t('serial.clearData')"
+                  >
+                    {{ t('serial.clearData') }}
+                  </button>
+                  <ChevronRight class="w-3 h-3 transition-transform" :class="{ 'rotate-90': showExecLog }"/>
+                </span>
               </button>
-              <div v-if="showExecLog" class="max-h-40 overflow-y-auto px-3 pb-2 space-y-1">
+              <div v-if="showExecLog" class="max-h-44 overflow-y-auto px-2.5 pb-2 space-y-1">
                 <div
-                  v-for="log in (cg.executionLogs.value || []).slice().reverse()"
+                  v-for="log in recentExecutionLogs"
                   :key="log.id"
-                  class="text-[10px] font-mono p-1.5 rounded bg-slate-50 dark:bg-slate-900 border dark:border-slate-700"
+                  class="text-[10px] font-mono px-2 py-1 rounded bg-slate-50 dark:bg-slate-900 border dark:border-slate-700 grid grid-cols-[auto_auto_1fr_auto] items-center gap-x-1.5"
                 >
-                  <span class="text-slate-400">[{{ new Date(log.startTime).toLocaleTimeString() }}]</span>
+                  <span class="text-slate-400 whitespace-nowrap">[{{ new Date(log.startTime).toLocaleTimeString() }}]</span>
                   <span
-                    class="ml-1 font-medium"
+                    class="font-medium whitespace-nowrap"
                     :class="{
                       'text-green-600': log.status === 'success',
                       'text-red-500': log.status === 'failed',
@@ -1780,12 +1797,18 @@ onUnmounted(cleanupButtonOptimizations)
                       'text-slate-400': log.status === 'skipped'
                     }"
                   >[{{ log.status.toUpperCase() }}]</span>
-                  <span class="ml-1 text-slate-700 dark:text-slate-300">{{ log.sentData || '(无数据)' }}</span>
-                  <span v-if="log.message" class="ml-1 text-slate-400">— {{ log.message }}</span>
-                  <span class="ml-auto text-slate-400">{{ log.duration }}ms</span>
+                  <span class="text-slate-700 dark:text-slate-300 truncate" :title="log.sentData || '(无数据)'">{{ log.sentData || '(无数据)' }}</span>
+                  <span class="text-slate-400 whitespace-nowrap">{{ log.duration }}ms</span>
+                  <div v-if="log.message" class="col-span-4 text-slate-400 truncate" :title="log.message">— {{ log.message }}</div>
                 </div>
                 <div v-if="(cg.executionLogs.value || []).length === 0" class="text-[10px] text-slate-400 text-center py-2">
                   {{ t('serial.noExecLog') }}
+                </div>
+                <div
+                  v-if="(cg.executionLogs.value || []).length > executionLogPreviewLimit"
+                  class="text-[10px] text-slate-400 text-center py-1"
+                >
+                  仅显示最近 {{ executionLogPreviewLimit }} 条
                 </div>
               </div>
             </div>
