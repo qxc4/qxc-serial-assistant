@@ -12,7 +12,7 @@ In scope:
 - Keep a compact left navigation rail, but group primary debugging pages separately from utility/settings pages.
 - Add a global top bar rendered by `src/App.vue`.
 - Show the current route title and short subtitle in the top bar using the existing custom i18n system.
-- Show browser capability/status chips for Web Serial, WebUSB, and RTT Bridge availability where the data can be read without adding heavy polling.
+- Show browser capability/status chips for Web Serial and WebUSB where the data can be read without adding heavy polling.
 - Move low-priority global actions, such as donation and profile/settings entry points, into a quieter area of the shell.
 - Unify shell-level spacing, active states, borders, hover states, and dark-mode styling.
 - Preserve each route's existing page component and its internal panel layout.
@@ -39,7 +39,7 @@ The top bar gives every page consistent context. It should contain:
 
 - Current page title.
 - One-line page subtitle or capability hint.
-- Status chips for supported browser APIs and bridge state when available.
+- Status chips for supported browser APIs when available.
 - A small global action cluster for theme/language/settings/profile/donation as appropriate.
 
 The main content area remains a full-height route viewport. Existing views continue to own their page-level side panels, logs, editors, and toolbars.
@@ -69,7 +69,7 @@ Capability data should be lightweight:
 
 - Web Serial: read `'serial' in navigator`.
 - WebUSB: read `'usb' in navigator`.
-- RTT Bridge: only use existing `useBridgeStatus()` if it does not create unwanted work on unrelated pages. If that composable starts active polling or WebSocket checks, defer Bridge status from the top bar and keep it inside `RttView`.
+- RTT/debug workbench state belongs inside `RttView`; the global shell should only show browser capability chips.
 
 ## Error Handling
 

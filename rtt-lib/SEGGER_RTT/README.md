@@ -107,13 +107,9 @@ SEGGER_RTT_printf(2, "ADC: %d\r\n", adc_value);
 5. 点击「选择设备」→ 选择 ST-Link → 授权
 6. 点击「连接」
 
-### 方法 2: probe-rs 后端
+### 调试工作台能力
 
-1. 安装 probe-rs 工具
-2. 启动 RTT Bridge 服务
-3. 选择「probe-rs」后端
-4. 填写 ELF 文件路径和芯片型号
-5. 点击「连接」
+RTT 页面已统一为纯 WebUSB 调试工作台。除 RTT 日志外，页面还提供寄存器查看、内存预览、断点管理和 Flash 烧录实验功能；不再需要启动本地代理服务。
 
 ## 常见问题
 

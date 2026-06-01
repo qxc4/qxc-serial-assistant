@@ -58,8 +58,8 @@
 </td>
 <td width="50%">
 
-### 📡 RTT 实时调试
-支持 probe-rs / OpenOCD / J-Link 多后端，实时读取嵌入式设备 RTT 日志，双向通信，多通道支持。
+### 📡 RTT 调试工作台
+通过 WebUSB 直连调试探针，提供 RTT 日志、寄存器、内存、断点和 Flash 烧录实验能力。
 
 </td>
 </tr>
@@ -89,7 +89,7 @@
 | | ASCII 表 | 完整 ASCII 字符参考表 |
 | | Modbus 解析 | RTU / ASCII 协议实时解析 |
 | | 数据图表 | 基于 ECharts 的实时数据可视化 |
-| 📡 **RTT 调试** | 多后端支持 | probe-rs / OpenOCD / J-Link |
+| 📡 **RTT 调试** | WebUSB 直连 | RTT 日志 / 调试控制 / Flash 烧录 |
 | | 高性能日志 | 虚拟滚动，5 万条日志流畅显示 |
 | | 日志过滤 | 按级别 / 通道 / 关键词多维度过滤 |
 | | 双向通信 | 向 MCU 发送命令，多通道支持 |
@@ -157,7 +157,7 @@ npm run test:coverage  # 生成覆盖率报告
 
 ## 📡 RTT 调试
 
-RTT (Real Time Transfer) 是 SEGGER 提供的高速调试输出技术，本项目支持通过多种后端进行 RTT 调试。
+RTT (Real Time Transfer) 是 SEGGER 提供的高速调试输出技术。本项目的 `/rtt` 页面已升级为纯浏览器调试工作台，首版通过 WebUSB 直连调试探针，不需要本地 Bridge 服务。
 
 ### 架构设计
 
@@ -165,79 +165,38 @@ RTT (Real Time Transfer) 是 SEGGER 提供的高速调试输出技术，本项�
 ┌─────────────────┐
 │  Frontend (Vue)  │  浏览器端
 └────────┬────────┘
-         │ WebSocket (ws://localhost:19022)
+         │ WebUSB
 ┌────────▼────────┐
-│  RTT Bridge      │  Node.js 后端
-│  (适配器模式)    │
-└──┬─────┬──────┬─┘
-   │     │      │
-   ▼     ▼      ▼
-probe-rs OpenOCD J-Link   调试探针适配器
-   │     │      │
-   └─────┼──────┘
-         │ SWD / JTAG
+│  Debug Probe     │  ST-Link / CMSIS-DAP*
+└────────┬────────┘
+         │ SWD
 ┌────────▼────────┐
-│  MCU Target      │  STM32 / nRF / ESP32...
+│  Cortex-M Target │  RTT / Memory / Flash
 └─────────────────┘
 ```
 
-### 支持的后端
-
-| 后端 | 说明 | 连接方式 |
-|:----:|:-----|:---------|
-| `probe-rs` | 开源调试工具，支持多种探针 | 本地子进程 |
-| `OpenOCD` | 通过 OpenOCD 的 RTT 服务器连接 | TCP (默认 9090) |
-| `J-Link` | 通过 J-Link 调试器的 RTT 功能 | TCP (默认 19021) |
-
-### 启动 RTT Bridge
-
-```bash
-cd rtt-bridge
-npm install
-npm run dev    # 开发模式
-# 或
-npm run build && npm start  # 生产模式
-```
+`*` CMSIS-DAP 支持按浏览器 WebUSB 能力和探针固件逐步完善。
 
 ### 使用步骤
 
-1. 安装 [probe-rs](https://probe.rs/) 工具链（如使用 probe-rs 后端）
-2. 连接调试探针（ST-Link / J-Link / CMSIS-DAP）
-3. 启动 RTT Bridge 后端服务
-4. 在前端选择 RTT 调试页面
-5. 选择后端类型并配置芯片型号
-6. 点击「刷新探针」检测连接的探针
-7. 点击「连接」开始调试
+1. 使用 Chrome/Edge 桌面版打开页面
+2. 连接调试探针和目标板，确认目标程序已集成 SEGGER RTT
+3. 在前端进入 RTT 调试页面
+4. 点击「选择设备」并授权 WebUSB 访问
+5. 配置 SWD 频率、RTT 扫描范围和 Flash 区域
+6. 点击「连接」开始读取 RTT，可继续使用寄存器、内存、断点和烧录功能
 
-### RTT Bridge 消息协议
+### 调试工作台能力
 
-**客户端 → 服务端**
-
-| 类型 | 说明 |
+| 能力 | 状态 |
 |:----:|:-----|
-| `connect` | 建立 RTT 连接 |
-| `disconnect` | 断开 RTT 连接 |
-| `send` | 发送数据到 MCU |
-| `list_probes` | 获取可用探针列表 |
-
-**服务端 → 客户端**
-
-| 类型 | 说明 |
-|:----:|:-----|
-| `connected` | RTT 连接成功 |
-| `disconnected` | RTT 连接断开 |
-| `rtt_data` | RTT 日志数据 |
-| `error` | 错误信息 |
-| `probe_list` | 探针列表 |
-| `channels` | RTT 通道列表 |
-
-### 打包 RTT Bridge
-
-```bash
-npm run pkg        # 打包当前平台
-npm run pkg:win    # 仅 Windows
-npm run pkg:all    # 全平台 (Windows / macOS / Linux)
-```
+| RTT Control Block 扫描 | 已支持 |
+| RTT Up/Down 通道 | 已支持 |
+| 寄存器批量刷新 | 已支持 |
+| 内存 Hex 预览 | 已支持 |
+| 硬件断点状态诊断 | 已支持 |
+| Flash dry-run / erase / program / verify | 实验支持 |
+| GDB-RSP 内核 | 内置命令核心，暂不暴露本地 TCP Server |
 
 ---
 
@@ -298,7 +257,7 @@ server {
 |:----:|:-----|
 | 浏览器 | Chrome 89+ / Edge 89+（需支持 Web Serial API） |
 | 操作系统 | Windows 10+ / macOS 11+ / Linux |
-| Node.js | 18+（仅 RTT Bridge 需要） |
+| Node.js | 18+（仅本地开发和构建需要） |
 
 ---
 
@@ -312,7 +271,8 @@ src/
 │   ├── useDataParse.ts       #   数据协议解析
 │   ├── useCommandGroup.ts    #   指令组管理 & 执行引擎
 │   ├── useI18n.ts            #   国际化 (中/英)
-│   ├── useRtt.ts             #   RTT 调试
+│   ├── useWebUsbRtt.ts       #   WebUSB RTT / 调试探针
+│   ├── useRttDebugWorkbench.ts # 调试工作台状态
 │   ├── useFileSave.ts        #   文件保存
 │   ├── useButtonOptimizer.ts #   按钮性能优化
 │   └── usePerformanceMonitor.ts  # 性能监控
@@ -330,27 +290,17 @@ src/
 │   ├── DonateModal.vue       #   赞助弹窗
 │   └── SaveStatusToast.vue   #   保存状态提示
 ├── stores/                   # Pinia 状态管理
-│   ├── settings.ts           #   全局设置 (localStorage 持久化)
-│   └── rtt.ts                #   RTT 日志存储 (批量缓冲)
-├── services/                 # 服务层
-│   └── rttService.ts         #   RTT WebSocket 客户端
+│   └── settings.ts           #   全局设置 (localStorage 持久化)
+├── debug-core/               # 浏览器端调试内核
+│   ├── cortexMDebugTarget.ts #   Cortex-M 控制、寄存器、断点
+│   ├── rttCore.ts            #   RTT 控制块和 ring buffer
+│   ├── flashPlanner.ts       #   Flash dry-run / range planner
+│   ├── flashProgrammer.ts    #   擦除、写入、校验编排
+│   └── gdbRspCore.ts         #   GDB-RSP 兼容命令内核
 ├── types/                    # TypeScript 类型定义
 ├── utils/                    # 工具函数
 ├── data/                     # 静态数据
 └── router/                   # 路由配置
-
-rtt-bridge/                   # RTT Bridge 后端 (独立子项目)
-├── src/
-│   ├── core/adapter.ts       #   适配器抽象基类
-│   ├── adapters/             #   探针适配器
-│   │   ├── probe_rs.ts       #     probe-rs
-│   │   ├── openocd.ts        #     OpenOCD
-│   │   └── jlink.ts          #     J-Link
-│   ├── services/rttManager.ts#   RTT 连接管理
-│   ├── ws/wsServer.ts        #   WebSocket 服务器
-│   └── index.ts              #   入口文件
-├── package.json
-└── tsconfig.json
 ```
 
 ---
@@ -369,14 +319,6 @@ rtt-bridge/                   # RTT Bridge 后端 (独立子项目)
 | [ECharts](https://echarts.apache.org/) | 6.x | 数据可视化 |
 | [Lucide](https://lucide.dev/) | 1.x | 图标库 |
 | [VueUse](https://vueuse.org/) | 14.x | 组合式工具集 |
-
-### 后端 (RTT Bridge)
-
-| 技术 | 版本 | 用途 |
-|:----:|:----:|:-----|
-| [Node.js](https://nodejs.org/) | 18+ | 运行时环境 |
-| [TypeScript](https://www.typescriptlang.org/) | 5.x | 类型安全 |
-| [ws](https://github.com/websockets/ws) | 8.x | WebSocket 服务器 |
 
 ### 性能优化策略
 
