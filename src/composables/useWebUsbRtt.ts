@@ -213,6 +213,7 @@ export function useWebUsbRtt() {
 
   /** 是否暂停接收日志 */
   const isPaused = ref(false)
+  const chipInfo = shallowRef<{ name: string; core: string } | null>(null)
 
   /** 日志 ID 自增计数器 */
   let logIdCounter = 0
@@ -358,6 +359,7 @@ export function useWebUsbRtt() {
     flushBatch()
     batchBuffer.length = 0
     jstlink = null
+    chipInfo.value = null
   }
 
   /**
@@ -670,6 +672,15 @@ export function useWebUsbRtt() {
     jstlink?.setFlashChipFamily(family)
   }
 
+  async function readChipInfo(): Promise<{ name: string; core: string }> {
+    if (!jstlink?.isConnected) {
+      throw new Error('调试探针未连接')
+    }
+    const info = await jstlink.getChipInfo()
+    chipInfo.value = info
+    return info
+  }
+
   function setScanRange(range: RttScanRangeInput): void {
     scanRange.value = normalizeRttScanRange(range)
   }
@@ -717,6 +728,7 @@ export function useWebUsbRtt() {
     channels,
     logs,
     isPaused,
+    chipInfo,
 
     // 计算属性
     isConnected,
@@ -731,6 +743,7 @@ export function useWebUsbRtt() {
     writeMemory,
     eraseFlashPage,
     setFlashChipFamily,
+    readChipInfo,
     clearLogs,
     togglePause,
     clearError,

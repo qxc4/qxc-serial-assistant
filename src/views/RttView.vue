@@ -556,6 +556,7 @@ const firmwareImage = ref<ProgramImage | null>(null)
 const firmwareBaseAddressInput = ref('0x08000000')
 const flashPageSizeInput = ref(2048)
 const flashChipFamily = ref<'stm32f1' | 'stm32f4'>('stm32f1')
+const detectedChipLabel = ref('')
 const flashPlanSummary = ref<{ erasePages: number; programSections: number; verifyBytes: number } | null>(null)
 const flashStatus = ref<'idle' | 'planning' | 'ready' | 'programming' | 'success' | 'error'>('idle')
 const flashError = ref('')
@@ -835,6 +836,32 @@ function planFirmwareProgramming(): void {
     flashStatus.value = 'error'
     flashError.value = error instanceof Error ? error.message : String(error)
     flashPlanSummary.value = null
+  }
+}
+
+async function detectFlashChipFamily(): Promise<void> {
+  if (!isConnected.value) {
+    flashError.value = '请先连接调试探针后再识别芯片'
+    return
+  }
+
+  try {
+    const info = await webUsbRtt.readChipInfo()
+    detectedChipLabel.value = `${info.name} / ${info.core}`
+    const normalized = `${info.name} ${info.core}`.toLowerCase()
+    if (normalized.includes('f1') || normalized.includes('m3')) {
+      flashChipFamily.value = 'stm32f1'
+      flashHint.value = '已自动建议 STM32F1 擦页路径。'
+      return
+    }
+    if (normalized.includes('f4') || normalized.includes('m4')) {
+      flashChipFamily.value = 'stm32f4'
+      flashHint.value = '已自动建议 STM32F4 擦页路径。'
+      return
+    }
+    flashHint.value = '未能自动识别芯片族，请手动确认芯片族。'
+  } catch (error) {
+    flashError.value = error instanceof Error ? error.message : String(error)
   }
 }
 
@@ -2404,6 +2431,17 @@ rtt server start 9090 0</pre>
           >
             执行写入
           </button>
+          <button
+            @click="detectFlashChipFamily"
+            :disabled="!isConnected || flashStatus === 'programming'"
+            class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+          >
+            识别芯片
+          </button>
+        </div>
+
+        <div class="text-[10px] text-slate-500 dark:text-slate-400 mb-1">
+          识别结果: {{ detectedChipLabel || '未识别' }}
         </div>
 
         <div v-if="flashPlanSummary" class="text-[10px] text-slate-500 dark:text-slate-400 space-y-0.5 mb-2">
