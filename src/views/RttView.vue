@@ -6,6 +6,7 @@ import { useI18n } from '../composables/useI18n'
 import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, summarizeFlashOperationProgress } from '../debug-core'
 import type { FlashDryRunReport, FlashVerifyReport, VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
+import { RTT_SOURCE_FILES, RTT_SOURCE_REPOSITORY_URL, downloadRttSourceFile, type RttSourceFile } from '../debug-core/rttSourceDownloads'
 import VirtualList from '../components/VirtualList.vue'
 import RttDebugControls from '../components/rtt/RttDebugControls.vue'
 import RttFlashProgrammerPanel from '../components/rtt/RttFlashProgrammerPanel.vue'
@@ -287,6 +288,9 @@ const variableFilterText = ref('')
 const variableAutoRefresh = ref(false)
 const variableRefreshMs = ref(500)
 let variableRefreshTimer: ReturnType<typeof setInterval> | null = null
+const rttSourceDownloadingId = ref('')
+const rttSourceDownloadMessage = ref('')
+const rttSourceDownloadError = ref('')
 const firmwareInputRef = ref<HTMLInputElement | null>(null)
 const firmwareName = ref('')
 const firmwareImage = ref<ProgramImage | null>(null)
@@ -1035,6 +1039,21 @@ function handleExportSession(): void {
   URL.revokeObjectURL(url)
 }
 
+async function handleDownloadRttSource(file: RttSourceFile): Promise<void> {
+  rttSourceDownloadingId.value = file.id
+  rttSourceDownloadMessage.value = ''
+  rttSourceDownloadError.value = ''
+
+  try {
+    const result = await downloadRttSourceFile(file)
+    rttSourceDownloadMessage.value = `已下载 ${result.fileName} (${result.bytes}B)`
+  } catch (error) {
+    rttSourceDownloadError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    rttSourceDownloadingId.value = ''
+  }
+}
+
 /**
  * 选择 WebUSB 设备
  */
@@ -1689,6 +1708,57 @@ watch(
         class="hidden"
         @change="handleFirmwareSelected"
       />
+
+      <!-- SEGGER RTT 库文件下载 -->
+      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div class="min-w-0">
+            <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">RTT 库文件</h3>
+            <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate">
+              从 SEGGER 官方 GitHub 获取，不随本站打包分发
+            </p>
+          </div>
+          <a
+            :href="RTT_SOURCE_REPOSITORY_URL"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="shrink-0 text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
+          >
+            官方仓库
+          </a>
+        </div>
+
+        <div class="space-y-1.5">
+          <button
+            v-for="file in RTT_SOURCE_FILES"
+            :key="file.id"
+            @click="handleDownloadRttSource(file)"
+            :disabled="Boolean(rttSourceDownloadingId)"
+            class="w-full flex items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-left text-[10px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+            :title="file.description"
+          >
+            <span class="min-w-0">
+              <span class="block truncate font-mono text-slate-700 dark:text-slate-200">{{ file.fileName }}</span>
+              <span class="block truncate text-slate-400 dark:text-slate-500">{{ file.path }}</span>
+            </span>
+            <RefreshCw
+              v-if="rttSourceDownloadingId === file.id"
+              class="w-3.5 h-3.5 shrink-0 animate-spin text-blue-500"
+            />
+            <Download v-else class="w-3.5 h-3.5 shrink-0 text-slate-400" />
+          </button>
+        </div>
+
+        <p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400">
+          集成：把以上文件加入 MCU 工程，业务代码包含 <span class="font-mono">SEGGER_RTT.h</span>，调用 <span class="font-mono">SEGGER_RTT_WriteString()</span> 或 <span class="font-mono">SEGGER_RTT_printf()</span>。
+        </p>
+        <p v-if="rttSourceDownloadMessage" class="mt-1 text-[10px] text-green-600 dark:text-green-400">
+          {{ rttSourceDownloadMessage }}
+        </p>
+        <p v-if="rttSourceDownloadError" class="mt-1 text-[10px] text-red-600 dark:text-red-400 break-words">
+          {{ rttSourceDownloadError }}
+        </p>
+      </div>
 
       <!-- 导出选项 -->
       <div class="p-3 border-b border-slate-200 dark:border-slate-800">
