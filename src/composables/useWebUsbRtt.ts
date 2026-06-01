@@ -52,6 +52,8 @@ interface JSTLinkInterface {
   rttWrite(channel: number, data: string): Promise<void>
   /** 读取目标内存 */
   readMemory8(address: number, bytes: number): Promise<Uint8Array>
+  /** 写入目标内存 */
+  writeMemory8(address: number, data: Uint8Array): Promise<void>
   /** 设置 SWD 频率 */
   setSpeed(frequency: number): Promise<void>
   /** 注册事件监听 */
@@ -646,6 +648,13 @@ export function useWebUsbRtt() {
     return jstlink.readMemory8(address, bytes)
   }
 
+  async function writeMemory(address: number, data: Uint8Array): Promise<void> {
+    if (!jstlink?.isConnected) {
+      throw new Error('调试探针未连接')
+    }
+    await jstlink.writeMemory8(address, data)
+  }
+
   function setScanRange(range: RttScanRangeInput): void {
     scanRange.value = normalizeRttScanRange(range)
   }
@@ -704,6 +713,7 @@ export function useWebUsbRtt() {
     disconnect,
     send,
     readMemory,
+    writeMemory,
     clearLogs,
     togglePause,
     clearError,

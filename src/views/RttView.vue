@@ -5,8 +5,9 @@ import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { getPlatformGuide } from '../composables/useBridgeStatus'
 import { useI18n } from '../composables/useI18n'
-import { parseElfImage, inspectGlobalVariables } from '../debug-core'
+import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer } from '../debug-core'
 import type { VariableSpec, VariableValue } from '../debug-core'
+import type { ProgramImage } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
 import type { RttLogLevel, RttBackend, BackendCapabilities } from '../types/rtt'
 import {
@@ -549,6 +550,14 @@ const variableFilterText = ref('')
 const variableAutoRefresh = ref(false)
 const variableRefreshMs = ref(500)
 let variableRefreshTimer: ReturnType<typeof setInterval> | null = null
+const firmwareInputRef = ref<HTMLInputElement | null>(null)
+const firmwareName = ref('')
+const firmwareImage = ref<ProgramImage | null>(null)
+const firmwareBaseAddressInput = ref('0x08000000')
+const flashPageSizeInput = ref(2048)
+const flashPlanSummary = ref<{ erasePages: number; programSections: number; verifyBytes: number } | null>(null)
+const flashStatus = ref<'idle' | 'planning' | 'ready' | 'programming' | 'success' | 'error'>('idle')
+const flashError = ref('')
 
 const filteredVariableValues = computed(() => {
   const keyword = variableFilterText.value.trim().toLowerCase()
@@ -741,6 +750,118 @@ function resetVariableRefreshTimer(): void {
       refreshVariableValues()
     }
   }, variableRefreshMs.value)
+}
+
+function openFirmwarePicker(): void {
+  firmwareInputRef.value?.click()
+}
+
+function parseFirmwareBaseAddress(): number {
+  const value = firmwareBaseAddressInput.value.trim().toLowerCase()
+  const normalized = value.startsWith('0x') ? value.slice(2) : value
+  const parsed = Number.parseInt(normalized, 16)
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error('BIN 基地址无效，请使用十六进制地址')
+  }
+  return parsed
+}
+
+async function handleFirmwareSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  flashStatus.value = 'planning'
+  flashError.value = ''
+  firmwareName.value = file.name
+
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const lowerName = file.name.toLowerCase()
+    if (lowerName.endsWith('.hex')) {
+      firmwareImage.value = parseIntelHex(new TextDecoder().decode(bytes))
+    } else if (lowerName.endsWith('.elf') || lowerName.endsWith('.axf') || lowerName.endsWith('.out')) {
+      firmwareImage.value = parseElfImage(bytes)
+    } else {
+      firmwareImage.value = parseBinaryImage(bytes, parseFirmwareBaseAddress())
+    }
+    planFirmwareProgramming()
+  } catch (error) {
+    flashStatus.value = 'error'
+    flashError.value = error instanceof Error ? error.message : String(error)
+    firmwareImage.value = null
+    flashPlanSummary.value = null
+  } finally {
+    input.value = ''
+  }
+}
+
+function planFirmwareProgramming(): void {
+  if (!firmwareImage.value) {
+    flashError.value = '请先导入固件镜像'
+    flashStatus.value = 'error'
+    return
+  }
+
+  const pageSize = flashPageSizeInput.value
+  if (!Number.isSafeInteger(pageSize) || pageSize <= 0) {
+    flashError.value = 'Flash 页大小无效'
+    flashStatus.value = 'error'
+    return
+  }
+
+  try {
+    const plan = planFlashRanges({
+      regions: [
+        { name: 'main-flash', start: 0x08000000, end: 0x08100000, pageSize },
+      ],
+      sections: firmwareImage.value.sections,
+    })
+    flashPlanSummary.value = {
+      erasePages: plan.erasePages.length,
+      programSections: plan.programSections.length,
+      verifyBytes: plan.verifyRanges.reduce((sum, item) => sum + item.length, 0),
+    }
+    flashStatus.value = 'ready'
+    flashError.value = ''
+  } catch (error) {
+    flashStatus.value = 'error'
+    flashError.value = error instanceof Error ? error.message : String(error)
+    flashPlanSummary.value = null
+  }
+}
+
+async function programFirmware(): Promise<void> {
+  if (!isWebUsbMode.value || !isConnected.value) {
+    flashStatus.value = 'error'
+    flashError.value = '请先连接 WebUSB 调试探针'
+    return
+  }
+  if (!firmwareImage.value) {
+    flashStatus.value = 'error'
+    flashError.value = '请先导入固件镜像'
+    return
+  }
+
+  flashStatus.value = 'programming'
+  flashError.value = ''
+
+  try {
+    const programmer = createFlashProgrammer({
+      // 当前 WebUSB jstlink 库没有通用擦页命令，先记录为 no-op，避免误导为“完整量产烧录”。
+      async erasePage() {},
+      program: (address, data) => webUsbRtt.writeMemory(address, data),
+      read: (address, length) => webUsbRtt.readMemory(address, length),
+    }, [
+      { name: 'main-flash', start: 0x08000000, end: 0x08100000, pageSize: flashPageSizeInput.value },
+    ])
+
+    await programmer.programImage(firmwareImage.value)
+    flashStatus.value = 'success'
+  } catch (error) {
+    flashStatus.value = 'error'
+    flashError.value = error instanceof Error ? error.message : String(error)
+  }
 }
 
 watch([variableAutoRefresh, variableRefreshMs], resetVariableRefreshTimer)
@@ -2087,6 +2208,13 @@ rtt server start 9090 0</pre>
         class="hidden"
         @change="handleVariableElfSelected"
       />
+      <input
+        ref="firmwareInputRef"
+        type="file"
+        accept=".bin,.hex,.elf,.axf,.out"
+        class="hidden"
+        @change="handleFirmwareSelected"
+      />
 
       <!-- 导出选项 -->
       <div class="p-3 border-b border-slate-200 dark:border-slate-800">
@@ -2181,6 +2309,73 @@ rtt server start 9090 0</pre>
             <span v-if="item.error" class="text-red-500 dark:text-red-400 truncate text-right" :title="item.error">ERR</span>
             <span v-else class="text-slate-500 dark:text-slate-400 text-right" :title="formatVariableValue(item)">{{ formatVariableValue(item) }}</span>
           </div>
+        </div>
+      </div>
+
+      <!-- 固件烧录 -->
+      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">固件烧录(实验)</h3>
+          <button
+            @click="openFirmwarePicker"
+            class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            选择固件
+          </button>
+        </div>
+
+        <p class="text-[10px] text-slate-500 dark:text-slate-400 truncate mb-2" :title="firmwareName || '未导入固件'">
+          {{ firmwareName || '未导入固件' }}
+        </p>
+
+        <div class="grid grid-cols-2 gap-1.5 mb-2">
+          <input
+            v-model="firmwareBaseAddressInput"
+            type="text"
+            placeholder="BIN基址(0x...)"
+            class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            v-model.number="flashPageSizeInput"
+            type="number"
+            min="256"
+            step="256"
+            placeholder="页大小"
+            class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div class="flex items-center gap-1.5 mb-2">
+          <button
+            @click="planFirmwareProgramming"
+            :disabled="!firmwareImage || flashStatus === 'programming'"
+            class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+          >
+            生成计划
+          </button>
+          <button
+            @click="programFirmware"
+            :disabled="flashStatus !== 'ready' || !isConnected"
+            class="px-2 py-1 rounded text-[10px] border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-900/20 disabled:opacity-40 transition-colors"
+          >
+            执行写入
+          </button>
+        </div>
+
+        <div v-if="flashPlanSummary" class="text-[10px] text-slate-500 dark:text-slate-400 space-y-0.5 mb-2">
+          <div>擦除页: {{ flashPlanSummary.erasePages }}</div>
+          <div>写入段: {{ flashPlanSummary.programSections }}</div>
+          <div>校验字节: {{ flashPlanSummary.verifyBytes }}</div>
+        </div>
+
+        <div class="text-[10px] mb-1" :class="flashStatus === 'error' ? 'text-red-600 dark:text-red-400' : flashStatus === 'success' ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'">
+          状态: {{ flashStatus }}
+        </div>
+        <div v-if="flashError" class="text-[10px] text-red-600 dark:text-red-400 mb-1">
+          {{ flashError }}
+        </div>
+        <div class="text-[10px] text-yellow-600 dark:text-yellow-400">
+          当前擦页为 no-op，仅用于链路打通与校验流程验证。
         </div>
       </div>
 
