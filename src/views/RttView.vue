@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed, onMounted } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { onClickOutside } from '@vueuse/core'
 import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
@@ -545,6 +545,19 @@ const variableSpecs = ref<VariableSpec[]>([])
 const variableValues = ref<VariableValue[]>([])
 const variableError = ref('')
 const variableLoading = ref(false)
+const variableFilterText = ref('')
+const variableAutoRefresh = ref(false)
+const variableRefreshMs = ref(500)
+let variableRefreshTimer: ReturnType<typeof setInterval> | null = null
+
+const filteredVariableValues = computed(() => {
+  const keyword = variableFilterText.value.trim().toLowerCase()
+  if (!keyword) return variableValues.value
+  return variableValues.value.filter(item =>
+    item.name.toLowerCase().includes(keyword) ||
+    item.address.toString(16).toLowerCase().includes(keyword)
+  )
+})
 
 /** 是否展开顶部高级配置区 */
 const showTopConfigDetails = ref(false)
@@ -705,6 +718,44 @@ async function refreshVariableValues(): Promise<void> {
     variableLoading.value = false
   }
 }
+
+function formatVariableValue(item: VariableValue): string {
+  if (item.value === null || Number.isNaN(item.value)) return '-'
+  if (item.type === 'f32') return `${item.value}`
+  const intValue = Math.trunc(item.value)
+  return `${intValue} (0x${(intValue >>> 0).toString(16).toUpperCase()})`
+}
+
+function formatVariableAddress(address: number): string {
+  return `0x${address.toString(16).toUpperCase().padStart(8, '0')}`
+}
+
+function resetVariableRefreshTimer(): void {
+  if (variableRefreshTimer) {
+    clearInterval(variableRefreshTimer)
+    variableRefreshTimer = null
+  }
+  if (!variableAutoRefresh.value) return
+  variableRefreshTimer = setInterval(() => {
+    if (!variableLoading.value && variableSpecs.value.length > 0 && isConnected.value) {
+      refreshVariableValues()
+    }
+  }, variableRefreshMs.value)
+}
+
+watch([variableAutoRefresh, variableRefreshMs], resetVariableRefreshTimer)
+watch(isConnected, connected => {
+  if (!connected) {
+    variableAutoRefresh.value = false
+  }
+})
+
+onUnmounted(() => {
+  if (variableRefreshTimer) {
+    clearInterval(variableRefreshTimer)
+    variableRefreshTimer = null
+  }
+})
 
 /**
  * 切换日志级别过滤
@@ -2080,26 +2131,55 @@ rtt server start 9090 0</pre>
           </div>
         </div>
 
+        <div class="flex items-center gap-1.5 mb-2">
+          <input
+            v-model="variableFilterText"
+            type="text"
+            placeholder="筛选变量"
+            class="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <label class="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+            <input v-model="variableAutoRefresh" type="checkbox" class="w-3 h-3" />
+            自动
+          </label>
+          <select
+            v-model.number="variableRefreshMs"
+            :disabled="!variableAutoRefresh"
+            class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-1 text-[10px] text-slate-700 dark:text-slate-200 disabled:opacity-50"
+          >
+            <option :value="200">200ms</option>
+            <option :value="500">500ms</option>
+            <option :value="1000">1s</option>
+          </select>
+        </div>
+
         <p class="text-[10px] text-slate-500 dark:text-slate-400 truncate mb-1" :title="variableElfName || '未导入 ELF'">
           {{ variableElfName || '未导入 ELF' }}
         </p>
         <p class="text-[10px] text-slate-400 dark:text-slate-500 mb-2">
-          {{ variableSpecs.length }} 个对象符号
+          {{ variableSpecs.length }} 个对象符号 / {{ filteredVariableValues.length }} 条显示
         </p>
 
         <div v-if="variableError" class="text-[10px] text-red-600 dark:text-red-400 mb-2">
           {{ variableError }}
         </div>
 
-        <div v-if="variableValues.length > 0" class="space-y-1 max-h-40 overflow-auto pr-1">
+        <div class="grid grid-cols-[1.2fr_1fr_1.6fr] gap-1 text-[10px] text-slate-400 dark:text-slate-500 mb-1">
+          <span>名称(类型)</span>
+          <span>地址</span>
+          <span class="text-right">值</span>
+        </div>
+
+        <div v-if="filteredVariableValues.length > 0" class="space-y-1 max-h-40 overflow-auto pr-1">
           <div
-            v-for="item in variableValues"
+            v-for="item in filteredVariableValues"
             :key="`${item.name}-${item.address}`"
-            class="flex items-center justify-between gap-2 text-[10px]"
+            class="grid grid-cols-[1.2fr_1fr_1.6fr] gap-1 items-center text-[10px]"
           >
-            <span class="truncate text-slate-600 dark:text-slate-300" :title="item.name">{{ item.name }}</span>
-            <span v-if="item.error" class="text-red-500 dark:text-red-400 truncate" :title="item.error">ERR</span>
-            <span v-else class="text-slate-500 dark:text-slate-400">{{ item.value }}</span>
+            <span class="truncate text-slate-600 dark:text-slate-300" :title="item.name">{{ item.name }}({{ item.type }})</span>
+            <span class="text-slate-500 dark:text-slate-400">{{ formatVariableAddress(item.address) }}</span>
+            <span v-if="item.error" class="text-red-500 dark:text-red-400 truncate text-right" :title="item.error">ERR</span>
+            <span v-else class="text-slate-500 dark:text-slate-400 text-right" :title="formatVariableValue(item)">{{ formatVariableValue(item) }}</span>
           </div>
         </div>
       </div>
