@@ -5,6 +5,8 @@ import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { getPlatformGuide } from '../composables/useBridgeStatus'
 import { useI18n } from '../composables/useI18n'
+import { parseElfImage, inspectGlobalVariables } from '../debug-core'
+import type { VariableSpec, VariableValue } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
 import type { RttLogLevel, RttBackend, BackendCapabilities } from '../types/rtt'
 import {
@@ -537,6 +539,12 @@ const showRightPanel = ref(true)
 
 /** 是否显示帮助面板 */
 const showHelpPanel = ref(false)
+const variableElfInputRef = ref<HTMLInputElement | null>(null)
+const variableElfName = ref('')
+const variableSpecs = ref<VariableSpec[]>([])
+const variableValues = ref<VariableValue[]>([])
+const variableError = ref('')
+const variableLoading = ref(false)
 
 /** 是否展开顶部高级配置区 */
 const showTopConfigDetails = ref(false)
@@ -615,6 +623,86 @@ function applyWebUsbScanRange(): boolean {
   } catch (error) {
     webUsbScanRangeError.value = error instanceof Error ? error.message : '扫描范围无效'
     return false
+  }
+}
+
+function openVariableElfPicker(): void {
+  variableElfInputRef.value?.click()
+}
+
+function toVariableType(size: number): VariableSpec['type'] | null {
+  if (size <= 0) return null
+  if (size === 1) return 'u8'
+  if (size === 2) return 'u16'
+  return 'u32'
+}
+
+async function handleVariableElfSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  variableError.value = ''
+  variableElfName.value = file.name
+
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const image = parseElfImage(bytes)
+    const symbols = image.symbols ?? []
+
+    const specs = symbols
+      .filter(symbol => symbol.type === 'object' && symbol.address > 0)
+      .map(symbol => ({
+        name: symbol.name,
+        address: symbol.address,
+        type: toVariableType(symbol.size) ?? 'u32',
+      }))
+      .slice(0, 64)
+
+    variableSpecs.value = specs
+    variableValues.value = []
+    if (specs.length === 0) {
+      variableError.value = 'ELF 中未找到可读取的全局对象符号'
+      return
+    }
+
+    await refreshVariableValues()
+  } catch (error) {
+    variableError.value = error instanceof Error ? error.message : String(error)
+    variableSpecs.value = []
+    variableValues.value = []
+  } finally {
+    input.value = ''
+  }
+}
+
+async function refreshVariableValues(): Promise<void> {
+  if (!isWebUsbMode.value) {
+    variableError.value = '当前仅支持 WebUSB 后端变量读取'
+    return
+  }
+  if (!isConnected.value) {
+    variableError.value = '请先连接调试探针'
+    return
+  }
+  if (variableSpecs.value.length === 0) {
+    variableError.value = '请先导入含符号的 ELF 文件'
+    return
+  }
+
+  variableLoading.value = true
+  variableError.value = ''
+  try {
+    variableValues.value = await inspectGlobalVariables(variableSpecs.value, {
+      read8: (address, length) => webUsbRtt.readMemory(address, length),
+      write8: async () => { throw new Error('write8 not supported in variable inspector') },
+      read32: async () => { throw new Error('read32 not supported in variable inspector') },
+      write32: async () => { throw new Error('write32 not supported in variable inspector') },
+    })
+  } catch (error) {
+    variableError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    variableLoading.value = false
   }
 }
 
@@ -1941,6 +2029,14 @@ rtt server start 9090 0</pre>
         <p v-else class="text-[10px] text-slate-400 dark:text-slate-500">{{ t('rtt.noChannels') }}</p>
       </div>
 
+      <input
+        ref="variableElfInputRef"
+        type="file"
+        accept=".elf,.axf,.out"
+        class="hidden"
+        @change="handleVariableElfSelected"
+      />
+
       <!-- 导出选项 -->
       <div class="p-3 border-b border-slate-200 dark:border-slate-800">
         <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{{ t('rtt.exportOptions') }}</h3>
@@ -1959,6 +2055,52 @@ rtt server start 9090 0</pre>
             <Download class="w-3.5 h-3.5" />
             {{ t('rtt.exportSession') }}
           </button>
+        </div>
+      </div>
+
+      <!-- 变量查看 -->
+      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">变量</h3>
+          <div class="flex items-center gap-1">
+            <button
+              @click="openVariableElfPicker"
+              class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              导入 ELF
+            </button>
+            <button
+              @click="refreshVariableValues"
+              :disabled="variableLoading || !isConnected || variableSpecs.length === 0"
+              class="p-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+              title="刷新变量"
+            >
+              <RefreshCw class="w-3 h-3" :class="variableLoading ? 'animate-spin' : ''" />
+            </button>
+          </div>
+        </div>
+
+        <p class="text-[10px] text-slate-500 dark:text-slate-400 truncate mb-1" :title="variableElfName || '未导入 ELF'">
+          {{ variableElfName || '未导入 ELF' }}
+        </p>
+        <p class="text-[10px] text-slate-400 dark:text-slate-500 mb-2">
+          {{ variableSpecs.length }} 个对象符号
+        </p>
+
+        <div v-if="variableError" class="text-[10px] text-red-600 dark:text-red-400 mb-2">
+          {{ variableError }}
+        </div>
+
+        <div v-if="variableValues.length > 0" class="space-y-1 max-h-40 overflow-auto pr-1">
+          <div
+            v-for="item in variableValues"
+            :key="`${item.name}-${item.address}`"
+            class="flex items-center justify-between gap-2 text-[10px]"
+          >
+            <span class="truncate text-slate-600 dark:text-slate-300" :title="item.name">{{ item.name }}</span>
+            <span v-if="item.error" class="text-red-500 dark:text-red-400 truncate" :title="item.error">ERR</span>
+            <span v-else class="text-slate-500 dark:text-slate-400">{{ item.value }}</span>
+          </div>
         </div>
       </div>
 
