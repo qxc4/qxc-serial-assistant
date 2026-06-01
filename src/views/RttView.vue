@@ -8,6 +8,7 @@ import type { FlashDryRunReport, FlashVerifyReport, VariableSpec, VariableValue 
 import type { ProgramImage } from '../debug-core'
 import { RTT_SOURCE_FILES, RTT_SOURCE_REPOSITORY_URL, downloadRttSourceFile, type RttSourceFile } from '../debug-core/rttSourceDownloads'
 import { createProbeCapabilityMatrix } from '../debug-core/probeCapabilityMatrix'
+import { RTT_SIDE_PANEL_TABS, type RttSidePanelTabKey } from '../debug-core/rttSidePanelTabs'
 import VirtualList from '../components/VirtualList.vue'
 import RttDebugControls from '../components/rtt/RttDebugControls.vue'
 import RttFlashProgrammerPanel from '../components/rtt/RttFlashProgrammerPanel.vue'
@@ -279,6 +280,7 @@ const virtualListRef = ref<InstanceType<typeof VirtualList> | null>(null)
 
 /** 是否显示右侧面板 */
 const showRightPanel = ref(true)
+const activeRightPanelTab = ref<RttSidePanelTabKey>('diagnostics')
 
 /** 是否显示帮助面板 */
 const showHelpPanel = ref(false)
@@ -1645,57 +1647,20 @@ watch(
     <!-- 右侧工具栏 -->
     <div
       v-if="showRightPanel"
-      class="apple-inspector w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 flex min-h-0 flex-col overflow-y-auto overscroll-contain"
+      class="apple-inspector w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 flex min-h-0 flex-col overflow-hidden overscroll-contain"
     >
-      <!-- 搜索 -->
-      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
-        <div class="relative">
-          <Search class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
-          <input
-            :value="filter.searchText"
-            @input="setSearchText(($event.target as HTMLInputElement).value)"
-            type="text"
-            :placeholder="t('rtt.searchPlaceholder')"
-            class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded pl-8 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      </div>
-
-      <!-- 级别过滤 -->
-      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
-        <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{{ t('rtt.levelFilter') }}</h3>
-        <div class="flex flex-wrap gap-1.5">
-          <button
-            v-for="opt in levelOptions"
-            :key="opt.value"
-            @click="toggleLevelFilter(opt.value)"
-            class="px-2 py-1 rounded text-[10px] font-semibold border transition-all"
-            :class="filter.levels.includes(opt.value)
-              ? `${opt.color} ${LEVEL_BG_MAP[opt.value]} border-current/30`
-              : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:text-slate-600 dark:hover:text-slate-300'"
-          >
-            {{ opt.label }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 通道过滤 -->
-      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
-        <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{{ t('rtt.channelFilter') }}</h3>
-        <div v-if="channels.length > 0" class="flex flex-wrap gap-1.5">
-          <button
-            v-for="ch in channels"
-            :key="ch.number"
-            @click="toggleChannelFilter(ch.number)"
-            class="px-2 py-1 rounded text-[10px] font-semibold border transition-all"
-            :class="filter.channels.includes(ch.number)
-              ? 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800'
-              : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:text-slate-600 dark:hover:text-slate-300'"
-          >
-            Ch{{ ch.number }}
-          </button>
-        </div>
-        <p v-else class="text-[10px] text-slate-400 dark:text-slate-500">{{ t('rtt.noChannels') }}</p>
+      <div class="grid grid-cols-4 gap-1 border-b border-slate-200 dark:border-slate-800 p-2">
+        <button
+          v-for="tab in RTT_SIDE_PANEL_TABS"
+          :key="tab.key"
+          @click="activeRightPanelTab = tab.key"
+          class="rounded-lg px-1 py-1.5 text-[10px] font-medium transition-colors"
+          :class="activeRightPanelTab === tab.key
+            ? 'bg-blue-500 text-white shadow-sm'
+            : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'"
+        >
+          {{ tab.label }}
+        </button>
       </div>
 
       <input
@@ -1713,8 +1678,60 @@ watch(
         @change="handleFirmwareSelected"
       />
 
+      <div class="min-h-0 flex-1 overflow-y-auto">
+      <!-- 搜索 -->
+      <div v-show="activeRightPanelTab === 'diagnostics'" class="p-3 border-b border-slate-200 dark:border-slate-800">
+        <div class="relative">
+          <Search class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          <input
+            :value="filter.searchText"
+            @input="setSearchText(($event.target as HTMLInputElement).value)"
+            type="text"
+            :placeholder="t('rtt.searchPlaceholder')"
+            class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded pl-8 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      <!-- 级别过滤 -->
+      <div v-show="activeRightPanelTab === 'diagnostics'" class="p-3 border-b border-slate-200 dark:border-slate-800">
+        <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{{ t('rtt.levelFilter') }}</h3>
+        <div class="flex flex-wrap gap-1.5">
+          <button
+            v-for="opt in levelOptions"
+            :key="opt.value"
+            @click="toggleLevelFilter(opt.value)"
+            class="px-2 py-1 rounded text-[10px] font-semibold border transition-all"
+            :class="filter.levels.includes(opt.value)
+              ? `${opt.color} ${LEVEL_BG_MAP[opt.value]} border-current/30`
+              : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:text-slate-600 dark:hover:text-slate-300'"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+      </div>
+
+      <!-- 通道过滤 -->
+      <div v-show="activeRightPanelTab === 'diagnostics'" class="p-3 border-b border-slate-200 dark:border-slate-800">
+        <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{{ t('rtt.channelFilter') }}</h3>
+        <div v-if="channels.length > 0" class="flex flex-wrap gap-1.5">
+          <button
+            v-for="ch in channels"
+            :key="ch.number"
+            @click="toggleChannelFilter(ch.number)"
+            class="px-2 py-1 rounded text-[10px] font-semibold border transition-all"
+            :class="filter.channels.includes(ch.number)
+              ? 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800'
+              : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:text-slate-600 dark:hover:text-slate-300'"
+          >
+            Ch{{ ch.number }}
+          </button>
+        </div>
+        <p v-else class="text-[10px] text-slate-400 dark:text-slate-500">{{ t('rtt.noChannels') }}</p>
+      </div>
+
       <!-- SEGGER RTT 库文件下载 -->
-      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+      <div v-show="activeRightPanelTab === 'resources'" class="p-3 border-b border-slate-200 dark:border-slate-800">
         <div class="flex items-center justify-between gap-2 mb-2">
           <div class="min-w-0">
             <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">RTT 库文件</h3>
@@ -1765,7 +1782,7 @@ watch(
       </div>
 
       <!-- 导出选项 -->
-      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+      <div v-show="activeRightPanelTab === 'resources'" class="p-3 border-b border-slate-200 dark:border-slate-800">
         <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{{ t('rtt.exportOptions') }}</h3>
         <div class="flex flex-col gap-1.5">
           <button
@@ -1786,6 +1803,7 @@ watch(
       </div>
 
       <RttDebugControls
+        v-show="activeRightPanelTab === 'diagnostics'"
         :is-connected="isConnected"
         :debug-control-state="debugControlState"
         :debug-control-error="debugControlError"
@@ -1812,7 +1830,7 @@ watch(
       />
 
       <!-- 变量查看 -->
-      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+      <div v-show="activeRightPanelTab === 'variables'" class="p-3 border-b border-slate-200 dark:border-slate-800">
         <div class="flex items-center justify-between mb-2">
           <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">变量</h3>
           <div class="flex items-center gap-1">
@@ -1887,6 +1905,7 @@ watch(
       </div>
 
       <RttFlashProgrammerPanel
+        v-show="activeRightPanelTab === 'flash'"
         v-model:firmware-base-address-input="firmwareBaseAddressInput"
         v-model:flash-page-size-input="flashPageSizeInput"
         v-model:flash-chip-family="flashChipFamily"
@@ -1915,7 +1934,7 @@ watch(
       />
 
       <!-- 纯 Web 调试链路自检 -->
-      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+      <div v-show="activeRightPanelTab === 'diagnostics'" class="p-3 border-b border-slate-200 dark:border-slate-800">
         <div class="flex items-center justify-between gap-2 mb-2">
           <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">调试链路自检</h3>
           <button
@@ -2061,7 +2080,7 @@ watch(
       </div>
 
       <!-- 连接信息 -->
-      <div class="p-3 mt-auto">
+      <div v-show="activeRightPanelTab === 'diagnostics'" class="p-3 mt-auto">
         <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{{ t('rtt.connectionInfo') }}</h3>
         <div class="space-y-1 text-[10px] text-slate-500 dark:text-slate-400">
           <div class="flex justify-between">
@@ -2079,6 +2098,7 @@ watch(
             <span class="text-slate-700 dark:text-slate-300">{{ channels.length }}</span>
           </div>
         </div>
+      </div>
       </div>
     </div>
   </div>
