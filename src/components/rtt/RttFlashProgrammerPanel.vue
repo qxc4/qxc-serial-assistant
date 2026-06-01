@@ -37,6 +37,7 @@ defineProps<{
   flashPlanSummary: FlashPlanSummary | null
   flashStage: FlashStage
   flashProgress: number
+  flashOperationSummary: string
   flashVerifyReport: FlashVerifyReport | null
   flashError: string
   flashDiagnosis: FlashDiagnosis | null
@@ -182,6 +183,9 @@ const emit = defineEmits<{
     </div>
     <div class="text-[10px] text-slate-500 dark:text-slate-400 mb-1">
       阶段: {{ flashStage }}
+    </div>
+    <div v-if="flashOperationSummary" class="text-[10px] text-slate-500 dark:text-slate-400 mb-1 truncate" :title="flashOperationSummary">
+      进度: {{ flashOperationSummary }}
     </div>
     <div class="h-1.5 rounded bg-slate-200 dark:bg-slate-700 overflow-hidden mb-1">
       <div class="h-full bg-blue-500 transition-all duration-200" :style="{ width: `${flashProgress}%` }" />

@@ -1,6 +1,7 @@
 export * from './cortexMDebugTarget'
 export * from './cmsisDapDriver'
 export * from './debugInterfaces'
+export * from './flashProgress'
 export * from './flashPlanner'
 export * from './flashProgrammer'
 export * from './gdbRspAdapter'

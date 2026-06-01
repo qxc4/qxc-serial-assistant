@@ -4,7 +4,7 @@ import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
-import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer } from '../debug-core'
+import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer, summarizeFlashOperationProgress } from '../debug-core'
 import type { FlashVerifyReport, VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
@@ -333,6 +333,7 @@ const flashProgress = ref(0)
 const flashStage = ref<'idle' | 'erase' | 'program' | 'verify' | 'done'>('idle')
 const flashHint = ref('')
 const flashVerifyReport = ref<FlashVerifyReport | null>(null)
+const flashOperationSummary = ref('')
 const {
   debugControlState,
   debugControlError,
@@ -719,6 +720,7 @@ async function handleFirmwareSelected(event: Event): Promise<void> {
     firmwareImage.value = null
     flashPlanSummary.value = null
     flashVerifyReport.value = null
+    flashOperationSummary.value = ''
   } finally {
     input.value = ''
   }
@@ -748,11 +750,13 @@ function planFirmwareProgramming(): void {
     flashStage.value = 'idle'
     flashHint.value = ''
     flashVerifyReport.value = null
+    flashOperationSummary.value = ''
   } catch (error) {
     flashStatus.value = 'error'
     flashError.value = error instanceof Error ? error.message : String(error)
     flashPlanSummary.value = null
     flashVerifyReport.value = null
+    flashOperationSummary.value = ''
   }
 }
 
@@ -806,6 +810,7 @@ async function programFirmware(): Promise<void> {
   flashStage.value = 'erase'
   flashHint.value = ''
   flashVerifyReport.value = null
+  flashOperationSummary.value = ''
 
   try {
     webUsbRtt.setFlashChipFamily(flashChipFamily.value)
@@ -826,18 +831,40 @@ async function programFirmware(): Promise<void> {
 
     const eraseTotal = Math.max(plan.erasePages.length, 1)
     for (let i = 0; i < plan.erasePages.length; i++) {
-      await programmer.erasePages([plan.erasePages[i]!])
+      const address = plan.erasePages[i]!
+      flashOperationSummary.value = summarizeFlashOperationProgress({
+        stage: 'erase',
+        completed: i + 1,
+        total: plan.erasePages.length,
+        address,
+      })
+      await programmer.erasePages([address])
       flashProgress.value = Math.round(((i + 1) / eraseTotal) * 35)
     }
 
     flashStage.value = 'program'
     const sectionTotal = Math.max(plan.programSections.length, 1)
     for (let i = 0; i < plan.programSections.length; i++) {
-      await programmer.programSections([plan.programSections[i]!])
+      const section = plan.programSections[i]!
+      flashOperationSummary.value = summarizeFlashOperationProgress({
+        stage: 'program',
+        completed: i + 1,
+        total: plan.programSections.length,
+        sectionName: section.name,
+        bytes: section.data.length,
+      })
+      await programmer.programSections([section])
       flashProgress.value = 35 + Math.round(((i + 1) / sectionTotal) * 40)
     }
 
     flashStage.value = 'verify'
+    const verifyBytes = plan.verifyRanges.reduce((sum, item) => sum + item.length, 0)
+    flashOperationSummary.value = summarizeFlashOperationProgress({
+      stage: 'verify',
+      completed: verifyBytes,
+      total: verifyBytes,
+      bytes: verifyBytes,
+    })
     const verifyReport = await programmer.verifySectionsDetailed(plan.programSections)
     flashVerifyReport.value = verifyReport
     if (!verifyReport.ok) {
@@ -849,6 +876,7 @@ async function programFirmware(): Promise<void> {
     }
     flashProgress.value = 100
     flashStage.value = 'done'
+    flashOperationSummary.value = `完成: ${verifyReport.checkedBytes}B 已校验`
     flashHint.value = '烧录完成，建议复位后观察日志与变量区。'
     flashStatus.value = 'success'
   } catch (error) {
@@ -2125,6 +2153,7 @@ rtt server start 9090 0</pre>
         :flash-plan-summary="flashPlanSummary"
         :flash-stage="flashStage"
         :flash-progress="flashProgress"
+        :flash-operation-summary="flashOperationSummary"
         :flash-verify-report="flashVerifyReport"
         :flash-error="flashError"
         :flash-diagnosis="flashDiagnosis"
