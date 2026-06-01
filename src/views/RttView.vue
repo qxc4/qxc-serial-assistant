@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
 import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
+import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
-import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer, CortexMDebugTarget } from '../debug-core'
+import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer } from '../debug-core'
 import type { VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
@@ -330,33 +331,32 @@ const flashError = ref('')
 const flashProgress = ref(0)
 const flashStage = ref<'idle' | 'erase' | 'program' | 'verify' | 'done'>('idle')
 const flashHint = ref('')
-const debugControlState = ref<'idle' | 'running' | 'halted' | 'reset' | 'error'>('idle')
-const debugControlError = ref('')
-const coreRegisters = ref<Uint32Array>(new Uint32Array(17))
-const breakpointInput = ref('0x08000000')
-const hardwareBreakpoints = ref<number[]>([])
-const BREAKPOINT_SESSION_KEY = 'qxc-serial-rtt-breakpoints'
-const breakpointRestoreStatus = ref('')
-const memoryViewAddressInput = ref('0x20000000')
-const memoryViewLengthInput = ref(128)
-const memoryViewHexLines = ref<string[]>([])
-const memoryViewError = ref('')
-const pcFocusRequestId = ref(0)
-let debugTargetInstance: CortexMDebugTarget | null = null
-
-const coreRegisterItems = computed(() => {
-  const names = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'SP', 'LR', 'PC', 'XPSR']
-  return names.map((name, index) => ({
-    name,
-    value: coreRegisters.value[index] ?? 0,
-    isKey: name === 'SP' || name === 'LR' || name === 'PC',
-  }))
-})
-
-const memoryViewByteLength = computed(() => {
-  const value = memoryViewLengthInput.value
-  if (!Number.isFinite(value)) return null
-  return Math.max(16, Math.min(512, Math.floor(value)))
+const {
+  debugControlState,
+  debugControlError,
+  breakpointInput,
+  hardwareBreakpoints,
+  breakpointRestoreStatus,
+  coreRegisterItems,
+  memoryViewAddressInput,
+  memoryViewLengthInput,
+  memoryViewHexLines,
+  memoryViewError,
+  pcFocusRequestId,
+  refreshCoreRegisters,
+  handleDebugAction,
+  addHardwareBreakpoint,
+  removeHardwareBreakpoint,
+  clearAllHardwareBreakpoints,
+  readMemoryPreview,
+} = useRttDebugWorkbench({
+  isConnected,
+  memory: {
+    readMemory: (address, bytes) => webUsbRtt.readMemory(address, bytes),
+    writeMemory: (address, data) => webUsbRtt.writeMemory(address, data),
+  },
+  parseHexAddress,
+  formatHexAddress,
 })
 type FlashDiagCode = 'permission' | 'disconnected' | 'range' | 'verify' | 'protected' | 'config' | 'generic'
 const flashDiagnosis = computed(() => {
@@ -459,201 +459,6 @@ function parseHexAddress(value: string): number | null {
   if (!/^[0-9a-fA-F]+$/.test(normalized)) return null
   const parsed = Number.parseInt(normalized, 16)
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
-}
-
-function createDebugTarget(): CortexMDebugTarget {
-  if (debugTargetInstance) return debugTargetInstance
-  debugTargetInstance = new CortexMDebugTarget({
-    read8: (address, length) => webUsbRtt.readMemory(address, length),
-    write8: (address, data) => webUsbRtt.writeMemory(address, data),
-    read32: async (address, words) => {
-      const bytes = await webUsbRtt.readMemory(address, words * 4)
-      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-      const result = new Uint32Array(words)
-      for (let i = 0; i < words; i++) {
-        result[i] = view.getUint32(i * 4, true)
-      }
-      return result
-    },
-    write32: async (address, words) => {
-      const bytes = new Uint8Array(words.length * 4)
-      const view = new DataView(bytes.buffer)
-      for (let i = 0; i < words.length; i++) {
-        view.setUint32(i * 4, words[i] ?? 0, true)
-      }
-      await webUsbRtt.writeMemory(address, bytes)
-    },
-  })
-  return debugTargetInstance
-}
-
-async function refreshCoreRegisters(): Promise<void> {
-  if (!isConnected.value) {
-    debugControlError.value = '请先连接调试探针'
-    return
-  }
-  try {
-    const target = createDebugTarget()
-    coreRegisters.value = await target.readCoreRegisters()
-    debugControlError.value = ''
-  } catch (error) {
-    debugControlError.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-function persistHardwareBreakpoints(): void {
-  sessionStorage.setItem(BREAKPOINT_SESSION_KEY, JSON.stringify(hardwareBreakpoints.value))
-}
-
-function restoreHardwareBreakpoints(): void {
-  const raw = sessionStorage.getItem(BREAKPOINT_SESSION_KEY)
-  if (!raw) return
-  try {
-    const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) {
-      hardwareBreakpoints.value = parsed
-        .map(item => Number(item))
-        .filter(item => Number.isInteger(item) && item >= 0)
-        .sort((a, b) => a - b)
-    }
-  } catch {
-    // ignore malformed session cache
-  }
-}
-
-async function handleDebugAction(action: 'halt' | 'resume' | 'step' | 'reset'): Promise<void> {
-  if (!isConnected.value) {
-    debugControlError.value = '请先连接调试探针'
-    return
-  }
-  try {
-    const target = createDebugTarget()
-    const state = await target[action]()
-    debugControlState.value = state === 'unknown' ? 'idle' : state
-    debugControlError.value = ''
-    await refreshCoreRegisters()
-    if (action === 'step') {
-      pcFocusRequestId.value += 1
-    }
-  } catch (error) {
-    debugControlState.value = 'error'
-    debugControlError.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-async function addHardwareBreakpoint(): Promise<void> {
-  if (!isConnected.value) {
-    debugControlError.value = '请先连接调试探针'
-    return
-  }
-  const address = parseHexAddress(breakpointInput.value)
-  if (address === null) {
-    debugControlError.value = '断点地址必须是十六进制'
-    return
-  }
-  try {
-    const target = createDebugTarget()
-    await target.setHardwareBreakpoint(address)
-    if (!hardwareBreakpoints.value.includes(address)) {
-      hardwareBreakpoints.value = [...hardwareBreakpoints.value, address].sort((a, b) => a - b)
-      persistHardwareBreakpoints()
-    }
-    debugControlError.value = ''
-  } catch (error) {
-    debugControlError.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-async function removeHardwareBreakpoint(address: number): Promise<void> {
-  if (!isConnected.value) {
-    debugControlError.value = '请先连接调试探针'
-    return
-  }
-  try {
-    const target = createDebugTarget()
-    await target.clearHardwareBreakpoint(address)
-    hardwareBreakpoints.value = hardwareBreakpoints.value.filter(item => item !== address)
-    persistHardwareBreakpoints()
-    debugControlError.value = ''
-  } catch (error) {
-    debugControlError.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-async function reapplyHardwareBreakpoints(): Promise<void> {
-  if (!isConnected.value || hardwareBreakpoints.value.length === 0) return
-  const target = createDebugTarget()
-  const failed: number[] = []
-  let successCount = 0
-  for (const address of hardwareBreakpoints.value) {
-    try {
-      await target.setHardwareBreakpoint(address)
-      successCount += 1
-    } catch {
-      failed.push(address)
-    }
-  }
-  if (failed.length > 0) {
-    breakpointRestoreStatus.value = `断点恢复: 成功 ${successCount} / 失败 ${failed.length}`
-    debugControlError.value = `部分断点恢复失败: ${failed.map(item => formatHexAddress(item)).join(', ')}`
-    return
-  }
-  breakpointRestoreStatus.value = successCount > 0 ? `断点恢复: 已恢复 ${successCount} 个` : ''
-}
-
-async function clearAllHardwareBreakpoints(): Promise<void> {
-  if (!isConnected.value) {
-    hardwareBreakpoints.value = []
-    persistHardwareBreakpoints()
-    breakpointRestoreStatus.value = '断点列表已清空（未连接目标）'
-    return
-  }
-  try {
-    const target = createDebugTarget()
-    for (const address of hardwareBreakpoints.value) {
-      await target.clearHardwareBreakpoint(address)
-    }
-    hardwareBreakpoints.value = []
-    persistHardwareBreakpoints()
-    debugControlError.value = ''
-    breakpointRestoreStatus.value = '断点已全部清除'
-  } catch (error) {
-    debugControlError.value = error instanceof Error ? error.message : String(error)
-  }
-}
-
-async function readMemoryPreview(): Promise<void> {
-  if (!isConnected.value) {
-    memoryViewError.value = '请先连接调试探针'
-    return
-  }
-  const address = parseHexAddress(memoryViewAddressInput.value)
-  if (address === null) {
-    memoryViewError.value = '内存地址必须是十六进制'
-    return
-  }
-  const byteLength = memoryViewByteLength.value
-  if (byteLength === null) {
-    memoryViewError.value = '读取长度必须是数字'
-    return
-  }
-  try {
-    const bytes = await webUsbRtt.readMemory(address, byteLength)
-    const lines: string[] = []
-    for (let offset = 0; offset < bytes.length; offset += 16) {
-      const chunk = bytes.slice(offset, offset + 16)
-      const addrText = formatHexAddress((address + offset) >>> 0)
-      const hexText = Array.from(chunk)
-        .map(item => item.toString(16).toUpperCase().padStart(2, '0'))
-        .join(' ')
-      lines.push(`${addrText}: ${hexText}`)
-    }
-    memoryViewHexLines.value = lines
-    memoryViewError.value = ''
-  } catch (error) {
-    memoryViewHexLines.value = []
-    memoryViewError.value = error instanceof Error ? error.message : String(error)
-  }
 }
 
 function applyWebUsbScanRange(): boolean {
@@ -981,18 +786,7 @@ watch([variableAutoRefresh, variableRefreshMs], resetVariableRefreshTimer)
 watch(isConnected, connected => {
   if (!connected) {
     variableAutoRefresh.value = false
-    debugControlState.value = 'idle'
-    coreRegisters.value = new Uint32Array(17)
-    breakpointRestoreStatus.value = ''
-    debugTargetInstance = null
-  } else {
-    debugTargetInstance = null
-    void reapplyHardwareBreakpoints()
   }
-})
-
-onMounted(() => {
-  restoreHardwareBreakpoints()
 })
 
 onUnmounted(() => {
