@@ -343,12 +343,15 @@ const {
   memoryViewHexLines,
   memoryViewError,
   pcFocusRequestId,
+  registerWriteName,
+  registerWriteValueInput,
   refreshCoreRegisters,
   handleDebugAction,
   addHardwareBreakpoint,
   removeHardwareBreakpoint,
   clearAllHardwareBreakpoints,
   readMemoryPreview,
+  writeCoreRegisterValue,
 } = useRttDebugWorkbench({
   isConnected,
   memory: {
@@ -1946,6 +1949,8 @@ rtt server start 9090 0</pre>
         :memory-view-hex-lines="memoryViewHexLines"
         :memory-view-error="memoryViewError"
         :pc-focus-request-id="pcFocusRequestId"
+        v-model:register-write-name="registerWriteName"
+        v-model:register-write-value-input="registerWriteValueInput"
         :format-hex-address="formatHexAddress"
         @refresh-core-registers="refreshCoreRegisters"
         @debug-action="handleDebugAction"
@@ -1953,6 +1958,7 @@ rtt server start 9090 0</pre>
         @remove-hardware-breakpoint="removeHardwareBreakpoint"
         @clear-all-hardware-breakpoints="clearAllHardwareBreakpoints"
         @read-memory-preview="readMemoryPreview"
+        @write-core-register-value="writeCoreRegisterValue"
       />
 
       <!-- 变量查看 -->

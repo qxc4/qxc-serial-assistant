@@ -17,6 +17,7 @@ export interface RttDebugWorkbenchOptions {
 }
 
 const BREAKPOINT_SESSION_KEY = 'qxc-serial-rtt-breakpoints'
+const CORE_REGISTER_NAMES = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'SP', 'LR', 'PC', 'XPSR'] as const
 
 export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
   const debugControlState = ref<DebugControlState>('idle')
@@ -30,11 +31,12 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
   const memoryViewHexLines = ref<string[]>([])
   const memoryViewError = ref('')
   const pcFocusRequestId = ref(0)
+  const registerWriteName = ref('PC')
+  const registerWriteValueInput = ref('0x00000000')
   let debugTargetInstance: CortexMDebugTarget | null = null
 
   const coreRegisterItems = computed(() => {
-    const names = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'SP', 'LR', 'PC', 'XPSR']
-    return names.map((name, index) => ({
+    return CORE_REGISTER_NAMES.map((name, index) => ({
       name,
       value: coreRegisters.value[index] ?? 0,
       isKey: name === 'SP' || name === 'LR' || name === 'PC',
@@ -245,6 +247,34 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
     }
   }
 
+  async function writeCoreRegisterValue(): Promise<void> {
+    if (!options.isConnected.value) {
+      debugControlError.value = '请先连接调试探针'
+      return
+    }
+    const registerIndex = CORE_REGISTER_NAMES.findIndex(name => name === registerWriteName.value)
+    if (registerIndex < 0) {
+      debugControlError.value = '寄存器名称无效'
+      return
+    }
+    const value = options.parseHexAddress(registerWriteValueInput.value)
+    if (value === null) {
+      debugControlError.value = '寄存器值必须是十六进制'
+      return
+    }
+    try {
+      const target = createDebugTarget()
+      await target.writeCoreRegister(registerIndex, value >>> 0)
+      debugControlError.value = ''
+      await refreshCoreRegisters()
+      if (registerWriteName.value === 'PC') {
+        pcFocusRequestId.value += 1
+      }
+    } catch (error) {
+      debugControlError.value = error instanceof Error ? error.message : String(error)
+    }
+  }
+
   watch(options.isConnected, connected => {
     if (!connected) {
       debugControlState.value = 'idle'
@@ -273,11 +303,14 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
     memoryViewHexLines,
     memoryViewError,
     pcFocusRequestId,
+    registerWriteName,
+    registerWriteValueInput,
     refreshCoreRegisters,
     handleDebugAction,
     addHardwareBreakpoint,
     removeHardwareBreakpoint,
     clearAllHardwareBreakpoints,
     readMemoryPreview,
+    writeCoreRegisterValue,
   }
 }

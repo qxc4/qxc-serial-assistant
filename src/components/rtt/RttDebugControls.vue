@@ -24,6 +24,8 @@ const props = defineProps<{
   memoryViewHexLines: string[]
   memoryViewError: string
   pcFocusRequestId: number
+  registerWriteName: string
+  registerWriteValueInput: string
   formatHexAddress: (value: number) => string
 }>()
 
@@ -31,12 +33,15 @@ const emit = defineEmits<{
   'update:breakpointInput': [value: string]
   'update:memoryViewAddressInput': [value: string]
   'update:memoryViewLengthInput': [value: number]
+  'update:registerWriteName': [value: string]
+  'update:registerWriteValueInput': [value: string]
   refreshCoreRegisters: []
   debugAction: [action: DebugAction]
   addHardwareBreakpoint: []
   removeHardwareBreakpoint: [address: number]
   clearAllHardwareBreakpoints: []
   readMemoryPreview: []
+  writeCoreRegisterValue: []
 }>()
 
 const registerPanelRef = ref<HTMLElement | null>(null)
@@ -148,6 +153,37 @@ watch(() => props.pcFocusRequestId, async () => {
       >
         <span class="text-slate-400 dark:text-slate-500">{{ item.name }}</span>
         <span class="font-mono text-slate-600 dark:text-slate-300">{{ formatHexAddress(item.value) }}</span>
+      </div>
+    </div>
+
+    <div class="mt-2 border-t border-slate-200 dark:border-slate-700 pt-2">
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-[10px] text-slate-500 dark:text-slate-400">寄存器写入</span>
+        <button
+          @click="emit('writeCoreRegisterValue')"
+          :disabled="!isConnected"
+          class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+        >
+          写入
+        </button>
+      </div>
+      <div class="grid grid-cols-[auto_1fr] gap-1.5">
+        <select
+          :value="registerWriteName"
+          @change="emit('update:registerWriteName', ($event.target as HTMLSelectElement).value)"
+          class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option v-for="item in coreRegisterItems" :key="`write-${item.name}`" :value="item.name">
+            {{ item.name }}
+          </option>
+        </select>
+        <input
+          :value="registerWriteValueInput"
+          @input="emit('update:registerWriteValueInput', ($event.target as HTMLInputElement).value)"
+          type="text"
+          placeholder="0x..."
+          class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
       </div>
     </div>
 
