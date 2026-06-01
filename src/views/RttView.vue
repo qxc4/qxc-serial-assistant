@@ -232,6 +232,44 @@ const webDebugSelfChecks = computed(() => {
   ]
 })
 
+const workbenchStatusChips = computed(() => {
+  const runState = isConnected.value ? (isPaused.value ? 'paused' : 'running') : 'idle'
+  const rttState = channels.value.length > 0 ? 'ready' : (isConnected.value ? 'scanning' : 'idle')
+
+  return [
+    {
+      key: 'connection',
+      label: '连接',
+      value: connectionState.value,
+      tone: isConnected.value ? 'ok' : (connectionState.value === 'error' ? 'error' : 'idle'),
+    },
+    {
+      key: 'run',
+      label: '运行',
+      value: runState,
+      tone: runState === 'running' ? 'ok' : (runState === 'paused' ? 'warn' : 'idle'),
+    },
+    {
+      key: 'rtt',
+      label: 'RTT',
+      value: rttState,
+      tone: rttState === 'ready' ? 'ok' : (rttState === 'scanning' ? 'warn' : 'idle'),
+    },
+    {
+      key: 'flash',
+      label: '烧录',
+      value: flashStatus.value,
+      tone: flashStatus.value === 'success'
+        ? 'ok'
+        : flashStatus.value === 'error'
+          ? 'error'
+          : flashStatus.value === 'programming'
+            ? 'warn'
+            : 'idle',
+    },
+  ] as const
+})
+
 /** 发送输入框内容 */
 const sendInput = ref('')
 
@@ -944,6 +982,20 @@ watch(
 
           <!-- 统计信息 -->
           <div class="ml-auto flex items-center gap-1.5 text-[11px]">
+            <span
+              v-for="chip in workbenchStatusChips"
+              :key="chip.key"
+              class="px-2 py-1 rounded border"
+              :class="chip.tone === 'ok'
+                ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800'
+                : chip.tone === 'warn'
+                  ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400 border-yellow-200 dark:border-yellow-800'
+                  : chip.tone === 'error'
+                    ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'"
+            >
+              {{ chip.label }}: {{ chip.value }}
+            </span>
             <span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ logStats.total }} {{ t('rtt.entries') }}</span>
             <span v-if="logStats.errors > 0" class="px-2 py-1 rounded bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400">
               {{ logStats.errors }} {{ t('rtt.errors') }}
