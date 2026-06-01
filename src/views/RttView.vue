@@ -571,6 +571,22 @@ async function removeHardwareBreakpoint(address: number): Promise<void> {
   }
 }
 
+async function reapplyHardwareBreakpoints(): Promise<void> {
+  if (!isConnected.value || hardwareBreakpoints.value.length === 0) return
+  const target = createDebugTarget()
+  const failed: number[] = []
+  for (const address of hardwareBreakpoints.value) {
+    try {
+      await target.setHardwareBreakpoint(address)
+    } catch {
+      failed.push(address)
+    }
+  }
+  if (failed.length > 0) {
+    debugControlError.value = `部分断点恢复失败: ${failed.map(item => formatHexAddress(item)).join(', ')}`
+  }
+}
+
 function applyWebUsbScanRange(): boolean {
   const start = parseHexAddress(rttScanStartInput.value)
   const end = parseHexAddress(rttScanEndInput.value)
@@ -898,7 +914,8 @@ watch(isConnected, connected => {
     variableAutoRefresh.value = false
     debugControlState.value = 'idle'
     coreRegisters.value = new Uint32Array(17)
-    hardwareBreakpoints.value = []
+  } else {
+    void reapplyHardwareBreakpoints()
   }
 })
 
