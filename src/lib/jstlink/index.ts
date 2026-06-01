@@ -73,6 +73,18 @@ const STM32F1_FLASH = {
   SR_BSY: 1 << 0,
 } as const
 
+const STM32F4_FLASH = {
+  KEYR: 0x40023c04,
+  SR: 0x40023c0c,
+  CR: 0x40023c10,
+  KEY1: 0x45670123,
+  KEY2: 0xcdef89ab,
+  CR_SER: 1 << 1,
+  CR_STRT: 1 << 16,
+  CR_LOCK: 1 << 31,
+  SR_BSY: 1 << 16,
+} as const
+
 // ==================== 类型定义 ====================
 
 /** RTT 通道信息 */
@@ -108,6 +120,7 @@ export class JSTLink {
   private outEndpoint = 0
   private packetSize = 64
   private _isConnected = false
+  private flashChipFamily: FlashChipFamily = 'stm32f1'
   private eventListeners: Map<string, Set<EventCallback>> = new Map()
   private rttChannels: RttChannel[] = []
   private rttSession: RttMemorySession | null = null
@@ -445,6 +458,18 @@ export class JSTLink {
    * 擦除 STM32F1 Flash 页（实验实现）
    */
   async eraseFlashPage(address: number): Promise<void> {
+    if (this.flashChipFamily === 'stm32f4') {
+      await this.eraseFlashSectorStm32f4(address)
+      return
+    }
+    await this.eraseFlashPageStm32f1(address)
+  }
+
+  setFlashChipFamily(family: FlashChipFamily): void {
+    this.flashChipFamily = family
+  }
+
+  private async eraseFlashPageStm32f1(address: number): Promise<void> {
     if ((address & 0x3ff) !== 0) {
       throw new Error('STM32F1 页擦除地址必须 1KB 对齐')
     }
@@ -462,6 +487,24 @@ export class JSTLink {
     await this.stm32f1WaitReady()
     await this.stm32f1WriteReg(STM32F1_FLASH.CR, baseCr & ~STM32F1_FLASH.CR_PER)
     await this.stm32f1WriteReg(STM32F1_FLASH.CR, (baseCr & ~STM32F1_FLASH.CR_PER) | STM32F1_FLASH.CR_LOCK)
+  }
+
+  private async eraseFlashSectorStm32f4(address: number): Promise<void> {
+    const sector = stm32f4AddressToSector(address)
+    if (sector < 0) {
+      throw new Error('STM32F4 擦除地址不在支持的扇区范围')
+    }
+    await this.stm32f4UnlockFlash()
+    await this.stm32f4WaitReady()
+
+    const baseCr = await this.stm32f4ReadReg(STM32F4_FLASH.CR)
+    const clearSectorBits = baseCr & ~(0x0f << 3)
+    const sectorMask = (sector & 0x0f) << 3
+    const setSer = clearSectorBits | STM32F4_FLASH.CR_SER | sectorMask
+    await this.stm32f4WriteReg(STM32F4_FLASH.CR, setSer)
+    await this.stm32f4WriteReg(STM32F4_FLASH.CR, setSer | STM32F4_FLASH.CR_STRT)
+    await this.stm32f4WaitReady()
+    await this.stm32f4WriteReg(STM32F4_FLASH.CR, (clearSectorBits & ~STM32F4_FLASH.CR_SER) | STM32F4_FLASH.CR_LOCK)
   }
 
   /**
@@ -577,4 +620,49 @@ export class JSTLink {
       }
     }
   }
+
+  private async stm32f4ReadReg(address: number): Promise<number> {
+    const bytes = await this.readMemory32(address, 1)
+    return new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, true)
+  }
+
+  private async stm32f4WriteReg(address: number, value: number): Promise<void> {
+    const bytes = new Uint8Array(4)
+    new DataView(bytes.buffer).setUint32(0, value >>> 0, true)
+    await this.writeMemory32(address, bytes)
+  }
+
+  private async stm32f4UnlockFlash(): Promise<void> {
+    const cr = await this.stm32f4ReadReg(STM32F4_FLASH.CR)
+    if ((cr & STM32F4_FLASH.CR_LOCK) === 0) {
+      return
+    }
+    await this.stm32f4WriteReg(STM32F4_FLASH.KEYR, STM32F4_FLASH.KEY1)
+    await this.stm32f4WriteReg(STM32F4_FLASH.KEYR, STM32F4_FLASH.KEY2)
+  }
+
+  private async stm32f4WaitReady(timeoutMs = 3000): Promise<void> {
+    const started = Date.now()
+    while (true) {
+      const sr = await this.stm32f4ReadReg(STM32F4_FLASH.SR)
+      if ((sr & STM32F4_FLASH.SR_BSY) === 0) return
+      if (Date.now() - started > timeoutMs) {
+        throw new Error('STM32F4 Flash 操作超时')
+      }
+    }
+  }
 }
+
+function stm32f4AddressToSector(address: number): number {
+  if (address >= 0x08000000 && address < 0x08004000) return 0
+  if (address >= 0x08004000 && address < 0x08008000) return 1
+  if (address >= 0x08008000 && address < 0x0800c000) return 2
+  if (address >= 0x0800c000 && address < 0x08010000) return 3
+  if (address >= 0x08010000 && address < 0x08020000) return 4
+  if (address >= 0x08020000 && address < 0x08040000) return 5
+  if (address >= 0x08040000 && address < 0x08060000) return 6
+  if (address >= 0x08060000 && address < 0x08080000) return 7
+  return -1
+}
+
+export type FlashChipFamily = 'stm32f1' | 'stm32f4'

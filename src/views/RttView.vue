@@ -555,6 +555,7 @@ const firmwareName = ref('')
 const firmwareImage = ref<ProgramImage | null>(null)
 const firmwareBaseAddressInput = ref('0x08000000')
 const flashPageSizeInput = ref(2048)
+const flashChipFamily = ref<'stm32f1' | 'stm32f4'>('stm32f1')
 const flashPlanSummary = ref<{ erasePages: number; programSections: number; verifyBytes: number } | null>(null)
 const flashStatus = ref<'idle' | 'planning' | 'ready' | 'programming' | 'success' | 'error'>('idle')
 const flashError = ref('')
@@ -847,6 +848,7 @@ async function programFirmware(): Promise<void> {
   flashError.value = ''
 
   try {
+    webUsbRtt.setFlashChipFamily(flashChipFamily.value)
     const programmer = createFlashProgrammer({
       erasePage: (address) => webUsbRtt.eraseFlashPage(address),
       program: (address, data) => webUsbRtt.writeMemory(address, data),
@@ -2327,7 +2329,7 @@ rtt server start 9090 0</pre>
           {{ firmwareName || '未导入固件' }}
         </p>
 
-        <div class="grid grid-cols-2 gap-1.5 mb-2">
+        <div class="grid grid-cols-3 gap-1.5 mb-2">
           <input
             v-model="firmwareBaseAddressInput"
             type="text"
@@ -2342,6 +2344,13 @@ rtt server start 9090 0</pre>
             placeholder="页大小"
             class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          <select
+            v-model="flashChipFamily"
+            class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="stm32f1">STM32F1</option>
+            <option value="stm32f4">STM32F4</option>
+          </select>
         </div>
 
         <div class="flex items-center gap-1.5 mb-2">
@@ -2374,7 +2383,7 @@ rtt server start 9090 0</pre>
           {{ flashError }}
         </div>
         <div class="text-[10px] text-yellow-600 dark:text-yellow-400">
-          当前仅实现 STM32F1 实验擦页，其他芯片族可能失败。
+          当前为实验擦页：已支持 STM32F1 页擦除与 STM32F4 扇区擦除(0-7)。
         </div>
       </div>
 

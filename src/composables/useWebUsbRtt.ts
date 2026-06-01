@@ -56,6 +56,8 @@ interface JSTLinkInterface {
   writeMemory8(address: number, data: Uint8Array): Promise<void>
   /** 擦除 Flash 页（STM32F1 实验路径） */
   eraseFlashPage(address: number): Promise<void>
+  /** 设置 Flash 芯片族 */
+  setFlashChipFamily(family: 'stm32f1' | 'stm32f4'): void
   /** 设置 SWD 频率 */
   setSpeed(frequency: number): Promise<void>
   /** 注册事件监听 */
@@ -664,6 +666,10 @@ export function useWebUsbRtt() {
     await jstlink.eraseFlashPage(address)
   }
 
+  function setFlashChipFamily(family: 'stm32f1' | 'stm32f4'): void {
+    jstlink?.setFlashChipFamily(family)
+  }
+
   function setScanRange(range: RttScanRangeInput): void {
     scanRange.value = normalizeRttScanRange(range)
   }
@@ -724,6 +730,7 @@ export function useWebUsbRtt() {
     readMemory,
     writeMemory,
     eraseFlashPage,
+    setFlashChipFamily,
     clearLogs,
     togglePause,
     clearError,
