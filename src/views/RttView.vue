@@ -3,7 +3,7 @@ import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
 import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useI18n } from '../composables/useI18n'
-import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer } from '../debug-core'
+import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer, CortexMDebugTarget } from '../debug-core'
 import type { VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
@@ -329,6 +329,19 @@ const flashError = ref('')
 const flashProgress = ref(0)
 const flashStage = ref<'idle' | 'erase' | 'program' | 'verify' | 'done'>('idle')
 const flashHint = ref('')
+const debugControlState = ref<'idle' | 'running' | 'halted' | 'reset' | 'error'>('idle')
+const debugControlError = ref('')
+const coreRegisters = ref<Uint32Array>(new Uint32Array(17))
+const breakpointInput = ref('0x08000000')
+const hardwareBreakpoints = ref<number[]>([])
+
+const coreRegisterItems = computed(() => {
+  const names = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'SP', 'LR', 'PC', 'XPSR']
+  return names.map((name, index) => ({
+    name,
+    value: coreRegisters.value[index] ?? 0,
+  }))
+})
 type FlashDiagCode = 'permission' | 'disconnected' | 'range' | 'verify' | 'protected' | 'config' | 'generic'
 const flashDiagnosis = computed(() => {
   const message = flashError.value.trim()
@@ -430,6 +443,98 @@ function parseHexAddress(value: string): number | null {
   if (!/^[0-9a-fA-F]+$/.test(normalized)) return null
   const parsed = Number.parseInt(normalized, 16)
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
+}
+
+function createDebugTarget(): CortexMDebugTarget {
+  return new CortexMDebugTarget({
+    read8: (address, length) => webUsbRtt.readMemory(address, length),
+    write8: (address, data) => webUsbRtt.writeMemory(address, data),
+    read32: async (address, words) => {
+      const bytes = await webUsbRtt.readMemory(address, words * 4)
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+      const result = new Uint32Array(words)
+      for (let i = 0; i < words; i++) {
+        result[i] = view.getUint32(i * 4, true)
+      }
+      return result
+    },
+    write32: async (address, words) => {
+      const bytes = new Uint8Array(words.length * 4)
+      const view = new DataView(bytes.buffer)
+      for (let i = 0; i < words.length; i++) {
+        view.setUint32(i * 4, words[i] ?? 0, true)
+      }
+      await webUsbRtt.writeMemory(address, bytes)
+    },
+  })
+}
+
+async function refreshCoreRegisters(): Promise<void> {
+  if (!isConnected.value) {
+    debugControlError.value = '请先连接调试探针'
+    return
+  }
+  try {
+    const target = createDebugTarget()
+    coreRegisters.value = await target.readCoreRegisters()
+    debugControlError.value = ''
+  } catch (error) {
+    debugControlError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+async function handleDebugAction(action: 'halt' | 'resume' | 'step' | 'reset'): Promise<void> {
+  if (!isConnected.value) {
+    debugControlError.value = '请先连接调试探针'
+    return
+  }
+  try {
+    const target = createDebugTarget()
+    const state = await target[action]()
+    debugControlState.value = state === 'unknown' ? 'idle' : state
+    debugControlError.value = ''
+    await refreshCoreRegisters()
+  } catch (error) {
+    debugControlState.value = 'error'
+    debugControlError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+async function addHardwareBreakpoint(): Promise<void> {
+  if (!isConnected.value) {
+    debugControlError.value = '请先连接调试探针'
+    return
+  }
+  const address = parseHexAddress(breakpointInput.value)
+  if (address === null) {
+    debugControlError.value = '断点地址必须是十六进制'
+    return
+  }
+  try {
+    const target = createDebugTarget()
+    await target.setHardwareBreakpoint(address)
+    if (!hardwareBreakpoints.value.includes(address)) {
+      hardwareBreakpoints.value = [...hardwareBreakpoints.value, address].sort((a, b) => a - b)
+    }
+    debugControlError.value = ''
+  } catch (error) {
+    debugControlError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+async function removeHardwareBreakpoint(address: number): Promise<void> {
+  if (!isConnected.value) {
+    debugControlError.value = '请先连接调试探针'
+    return
+  }
+  try {
+    const target = createDebugTarget()
+    await target.clearHardwareBreakpoint(address)
+    hardwareBreakpoints.value = hardwareBreakpoints.value.filter(item => item !== address)
+    debugControlError.value = ''
+  } catch (error) {
+    debugControlError.value = error instanceof Error ? error.message : String(error)
+  }
 }
 
 function applyWebUsbScanRange(): boolean {
@@ -757,6 +862,9 @@ watch([variableAutoRefresh, variableRefreshMs], resetVariableRefreshTimer)
 watch(isConnected, connected => {
   if (!connected) {
     variableAutoRefresh.value = false
+    debugControlState.value = 'idle'
+    coreRegisters.value = new Uint32Array(17)
+    hardwareBreakpoints.value = []
   }
 })
 
@@ -1901,6 +2009,72 @@ rtt server start 9090 0</pre>
             <Download class="w-3.5 h-3.5" />
             {{ t('rtt.exportSession') }}
           </button>
+        </div>
+      </div>
+
+      <!-- 变量查看 -->
+      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">调试控制</h3>
+          <button
+            @click="refreshCoreRegisters"
+            :disabled="!isConnected"
+            class="p-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+            title="刷新寄存器"
+          >
+            <RefreshCw class="w-3 h-3" />
+          </button>
+        </div>
+
+        <div class="grid grid-cols-4 gap-1.5 mb-2">
+          <button @click="handleDebugAction('halt')" :disabled="!isConnected" class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">halt</button>
+          <button @click="handleDebugAction('resume')" :disabled="!isConnected" class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">resume</button>
+          <button @click="handleDebugAction('step')" :disabled="!isConnected" class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">step</button>
+          <button @click="handleDebugAction('reset')" :disabled="!isConnected" class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">reset</button>
+        </div>
+
+        <div class="text-[10px] text-slate-500 dark:text-slate-400 mb-2">
+          状态: {{ debugControlState }}
+        </div>
+
+        <div class="flex items-center gap-1.5 mb-2">
+          <input
+            v-model="breakpointInput"
+            type="text"
+            placeholder="断点地址(0x...)"
+            class="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <button
+            @click="addHardwareBreakpoint"
+            :disabled="!isConnected"
+            class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+          >
+            加断点
+          </button>
+        </div>
+
+        <div v-if="hardwareBreakpoints.length > 0" class="space-y-1 mb-2 max-h-20 overflow-auto pr-1">
+          <div
+            v-for="address in hardwareBreakpoints"
+            :key="`bp-${address}`"
+            class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400"
+          >
+            <span>{{ formatHexAddress(address) }}</span>
+            <button @click="removeHardwareBreakpoint(address)" class="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300">
+              删除
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+          <div v-for="item in coreRegisterItems" :key="item.name" class="flex items-center justify-between rounded bg-slate-50 dark:bg-slate-800/50 px-1.5 py-1">
+            <span class="text-slate-400 dark:text-slate-500">{{ item.name }}</span>
+            <span class="font-mono text-slate-600 dark:text-slate-300">{{ formatHexAddress(item.value) }}</span>
+          </div>
+        </div>
+
+        <div v-if="debugControlError" class="text-[10px] text-red-600 dark:text-red-400 mt-2">
+          {{ debugControlError }}
         </div>
       </div>
 
