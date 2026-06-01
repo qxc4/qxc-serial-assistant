@@ -408,6 +408,67 @@ const filteredVariableValues = computed(() => {
   )
 })
 
+const flashPrecheckItems = computed(() => {
+  const items: Array<{ label: string; state: 'ok' | 'warn' | 'error' | 'idle'; detail: string }> = [
+    {
+      label: '固件',
+      state: firmwareImage.value ? 'ok' : 'idle',
+      detail: firmwareImage.value ? `${firmwareImage.value.sections.length} 个 section` : '未导入',
+    },
+    {
+      label: '连接',
+      state: isConnected.value ? 'ok' : 'warn',
+      detail: isConnected.value ? '探针已连接' : '执行写入前需要连接',
+    },
+  ]
+
+  let region: ReturnType<typeof flashRegionConfig> | null = null
+  try {
+    region = flashRegionConfig()
+    items.push({
+      label: 'Flash 区域',
+      state: 'ok',
+      detail: `${formatHexAddress(region.start)}-${formatHexAddress(region.end)} / ${region.pageSize}B`,
+    })
+  } catch (error) {
+    items.push({
+      label: 'Flash 区域',
+      state: 'error',
+      detail: error instanceof Error ? error.message : String(error),
+    })
+  }
+
+  if (!firmwareImage.value || !region) {
+    items.push({
+      label: '写入计划',
+      state: 'idle',
+      detail: '等待固件与区域配置',
+    })
+    return items
+  }
+
+  try {
+    const plan = planFlashRanges({
+      regions: [region],
+      sections: firmwareImage.value.sections,
+    })
+    const verifyBytes = plan.verifyRanges.reduce((total, range) => total + range.length, 0)
+    items.push({
+      label: '写入计划',
+      state: plan.programSections.length > 0 ? 'ok' : 'warn',
+      detail: `${plan.erasePages.length} 页 / ${plan.programSections.length} 段 / ${verifyBytes}B`,
+    })
+  } catch (error) {
+    items.push({
+      label: '写入计划',
+      state: 'error',
+      detail: error instanceof Error ? error.message : String(error),
+    })
+  }
+
+  return items
+})
+
 /** 是否展开顶部高级配置区 */
 const showTopConfigDetails = ref(false)
 
@@ -2089,6 +2150,32 @@ rtt server start 9090 0</pre>
             placeholder="Flash结束(0x...)"
             class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </div>
+
+        <div class="rounded border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 px-2 py-1.5 mb-2">
+          <div class="text-[10px] text-slate-400 dark:text-slate-500 mb-1">烧录前检查</div>
+          <div class="space-y-1">
+            <div
+              v-for="item in flashPrecheckItems"
+              :key="item.label"
+              class="flex items-center justify-between gap-2 text-[10px]"
+            >
+              <span
+                :class="item.state === 'ok'
+                  ? 'text-green-600 dark:text-green-400'
+                  : item.state === 'warn'
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : item.state === 'error'
+                      ? 'text-red-600 dark:text-red-400'
+                      : 'text-slate-500 dark:text-slate-400'"
+              >
+                {{ item.label }}
+              </span>
+              <span class="truncate text-right text-slate-500 dark:text-slate-400" :title="item.detail">
+                {{ item.detail }}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div class="flex items-center gap-1.5 mb-2">
