@@ -126,6 +126,18 @@ const showBottomPanel = computed({
   get: () => settingsStore.config.uiSettings.showBottomPanel,
   set: (val) => { settingsStore.config.uiSettings.showBottomPanel = val }
 })
+const connectionSummary = computed(() => {
+  if (isReconnecting.value) {
+    return `${t('serial.reconnecting')} ${reconnectAttempts.value}/5`
+  }
+  if (isConnected.value) {
+    return `${baudRate.value} bps · ${dataBits.value}${t('serial.dataBitsUnit')} · ${parity.value} · ${stopBits.value}${t('serial.stopBitsUnit')}`
+  }
+  if (canReconnect.value) {
+    return t('serial.enablePort')
+  }
+  return t('serial.waitingConnect')
+})
 const toolbarExpanded = computed({
   get: () => settingsStore.config.uiSettings.toolbarExpanded,
   set: (val) => { settingsStore.config.uiSettings.toolbarExpanded = val }
@@ -892,10 +904,11 @@ onUnmounted(cleanupButtonOptimizations)
     </div>
     
     <!-- Top / Main Content Area -->
-    <div class="flex flex-1 min-h-0 overflow-hidden">
+    <div class="relative flex flex-1 min-h-0 overflow-hidden">
       
-      <!-- Left Panel: Settings -->
-      <div v-show="showLeftPanel" class="apple-sidebar w-64 shrink-0 bg-white/90 dark:bg-slate-800/90 border-r dark:border-slate-700 flex min-h-0 flex-col">
+      <!-- Left Drawer: Connection Settings -->
+      <Transition name="serial-drawer">
+      <div v-if="showLeftPanel" class="apple-sidebar absolute inset-y-0 left-0 z-30 w-80 max-w-[calc(100vw-1rem)] shrink-0 bg-white/95 dark:bg-slate-800/95 border-r border-slate-200 dark:border-slate-700 shadow-2xl backdrop-blur flex min-h-0 flex-col">
         <!-- Tabs -->
         <div class="flex h-12 border-b dark:border-slate-700 text-center">
           <div 
@@ -911,6 +924,13 @@ onUnmounted(cleanupButtonOptimizations)
           >
             <Bluetooth class="w-4 h-4" /> {{ t('serial.bluetoothTab') }}
           </div>
+          <button
+            @click="showLeftPanel = false"
+            class="w-11 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            title="关闭连接抽屉"
+          >
+            <XCircle class="w-4 h-4" />
+          </button>
         </div>
 
         <!-- Settings Form -->
@@ -1155,12 +1175,30 @@ onUnmounted(cleanupButtonOptimizations)
           </div>
         </div>
       </div>
+      </Transition>
 
       <!-- Middle Panel: Data View & Send -->
       <div class="apple-content flex-1 flex flex-col bg-white dark:bg-slate-800 min-w-0">
         <!-- Top Toolbar -->
         <div class="apple-toolbar border-b dark:border-slate-700 bg-slate-50/85 dark:bg-slate-900/85 shrink-0 px-3 py-2">
           <div class="flex items-center gap-2">
+            <button
+              @click="showLeftPanel = true"
+              class="min-w-0 max-w-[240px] rounded-lg border px-2.5 py-1.5 text-left transition-colors flex items-center gap-2"
+              :class="isConnected
+                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300'
+                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'"
+              title="打开连接抽屉"
+            >
+              <Usb class="h-4 w-4 shrink-0" />
+              <span class="min-w-0">
+                <span class="block truncate text-[11px] font-semibold">
+                  {{ isConnected ? t('serial.connected') : t('serial.serialSettings') }}
+                </span>
+                <span class="block truncate text-[10px] opacity-75">{{ connectionSummary }}</span>
+              </span>
+            </button>
+
             <div class="relative min-w-0 flex-1 max-w-sm">
               <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
@@ -1185,7 +1223,7 @@ onUnmounted(cleanupButtonOptimizations)
             </div>
 
             <div class="flex items-center gap-1 text-slate-600 dark:text-slate-400">
-              <button @click="showLeftPanel = !showLeftPanel" :class="showLeftPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换左侧栏"><PanelLeft class="w-4 h-4" /></button>
+              <button @click="showLeftPanel = !showLeftPanel" :class="showLeftPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换连接抽屉"><PanelLeft class="w-4 h-4" /></button>
               <button @click="showBottomPanel = !showBottomPanel" :class="showBottomPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换底部栏"><PanelBottom class="w-4 h-4" /></button>
               <button @click="showRightPanel = !showRightPanel" :class="showRightPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换右侧栏"><PanelRight class="w-4 h-4" /></button>
               <button @click="showLeftPanel = false; showRightPanel = false; showBottomPanel = false" class="p-1.5 text-slate-400 hover:text-slate-900 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="最大化视图"><Maximize class="w-4 h-4" /></button>
@@ -1978,6 +2016,13 @@ onUnmounted(cleanupButtonOptimizations)
 .slide-enter-from, .slide-leave-to {
   opacity: 0;
   transform: translateX(-10px);
+}
+.serial-drawer-enter-active, .serial-drawer-leave-active {
+  transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.2, 0, 0, 1);
+}
+.serial-drawer-enter-from, .serial-drawer-leave-to {
+  opacity: 0;
+  transform: translateX(-18px);
 }
 /* Custom Scrollbar for better UI match */
 ::-webkit-scrollbar {

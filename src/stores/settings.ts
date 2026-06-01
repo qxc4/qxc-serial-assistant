@@ -152,7 +152,7 @@ const DEFAULT_UI_SETTINGS: UISettings = {
   sendEncoding: 'utf8',
   showTimestamp: false,
   autoScroll: true,
-  showLeftPanel: true,
+  showLeftPanel: false,
   showRightPanel: true,
   showBottomPanel: true,
   toolbarExpanded: {

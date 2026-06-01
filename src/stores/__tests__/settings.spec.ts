@@ -32,6 +32,7 @@ describe('Settings Store', () => {
     expect(store.config.language).toBe('zh-CN')
     expect(store.config.serialDefaults.baudRate).toBe(9600)
     expect(store.config.serialDefaults.dataBits).toBe(8)
+    expect(store.config.uiSettings.showLeftPanel).toBe(false)
   })
 
   it('更新主题能够修改状态', async () => {
