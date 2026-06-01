@@ -559,6 +559,9 @@ const flashChipFamily = ref<'stm32f1' | 'stm32f4'>('stm32f1')
 const flashPlanSummary = ref<{ erasePages: number; programSections: number; verifyBytes: number } | null>(null)
 const flashStatus = ref<'idle' | 'planning' | 'ready' | 'programming' | 'success' | 'error'>('idle')
 const flashError = ref('')
+const flashProgress = ref(0)
+const flashStage = ref<'idle' | 'erase' | 'program' | 'verify' | 'done'>('idle')
+const flashHint = ref('')
 
 const filteredVariableValues = computed(() => {
   const keyword = variableFilterText.value.trim().toLowerCase()
@@ -825,6 +828,9 @@ function planFirmwareProgramming(): void {
     }
     flashStatus.value = 'ready'
     flashError.value = ''
+    flashProgress.value = 0
+    flashStage.value = 'idle'
+    flashHint.value = ''
   } catch (error) {
     flashStatus.value = 'error'
     flashError.value = error instanceof Error ? error.message : String(error)
@@ -846,22 +852,52 @@ async function programFirmware(): Promise<void> {
 
   flashStatus.value = 'programming'
   flashError.value = ''
+  flashProgress.value = 0
+  flashStage.value = 'erase'
+  flashHint.value = ''
 
   try {
     webUsbRtt.setFlashChipFamily(flashChipFamily.value)
-    const programmer = createFlashProgrammer({
-      erasePage: (address) => webUsbRtt.eraseFlashPage(address),
-      program: (address, data) => webUsbRtt.writeMemory(address, data),
-      read: (address, length) => webUsbRtt.readMemory(address, length),
-    }, [
-      { name: 'main-flash', start: 0x08000000, end: 0x08100000, pageSize: flashPageSizeInput.value },
-    ])
+    const sections = firmwareImage.value.sections
+    const plan = planFlashRanges({
+      regions: [{ name: 'main-flash', start: 0x08000000, end: 0x08100000, pageSize: flashPageSizeInput.value }],
+      sections,
+    })
+    const programmer = createFlashProgrammer(
+      {
+        erasePage: (address) => webUsbRtt.eraseFlashPage(address),
+        program: (address, data) => webUsbRtt.writeMemory(address, data),
+        read: (address, length) => webUsbRtt.readMemory(address, length),
+      },
+      [{ name: 'main-flash', start: 0x08000000, end: 0x08100000, pageSize: flashPageSizeInput.value }],
+    )
 
-    await programmer.programImage(firmwareImage.value)
+    const eraseTotal = Math.max(plan.erasePages.length, 1)
+    for (let i = 0; i < plan.erasePages.length; i++) {
+      await programmer.erasePages([plan.erasePages[i]!])
+      flashProgress.value = Math.round(((i + 1) / eraseTotal) * 35)
+    }
+
+    flashStage.value = 'program'
+    const sectionTotal = Math.max(plan.programSections.length, 1)
+    for (let i = 0; i < plan.programSections.length; i++) {
+      await programmer.programSections([plan.programSections[i]!])
+      flashProgress.value = 35 + Math.round(((i + 1) / sectionTotal) * 40)
+    }
+
+    flashStage.value = 'verify'
+    const verified = await programmer.verifySections(plan.programSections)
+    if (!verified) {
+      throw new Error('校验失败：读回数据与镜像不一致')
+    }
+    flashProgress.value = 100
+    flashStage.value = 'done'
+    flashHint.value = '烧录完成，建议复位后观察日志与变量区。'
     flashStatus.value = 'success'
   } catch (error) {
     flashStatus.value = 'error'
     flashError.value = error instanceof Error ? error.message : String(error)
+    flashHint.value = '失败建议：检查芯片族、页大小、地址范围；必要时先手动擦除再重试。'
   }
 }
 
@@ -2379,8 +2415,18 @@ rtt server start 9090 0</pre>
         <div class="text-[10px] mb-1" :class="flashStatus === 'error' ? 'text-red-600 dark:text-red-400' : flashStatus === 'success' ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'">
           状态: {{ flashStatus }}
         </div>
+        <div class="text-[10px] text-slate-500 dark:text-slate-400 mb-1">
+          阶段: {{ flashStage }}
+        </div>
+        <div class="h-1.5 rounded bg-slate-200 dark:bg-slate-700 overflow-hidden mb-1">
+          <div class="h-full bg-blue-500 transition-all duration-200" :style="{ width: `${flashProgress}%` }" />
+        </div>
+        <div class="text-[10px] text-slate-500 dark:text-slate-400 mb-1">{{ flashProgress }}%</div>
         <div v-if="flashError" class="text-[10px] text-red-600 dark:text-red-400 mb-1">
           {{ flashError }}
+        </div>
+        <div v-if="flashHint" class="text-[10px] text-slate-500 dark:text-slate-400 mb-1">
+          {{ flashHint }}
         </div>
         <div class="text-[10px] text-yellow-600 dark:text-yellow-400">
           当前为实验擦页：已支持 STM32F1 页擦除与 STM32F4 扇区擦除(0-7)。
