@@ -54,6 +54,8 @@ interface JSTLinkInterface {
   readMemory8(address: number, bytes: number): Promise<Uint8Array>
   /** 写入目标内存 */
   writeMemory8(address: number, data: Uint8Array): Promise<void>
+  /** 擦除 Flash 页（STM32F1 实验路径） */
+  eraseFlashPage(address: number): Promise<void>
   /** 设置 SWD 频率 */
   setSpeed(frequency: number): Promise<void>
   /** 注册事件监听 */
@@ -655,6 +657,13 @@ export function useWebUsbRtt() {
     await jstlink.writeMemory8(address, data)
   }
 
+  async function eraseFlashPage(address: number): Promise<void> {
+    if (!jstlink?.isConnected) {
+      throw new Error('调试探针未连接')
+    }
+    await jstlink.eraseFlashPage(address)
+  }
+
   function setScanRange(range: RttScanRangeInput): void {
     scanRange.value = normalizeRttScanRange(range)
   }
@@ -714,6 +723,7 @@ export function useWebUsbRtt() {
     send,
     readMemory,
     writeMemory,
+    eraseFlashPage,
     clearLogs,
     togglePause,
     clearError,

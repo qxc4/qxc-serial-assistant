@@ -848,8 +848,7 @@ async function programFirmware(): Promise<void> {
 
   try {
     const programmer = createFlashProgrammer({
-      // 当前 WebUSB jstlink 库没有通用擦页命令，先记录为 no-op，避免误导为“完整量产烧录”。
-      async erasePage() {},
+      erasePage: (address) => webUsbRtt.eraseFlashPage(address),
       program: (address, data) => webUsbRtt.writeMemory(address, data),
       read: (address, length) => webUsbRtt.readMemory(address, length),
     }, [
@@ -2375,7 +2374,7 @@ rtt server start 9090 0</pre>
           {{ flashError }}
         </div>
         <div class="text-[10px] text-yellow-600 dark:text-yellow-400">
-          当前擦页为 no-op，仅用于链路打通与校验流程验证。
+          当前仅实现 STM32F1 实验擦页，其他芯片族可能失败。
         </div>
       </div>
 

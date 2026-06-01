@@ -60,6 +60,19 @@ const SWDFrequency: Record<number, number> = {
   100000: 10,
 }
 
+const STM32F1_FLASH = {
+  KEYR: 0x40022004,
+  SR: 0x4002200c,
+  CR: 0x40022010,
+  AR: 0x40022014,
+  KEY1: 0x45670123,
+  KEY2: 0xcdef89ab,
+  CR_PER: 1 << 1,
+  CR_STRT: 1 << 6,
+  CR_LOCK: 1 << 7,
+  SR_BSY: 1 << 0,
+} as const
+
 // ==================== 类型定义 ====================
 
 /** RTT 通道信息 */
@@ -429,6 +442,29 @@ export class JSTLink {
   }
 
   /**
+   * 擦除 STM32F1 Flash 页（实验实现）
+   */
+  async eraseFlashPage(address: number): Promise<void> {
+    if ((address & 0x3ff) !== 0) {
+      throw new Error('STM32F1 页擦除地址必须 1KB 对齐')
+    }
+
+    await this.stm32f1UnlockFlash()
+    await this.stm32f1WaitReady()
+
+    const baseCr = await this.stm32f1ReadReg(STM32F1_FLASH.CR)
+    await this.stm32f1WriteReg(STM32F1_FLASH.CR, baseCr | STM32F1_FLASH.CR_PER)
+    await this.stm32f1WriteReg(STM32F1_FLASH.AR, address >>> 0)
+    await this.stm32f1WriteReg(
+      STM32F1_FLASH.CR,
+      baseCr | STM32F1_FLASH.CR_PER | STM32F1_FLASH.CR_STRT,
+    )
+    await this.stm32f1WaitReady()
+    await this.stm32f1WriteReg(STM32F1_FLASH.CR, baseCr & ~STM32F1_FLASH.CR_PER)
+    await this.stm32f1WriteReg(STM32F1_FLASH.CR, (baseCr & ~STM32F1_FLASH.CR_PER) | STM32F1_FLASH.CR_LOCK)
+  }
+
+  /**
    * 获取芯片信息
    */
   async getChipInfo(): Promise<ChipInfo> {
@@ -509,5 +545,36 @@ export class JSTLink {
 
     const encoded = new TextEncoder().encode(data)
     await this.rttSession.writeDownChannel(channel, encoded)
+  }
+
+  private async stm32f1ReadReg(address: number): Promise<number> {
+    const bytes = await this.readMemory32(address, 1)
+    return new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, true)
+  }
+
+  private async stm32f1WriteReg(address: number, value: number): Promise<void> {
+    const bytes = new Uint8Array(4)
+    new DataView(bytes.buffer).setUint32(0, value >>> 0, true)
+    await this.writeMemory32(address, bytes)
+  }
+
+  private async stm32f1UnlockFlash(): Promise<void> {
+    const cr = await this.stm32f1ReadReg(STM32F1_FLASH.CR)
+    if ((cr & STM32F1_FLASH.CR_LOCK) === 0) {
+      return
+    }
+    await this.stm32f1WriteReg(STM32F1_FLASH.KEYR, STM32F1_FLASH.KEY1)
+    await this.stm32f1WriteReg(STM32F1_FLASH.KEYR, STM32F1_FLASH.KEY2)
+  }
+
+  private async stm32f1WaitReady(timeoutMs = 1500): Promise<void> {
+    const started = Date.now()
+    while (true) {
+      const sr = await this.stm32f1ReadReg(STM32F1_FLASH.SR)
+      if ((sr & STM32F1_FLASH.SR_BSY) === 0) return
+      if (Date.now() - started > timeoutMs) {
+        throw new Error('STM32F1 Flash 操作超时')
+      }
+    }
   }
 }
