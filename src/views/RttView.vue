@@ -336,6 +336,7 @@ const breakpointInput = ref('0x08000000')
 const hardwareBreakpoints = ref<number[]>([])
 const registerPanelRef = ref<HTMLElement | null>(null)
 const BREAKPOINT_SESSION_KEY = 'qxc-serial-rtt-breakpoints'
+const breakpointRestoreStatus = ref('')
 
 const coreRegisterItems = computed(() => {
   const names = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'SP', 'LR', 'PC', 'XPSR']
@@ -575,15 +576,41 @@ async function reapplyHardwareBreakpoints(): Promise<void> {
   if (!isConnected.value || hardwareBreakpoints.value.length === 0) return
   const target = createDebugTarget()
   const failed: number[] = []
+  let successCount = 0
   for (const address of hardwareBreakpoints.value) {
     try {
       await target.setHardwareBreakpoint(address)
+      successCount += 1
     } catch {
       failed.push(address)
     }
   }
   if (failed.length > 0) {
+    breakpointRestoreStatus.value = `断点恢复: 成功 ${successCount} / 失败 ${failed.length}`
     debugControlError.value = `部分断点恢复失败: ${failed.map(item => formatHexAddress(item)).join(', ')}`
+    return
+  }
+  breakpointRestoreStatus.value = successCount > 0 ? `断点恢复: 已恢复 ${successCount} 个` : ''
+}
+
+async function clearAllHardwareBreakpoints(): Promise<void> {
+  if (!isConnected.value) {
+    hardwareBreakpoints.value = []
+    persistHardwareBreakpoints()
+    breakpointRestoreStatus.value = '断点列表已清空（未连接目标）'
+    return
+  }
+  try {
+    const target = createDebugTarget()
+    for (const address of hardwareBreakpoints.value) {
+      await target.clearHardwareBreakpoint(address)
+    }
+    hardwareBreakpoints.value = []
+    persistHardwareBreakpoints()
+    debugControlError.value = ''
+    breakpointRestoreStatus.value = '断点已全部清除'
+  } catch (error) {
+    debugControlError.value = error instanceof Error ? error.message : String(error)
   }
 }
 
@@ -914,6 +941,7 @@ watch(isConnected, connected => {
     variableAutoRefresh.value = false
     debugControlState.value = 'idle'
     coreRegisters.value = new Uint32Array(17)
+    breakpointRestoreStatus.value = ''
   } else {
     void reapplyHardwareBreakpoints()
   }
@@ -2119,6 +2147,18 @@ rtt server start 9090 0</pre>
               删除
             </button>
           </div>
+        </div>
+        <div class="flex items-center justify-between mb-2">
+          <div v-if="breakpointRestoreStatus" class="text-[10px] text-slate-500 dark:text-slate-400">
+            {{ breakpointRestoreStatus }}
+          </div>
+          <button
+            @click="clearAllHardwareBreakpoints"
+            :disabled="hardwareBreakpoints.length === 0"
+            class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+          >
+            清空断点
+          </button>
         </div>
 
         <div ref="registerPanelRef" class="grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400 max-h-36 overflow-auto pr-1">
