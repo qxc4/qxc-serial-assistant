@@ -172,7 +172,7 @@ const allBaseResults = computed(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-slate-50 dark:bg-slate-950">
+  <div class="h-full min-h-0 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950">
     <!-- Header -->
     <header class="h-14 border-b dark:border-slate-800 flex items-center justify-between px-6 bg-white dark:bg-slate-900 shrink-0">
       <div>
@@ -182,7 +182,7 @@ const allBaseResults = computed(() => {
     </header>
 
     <!-- Main Content -->
-    <div class="flex-1 overflow-auto p-6">
+    <div class="flex-1 min-h-0 overflow-auto p-6">
       <div class="max-w-2xl mx-auto">
         <!-- Converter Card -->
         <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border dark:border-slate-700 p-6">

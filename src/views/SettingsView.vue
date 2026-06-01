@@ -227,7 +227,7 @@ async function handleExportAllData(): Promise<void> {
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto p-8 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors">
+  <div class="h-full min-h-0 overflow-y-auto p-8 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 transition-colors">
     <!-- Toast Notification -->
     <div 
       v-if="store.toastVisible" 

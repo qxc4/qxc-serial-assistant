@@ -1055,9 +1055,9 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-full bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
+  <div class="flex h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
     <!-- 主内容区 -->
-    <div class="flex-1 flex flex-col min-w-0">
+    <div class="flex-1 flex flex-col min-w-0 min-h-0">
       <!-- 顶部控制栏 -->
       <div class="shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2">
         <div class="flex items-center gap-2 flex-wrap">
@@ -1313,9 +1313,9 @@ watch(
       </div>
 
       <!-- 主内容区域 -->
-      <div class="flex-1 flex min-h-0">
+      <div class="flex-1 flex min-h-0 min-w-0 overflow-hidden">
         <!-- 日志区域 -->
-        <div class="flex-1 flex flex-col min-w-0">
+        <div class="flex-1 flex flex-col min-w-0 min-h-0">
           <div class="flex-1 min-h-0 bg-white dark:bg-slate-900">
             <VirtualList
               ref="virtualListRef"
@@ -1407,7 +1407,7 @@ watch(
         <!-- 帮助面板 -->
         <div
           v-if="showHelpPanel"
-          class="w-96 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-y-auto"
+          class="w-96 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-0 overflow-y-auto"
         >
           <!-- v-once: 静态内容不需要重复渲染 -->
           <div class="p-4" v-once>
@@ -1622,7 +1622,7 @@ watch(
     <!-- 右侧工具栏 -->
     <div
       v-if="showRightPanel"
-      class="w-56 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col"
+      class="w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex min-h-0 flex-col overflow-y-auto overscroll-contain"
     >
       <!-- 搜索 -->
       <div class="p-3 border-b border-slate-200 dark:border-slate-800">

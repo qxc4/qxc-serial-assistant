@@ -397,7 +397,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-slate-950 text-slate-200">
+  <div class="flex flex-col h-full min-h-0 overflow-hidden bg-slate-950 text-slate-200">
     <!-- 顶部工具栏 -->
     <div class="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
       <div class="flex items-center gap-3">
@@ -489,13 +489,13 @@ onUnmounted(() => {
     </div>
 
     <!-- 主内容区域 -->
-    <div class="flex-1 flex overflow-hidden">
+    <div class="flex-1 min-h-0 flex overflow-hidden">
       <!-- 终端区域 -->
-      <div class="flex-1 flex flex-col overflow-hidden">
+      <div class="flex-1 min-h-0 flex flex-col overflow-hidden">
         <!-- 终端输出 -->
         <div
           ref="terminalRef"
-          class="flex-1 overflow-y-auto p-4"
+          class="flex-1 min-h-0 overflow-y-auto p-4"
           :style="{ fontSize: `${fontSize}px` }"
           @click="focusInput"
         >
@@ -594,7 +594,7 @@ onUnmounted(() => {
       <!-- 右侧面板 - 环境变量 -->
       <div
         v-if="showEnvPanel"
-        class="w-64 shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col overflow-hidden"
+        class="w-64 shrink-0 bg-slate-900 border-l border-slate-800 flex min-h-0 flex-col overflow-hidden"
       >
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-800">
           <span class="text-xs font-medium text-slate-300">{{ t('shell.envVars') }}</span>
@@ -625,7 +625,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 变量列表 -->
-        <div class="flex-1 overflow-y-auto">
+        <div class="flex-1 min-h-0 overflow-y-auto">
           <div
             v-for="v in envVars"
             :key="v.key"
@@ -657,7 +657,7 @@ onUnmounted(() => {
       <!-- 右侧面板 - 历史记录 -->
       <div
         v-if="showHistoryPanel"
-        class="w-72 shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col overflow-hidden"
+        class="w-72 shrink-0 bg-slate-900 border-l border-slate-800 flex min-h-0 flex-col overflow-hidden"
       >
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-800">
           <span class="text-xs font-medium text-slate-300">{{ t('shell.commandHistory') }}</span>
@@ -673,7 +673,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="flex-1 overflow-y-auto">
+        <div class="flex-1 min-h-0 overflow-y-auto">
           <div
             v-for="(entry, i) in [...history].reverse()"
             :key="i"
@@ -696,14 +696,14 @@ onUnmounted(() => {
       <!-- 右侧面板 - 设置 -->
       <div
         v-if="showSettings"
-        class="w-64 shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col overflow-hidden"
+        class="w-64 shrink-0 bg-slate-900 border-l border-slate-800 flex min-h-0 flex-col overflow-hidden"
       >
         <div class="flex items-center justify-between px-3 py-2 border-b border-slate-800">
           <span class="text-xs font-medium text-slate-300">{{ t('shell.settings') }}</span>
           <button @click="showSettings = false" class="text-xs text-slate-500 hover:text-slate-300">✕</button>
         </div>
 
-        <div class="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+        <div class="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-4">
           <!-- 回显命令 -->
           <label class="flex items-center justify-between">
             <span class="text-xs text-slate-400">{{ t('shell.echoCommands') }}</span>

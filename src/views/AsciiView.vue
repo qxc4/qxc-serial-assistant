@@ -117,7 +117,7 @@ const copyRow = async (item: AsciiEntry) => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 transition-colors duration-200">
+  <div class="h-full min-h-0 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200 transition-colors duration-200">
     
     <!-- Header & Search -->
     <div class="px-8 py-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shrink-0">
@@ -162,8 +162,8 @@ const copyRow = async (item: AsciiEntry) => {
     </div>
 
     <!-- Table Container -->
-    <div class="flex-1 overflow-hidden p-4 md:p-8">
-      <div class="max-w-6xl mx-auto h-full flex flex-col bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+    <div class="flex-1 min-h-0 overflow-hidden p-4 md:p-8">
+      <div class="max-w-6xl mx-auto h-full min-h-0 flex flex-col bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         
         <!-- Table Header -->
         <div class="grid grid-cols-6 md:grid-cols-12 gap-4 px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider shrink-0 select-none">
@@ -185,7 +185,7 @@ const copyRow = async (item: AsciiEntry) => {
         </div>
 
         <!-- Table Body (Virtual scroll is better, but 256 items are fine for normal render) -->
-        <div class="flex-1 overflow-y-auto">
+        <div class="flex-1 min-h-0 overflow-y-auto">
           <div 
             v-for="item in filteredAndSortedData" 
             :key="item.dec"

@@ -881,7 +881,7 @@ onUnmounted(cleanupButtonOptimizations)
 </script>
 
 <template>
-  <div class="flex flex-col h-full w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
+  <div class="flex flex-col h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
     <!-- Toast Notification -->
     <div 
       v-if="settingsStore.toastVisible" 
@@ -892,10 +892,10 @@ onUnmounted(cleanupButtonOptimizations)
     </div>
     
     <!-- Top / Main Content Area -->
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 min-h-0 overflow-hidden">
       
       <!-- Left Panel: Settings -->
-      <div v-show="showLeftPanel" class="w-64 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex flex-col">
+      <div v-show="showLeftPanel" class="w-64 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex min-h-0 flex-col">
         <!-- Tabs -->
         <div class="flex h-12 border-b dark:border-slate-700 text-center">
           <div 
@@ -914,7 +914,7 @@ onUnmounted(cleanupButtonOptimizations)
         </div>
 
         <!-- Settings Form -->
-        <div class="p-4 flex flex-col gap-4 overflow-y-auto">
+        <div class="p-4 flex min-h-0 flex-col gap-4 overflow-y-auto">
           <div>
             <h2 class="font-bold text-base mb-1">{{ t('serial.serialSettings') }}</h2>
             <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('serial.serialSettingsDesc') }}</p>
@@ -1256,7 +1256,7 @@ onUnmounted(cleanupButtonOptimizations)
             </div>
           </div>
           
-          <div class="flex-1 overflow-y-auto p-2 space-y-2">
+          <div class="flex-1 min-h-0 overflow-y-auto p-2 space-y-2">
             <div 
               v-for="result in dataParse.parsedResults.value.slice(-50).reverse()" 
               :key="result.id"
@@ -1515,7 +1515,7 @@ onUnmounted(cleanupButtonOptimizations)
         </div>
 
         <!-- ===== 快捷输入面板 (原有) ===== -->
-        <div v-show="activeRightTab === 'quick'" class="flex flex-col flex-1 overflow-hidden">
+        <div v-show="activeRightTab === 'quick'" class="flex min-h-0 flex-col flex-1 overflow-hidden">
           <div class="h-10 border-b dark:border-slate-700 flex items-center justify-between px-3 bg-white dark:bg-slate-800">
             <div class="min-w-0">
               <h2 class="font-semibold text-sm text-slate-700 dark:text-slate-300 truncate">{{ t('serial.quickCommands') }}</h2>
@@ -1556,7 +1556,7 @@ onUnmounted(cleanupButtonOptimizations)
             </div>
           </div>
 
-          <div class="flex-1 overflow-y-auto p-2">
+          <div class="flex-1 min-h-0 overflow-y-auto p-2">
             <div class="flex items-center px-2 py-1 text-[10px] text-slate-500 mb-1 sticky top-0 bg-slate-50 dark:bg-slate-900 z-10">
               <div class="w-7 text-center">{{ t('serial.quickCmdEnable') }}</div>
               <div class="flex-1">{{ t('serial.quickCmdContent') }}</div>
@@ -1592,7 +1592,7 @@ onUnmounted(cleanupButtonOptimizations)
         </div>
 
         <!-- ===== 指令组面板 (新增) ===== -->
-        <div v-show="activeRightTab === 'group'" class="flex flex-col flex-1 overflow-hidden">
+        <div v-show="activeRightTab === 'group'" class="flex min-h-0 flex-col flex-1 overflow-hidden">
 
           <!-- 指令组头部：名称 + 操作按钮 -->
           <div class="border-b dark:border-slate-700 bg-white dark:bg-slate-800">
@@ -1685,7 +1685,7 @@ onUnmounted(cleanupButtonOptimizations)
           </div>
 
           <!-- 指令列表区域 -->
-          <div class="flex-1 overflow-y-auto p-2">
+          <div class="flex-1 min-h-0 overflow-y-auto p-2">
             <!-- 表头 -->
             <div class="flex items-center px-2 py-1 text-[10px] text-slate-500 dark:text-slate-400 mb-1 sticky top-0 bg-slate-50 dark:bg-slate-900 z-10">
               <div class="w-7 text-center">#</div>

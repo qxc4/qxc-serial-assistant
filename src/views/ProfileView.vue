@@ -62,7 +62,7 @@ const stats = computed(() => [
 </script>
 
 <template>
-  <div class="h-full overflow-y-auto bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+  <div class="h-full min-h-0 overflow-y-auto bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
     <div class="max-w-5xl mx-auto p-6 md:p-8">
       
       <div class="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 shadow-sm p-6 mb-6">

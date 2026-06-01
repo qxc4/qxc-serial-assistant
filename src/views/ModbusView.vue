@@ -507,10 +507,10 @@ function formatTimestamp(timestamp: number): string {
 </script>
 
 <template>
-  <div class="flex flex-col h-full w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
-    <div class="flex flex-1 overflow-hidden">
+  <div class="flex flex-col h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
+    <div class="flex flex-1 min-h-0 overflow-hidden">
       <!-- 左侧面板 -->
-      <div class="w-80 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex flex-col">
+      <div class="w-80 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex min-h-0 flex-col">
         <div class="p-4 border-b dark:border-slate-700">
           <h2 class="font-bold text-base mb-1 flex items-center gap-2">
             <Cpu class="w-5 h-5" />
@@ -592,7 +592,7 @@ function formatTimestamp(timestamp: number): string {
         </div>
 
         <!-- 帧构建 -->
-        <div class="p-4 flex-1 overflow-y-auto">
+        <div class="p-4 flex-1 min-h-0 overflow-y-auto">
           <h3 class="font-semibold text-sm mb-3">{{ t('modbus.frameBuild') }}</h3>
           <div class="flex flex-col gap-3">
             <div class="flex gap-2">
@@ -674,7 +674,7 @@ function formatTimestamp(timestamp: number): string {
       </div>
 
       <!-- 右侧面板: 解析结果 -->
-      <div class="flex-1 flex flex-col bg-white dark:bg-slate-800 min-w-0">
+      <div class="flex-1 flex min-h-0 flex-col bg-white dark:bg-slate-800 min-w-0">
         <!-- 工具栏 -->
         <div class="h-12 border-b dark:border-slate-700 flex items-center justify-between px-4 bg-slate-50 dark:bg-slate-900 shrink-0">
           <h3 class="font-semibold text-sm flex items-center gap-2">
@@ -712,7 +712,7 @@ function formatTimestamp(timestamp: number): string {
         </div>
 
         <!-- 结果列表 -->
-        <div class="flex-1 overflow-y-auto p-4">
+        <div class="flex-1 min-h-0 overflow-y-auto p-4">
           <div v-if="parseResults.length === 0" class="h-full flex items-center justify-center text-slate-400">
             <div class="text-center">
               <FileCode class="w-16 h-16 mx-auto mb-4 opacity-30" />

@@ -280,11 +280,11 @@ const handleQueryHistory = () => {
 </script>
 
 <template>
-  <div class="flex flex-col h-full w-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
+  <div class="flex flex-col h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
     <!-- 主内容区 -->
-    <div class="flex flex-1 overflow-hidden">
+    <div class="flex flex-1 min-h-0 overflow-hidden">
       <!-- 左侧面板: 配置 -->
-      <div v-show="showLeftPanel" class="w-64 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex flex-col">
+      <div v-show="showLeftPanel" class="w-64 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex min-h-0 flex-col">
         <!-- 图表类型选择 -->
         <div class="p-4 border-b dark:border-slate-700">
           <h2 class="font-bold text-base mb-3">{{ t('chart.chartType') }}</h2>
@@ -516,7 +516,7 @@ const handleQueryHistory = () => {
       </div>
 
       <!-- 中间面板: 图表显示 -->
-      <div class="flex-1 flex flex-col bg-white dark:bg-slate-800 min-w-0">
+      <div class="flex-1 flex min-h-0 flex-col bg-white dark:bg-slate-800 min-w-0">
         <!-- 图表区域 -->
         <div class="flex-1 relative min-h-0">
           <div 
