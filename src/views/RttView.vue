@@ -7,6 +7,7 @@ import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables,
 import type { VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
+import RttDebugControls from '../components/rtt/RttDebugControls.vue'
 import type { RttLogLevel, RttBackend } from '../types/rtt'
 import {
   Usb, Unplug, Play, Pause, Send,
@@ -334,13 +335,13 @@ const debugControlError = ref('')
 const coreRegisters = ref<Uint32Array>(new Uint32Array(17))
 const breakpointInput = ref('0x08000000')
 const hardwareBreakpoints = ref<number[]>([])
-const registerPanelRef = ref<HTMLElement | null>(null)
 const BREAKPOINT_SESSION_KEY = 'qxc-serial-rtt-breakpoints'
 const breakpointRestoreStatus = ref('')
 const memoryViewAddressInput = ref('0x20000000')
 const memoryViewLengthInput = ref(128)
 const memoryViewHexLines = ref<string[]>([])
 const memoryViewError = ref('')
+const pcFocusRequestId = ref(0)
 let debugTargetInstance: CortexMDebugTarget | null = null
 
 const coreRegisterItems = computed(() => {
@@ -520,12 +521,6 @@ function restoreHardwareBreakpoints(): void {
   }
 }
 
-async function focusPcRegisterRow(): Promise<void> {
-  await nextTick()
-  const row = registerPanelRef.value?.querySelector<HTMLElement>('[data-reg-name="PC"]')
-  row?.scrollIntoView({ block: 'nearest' })
-}
-
 async function handleDebugAction(action: 'halt' | 'resume' | 'step' | 'reset'): Promise<void> {
   if (!isConnected.value) {
     debugControlError.value = '请先连接调试探针'
@@ -538,7 +533,7 @@ async function handleDebugAction(action: 'halt' | 'resume' | 'step' | 'reset'): 
     debugControlError.value = ''
     await refreshCoreRegisters()
     if (action === 'step') {
-      await focusPcRegisterRow()
+      pcFocusRequestId.value += 1
     }
   } catch (error) {
     debugControlState.value = 'error'
@@ -2144,126 +2139,27 @@ rtt server start 9090 0</pre>
         </div>
       </div>
 
-      <!-- 变量查看 -->
-      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">调试控制</h3>
-          <button
-            @click="refreshCoreRegisters"
-            :disabled="!isConnected"
-            class="p-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
-            title="刷新寄存器"
-          >
-            <RefreshCw class="w-3 h-3" />
-          </button>
-        </div>
-
-        <div class="grid grid-cols-4 gap-1.5 mb-2">
-          <button @click="handleDebugAction('halt')" :disabled="!isConnected" class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">halt</button>
-          <button @click="handleDebugAction('resume')" :disabled="!isConnected" class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">resume</button>
-          <button @click="handleDebugAction('step')" :disabled="!isConnected" class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">step</button>
-          <button @click="handleDebugAction('reset')" :disabled="!isConnected" class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40">reset</button>
-        </div>
-
-        <div class="text-[10px] text-slate-500 dark:text-slate-400 mb-2">
-          状态: {{ debugControlState }}
-        </div>
-
-        <div class="flex items-center gap-1.5 mb-2">
-          <input
-            v-model="breakpointInput"
-            type="text"
-            placeholder="断点地址(0x...)"
-            class="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <button
-            @click="addHardwareBreakpoint"
-            :disabled="!isConnected"
-            class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
-          >
-            加断点
-          </button>
-        </div>
-
-        <div v-if="hardwareBreakpoints.length > 0" class="space-y-1 mb-2 max-h-20 overflow-auto pr-1">
-          <div
-            v-for="address in hardwareBreakpoints"
-            :key="`bp-${address}`"
-            class="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400"
-          >
-            <span>{{ formatHexAddress(address) }}</span>
-            <button @click="removeHardwareBreakpoint(address)" class="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300">
-              删除
-            </button>
-          </div>
-        </div>
-        <div class="flex items-center justify-between mb-2">
-          <div v-if="breakpointRestoreStatus" class="text-[10px] text-slate-500 dark:text-slate-400">
-            {{ breakpointRestoreStatus }}
-          </div>
-          <button
-            @click="clearAllHardwareBreakpoints"
-            :disabled="hardwareBreakpoints.length === 0"
-            class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
-          >
-            清空断点
-          </button>
-        </div>
-
-        <div ref="registerPanelRef" class="grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400 max-h-36 overflow-auto pr-1">
-          <div
-            v-for="item in coreRegisterItems"
-            :key="item.name"
-            :data-reg-name="item.name"
-            class="flex items-center justify-between rounded px-1.5 py-1"
-            :class="item.isKey
-              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
-              : 'bg-slate-50 dark:bg-slate-800/50'"
-          >
-            <span class="text-slate-400 dark:text-slate-500">{{ item.name }}</span>
-            <span class="font-mono text-slate-600 dark:text-slate-300">{{ formatHexAddress(item.value) }}</span>
-          </div>
-        </div>
-
-        <div class="mt-2 border-t border-slate-200 dark:border-slate-700 pt-2">
-          <div class="flex items-center justify-between mb-1.5">
-            <span class="text-[10px] text-slate-500 dark:text-slate-400">内存查看</span>
-            <button
-              @click="readMemoryPreview"
-              :disabled="!isConnected"
-              class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
-            >
-              读取
-            </button>
-          </div>
-          <div class="grid grid-cols-[1fr_auto] gap-1.5 mb-1.5">
-            <input
-              v-model="memoryViewAddressInput"
-              type="text"
-              placeholder="地址(0x...)"
-              class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <input
-              v-model.number="memoryViewLengthInput"
-              type="number"
-              min="16"
-              max="512"
-              step="16"
-              class="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div v-if="memoryViewHexLines.length > 0" class="max-h-28 overflow-auto rounded bg-slate-50 dark:bg-slate-800/50 p-1.5 font-mono text-[10px] text-slate-600 dark:text-slate-300 space-y-0.5">
-            <div v-for="line in memoryViewHexLines" :key="line">{{ line }}</div>
-          </div>
-          <div v-if="memoryViewError" class="text-[10px] text-red-600 dark:text-red-400 mt-1">
-            {{ memoryViewError }}
-          </div>
-        </div>
-
-        <div v-if="debugControlError" class="text-[10px] text-red-600 dark:text-red-400 mt-2">
-          {{ debugControlError }}
-        </div>
-      </div>
+      <RttDebugControls
+        :is-connected="isConnected"
+        :debug-control-state="debugControlState"
+        :debug-control-error="debugControlError"
+        v-model:breakpoint-input="breakpointInput"
+        :hardware-breakpoints="hardwareBreakpoints"
+        :breakpoint-restore-status="breakpointRestoreStatus"
+        :core-register-items="coreRegisterItems"
+        v-model:memory-view-address-input="memoryViewAddressInput"
+        v-model:memory-view-length-input="memoryViewLengthInput"
+        :memory-view-hex-lines="memoryViewHexLines"
+        :memory-view-error="memoryViewError"
+        :pc-focus-request-id="pcFocusRequestId"
+        :format-hex-address="formatHexAddress"
+        @refresh-core-registers="refreshCoreRegisters"
+        @debug-action="handleDebugAction"
+        @add-hardware-breakpoint="addHardwareBreakpoint"
+        @remove-hardware-breakpoint="removeHardwareBreakpoint"
+        @clear-all-hardware-breakpoints="clearAllHardwareBreakpoints"
+        @read-memory-preview="readMemoryPreview"
+      />
 
       <!-- 变量查看 -->
       <div class="p-3 border-b border-slate-200 dark:border-slate-800">
