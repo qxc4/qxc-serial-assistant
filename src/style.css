@@ -6,6 +6,10 @@ body {
   display: flex;
   min-height: 100vh;
   min-width: 100vw;
+  background: #f5f5f7;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 #app {
@@ -23,4 +27,109 @@ button:disabled,
   opacity: 0.5;
   cursor: not-allowed;
   pointer-events: none;
+}
+
+:root {
+  --apple-bg: #f5f5f7;
+  --apple-surface: rgba(255, 255, 255, 0.82);
+  --apple-surface-solid: #ffffff;
+  --apple-elevated: rgba(255, 255, 255, 0.94);
+  --apple-border: rgba(60, 60, 67, 0.16);
+  --apple-border-strong: rgba(60, 60, 67, 0.24);
+  --apple-text: #1d1d1f;
+  --apple-muted: #6e6e73;
+  --apple-fill: rgba(118, 118, 128, 0.12);
+  --apple-fill-hover: rgba(118, 118, 128, 0.18);
+  --apple-blue: #007aff;
+  --apple-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  --apple-bg: #0b0b0f;
+  --apple-surface: rgba(28, 28, 30, 0.78);
+  --apple-surface-solid: #1c1c1e;
+  --apple-elevated: rgba(36, 36, 38, 0.92);
+  --apple-border: rgba(235, 235, 245, 0.14);
+  --apple-border-strong: rgba(235, 235, 245, 0.22);
+  --apple-text: #f5f5f7;
+  --apple-muted: #98989d;
+  --apple-fill: rgba(120, 120, 128, 0.22);
+  --apple-fill-hover: rgba(120, 120, 128, 0.32);
+  --apple-blue: #0a84ff;
+  --apple-shadow: 0 16px 38px rgba(0, 0, 0, 0.36);
+}
+
+.apple-shell,
+.apple-workbench {
+  color: var(--apple-text);
+  background:
+    radial-gradient(circle at 20% -10%, rgba(0, 122, 255, 0.10), transparent 28rem),
+    var(--apple-bg) !important;
+}
+
+.apple-rail,
+.apple-topbar,
+.apple-toolbar,
+.apple-sidebar,
+.apple-inspector,
+.apple-statusbar {
+  border-color: var(--apple-border) !important;
+  background-color: var(--apple-surface) !important;
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+}
+
+.apple-content,
+.apple-panel {
+  border-color: var(--apple-border) !important;
+  background-color: var(--apple-elevated) !important;
+}
+
+.apple-card {
+  border: 1px solid var(--apple-border);
+  border-radius: 12px;
+  background: var(--apple-elevated);
+  box-shadow: var(--apple-shadow);
+}
+
+.apple-chip {
+  border-color: var(--apple-border) !important;
+  background-color: var(--apple-fill) !important;
+  color: var(--apple-muted) !important;
+}
+
+.apple-shell input:not([type="checkbox"]):not([type="radio"]),
+.apple-shell select,
+.apple-shell textarea,
+.apple-workbench input:not([type="checkbox"]):not([type="radio"]),
+.apple-workbench select,
+.apple-workbench textarea {
+  border-color: var(--apple-border-strong) !important;
+  border-radius: 9px !important;
+  background-color: var(--apple-elevated) !important;
+  color: var(--apple-text) !important;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.apple-shell button,
+.apple-workbench button {
+  border-radius: 9px;
+}
+
+.apple-shell button:not([class*="bg-"]):not(:disabled):hover,
+.apple-workbench button:not([class*="bg-"]):not(:disabled):hover {
+  background-color: var(--apple-fill-hover);
+}
+
+.apple-shell input:focus-visible,
+.apple-shell select:focus-visible,
+.apple-shell textarea:focus-visible,
+.apple-workbench input:focus-visible,
+.apple-workbench select:focus-visible,
+.apple-workbench textarea:focus-visible,
+.apple-shell button:focus-visible,
+.apple-workbench button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--apple-blue) 24%, transparent) !important;
+  border-color: color-mix(in srgb, var(--apple-blue) 70%, var(--apple-border)) !important;
 }

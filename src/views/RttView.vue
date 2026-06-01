@@ -1055,11 +1055,11 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
+  <div class="apple-workbench flex h-full min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
     <!-- 主内容区 -->
     <div class="flex-1 flex flex-col min-w-0 min-h-0">
       <!-- 顶部控制栏 -->
-      <div class="shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2">
+      <div class="apple-toolbar shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/85 dark:bg-slate-900/85 px-3 py-2">
         <div class="flex items-center gap-2 flex-wrap">
           <!-- 状态灯 -->
           <div class="flex items-center gap-2">
@@ -1089,7 +1089,7 @@ watch(
             </select>
           </div>
 
-          <div class="flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 px-2 py-1 rounded bg-slate-100 dark:bg-slate-800">
+          <div class="apple-chip flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800">
             <span class="uppercase">{{ backend }}</span>
             <span>·</span>
             <span>{{ channels.length }}ch</span>
@@ -1097,7 +1097,7 @@ watch(
 
           <button
             @click="showTopConfigDetails = !showTopConfigDetails"
-            class="flex items-center gap-1 px-2.5 py-1 rounded text-xs border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            class="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             :title="showTopConfigDetails ? '收起高级配置' : '展开高级配置'"
           >
             <component :is="showTopConfigDetails ? ChevronUp : ChevronDown" class="w-3.5 h-3.5" />
@@ -1156,7 +1156,7 @@ watch(
             <span
               v-for="chip in workbenchStatusChips"
               :key="chip.key"
-              class="px-2 py-1 rounded border"
+              class="px-2 py-1 rounded-lg border"
               :class="chip.tone === 'ok'
                 ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 border-green-200 dark:border-green-800'
                 : chip.tone === 'warn'
@@ -1167,17 +1167,17 @@ watch(
             >
               {{ chip.label }}: {{ chip.value }}
             </span>
-            <span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ logStats.total }} {{ t('rtt.entries') }}</span>
-            <span v-if="logStats.errors > 0" class="px-2 py-1 rounded bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400">
+            <span class="apple-chip px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ logStats.total }} {{ t('rtt.entries') }}</span>
+            <span v-if="logStats.errors > 0" class="px-2 py-1 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400">
               {{ logStats.errors }} {{ t('rtt.errors') }}
             </span>
-            <span v-if="logStats.warnings > 0" class="px-2 py-1 rounded bg-yellow-50 dark:bg-yellow-900/20 text-yellow-500 dark:text-yellow-400">
+            <span v-if="logStats.warnings > 0" class="px-2 py-1 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 text-yellow-500 dark:text-yellow-400">
               {{ logStats.warnings }} {{ t('rtt.warnings') }}
             </span>
           </div>
         </div>
 
-        <div v-if="showTopConfigDetails" class="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-3 flex-wrap rounded-md bg-slate-50/70 dark:bg-slate-800/30 px-2.5 py-2">
+        <div v-if="showTopConfigDetails" class="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-3 flex-wrap rounded-xl bg-white/55 dark:bg-slate-800/30 px-2.5 py-2">
           <!-- WebUSB 配置 -->
           <template v-if="isWebUsbMode">
             <!-- 选择设备按钮 -->
@@ -1313,9 +1313,9 @@ watch(
       </div>
 
       <!-- 主内容区域 -->
-      <div class="flex-1 flex min-h-0 min-w-0 overflow-hidden">
+      <div class="flex-1 flex min-h-0 min-w-0 overflow-hidden gap-2 p-2">
         <!-- 日志区域 -->
-        <div class="flex-1 flex flex-col min-w-0 min-h-0">
+        <div class="apple-content flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
           <div class="flex-1 min-h-0 bg-white dark:bg-slate-900">
             <VirtualList
               ref="virtualListRef"
@@ -1367,7 +1367,7 @@ watch(
           </div>
 
           <!-- 底部输入区 -->
-          <div class="shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2">
+          <div class="apple-toolbar shrink-0 border-t border-slate-200 dark:border-slate-800 bg-white/85 dark:bg-slate-900/85 px-4 py-2">
             <div class="flex items-center gap-2">
               <!-- 通道选择 -->
               <select
@@ -1407,7 +1407,7 @@ watch(
         <!-- 帮助面板 -->
         <div
           v-if="showHelpPanel"
-          class="w-96 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-0 overflow-y-auto"
+          class="apple-inspector w-96 shrink-0 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 min-h-0 overflow-y-auto"
         >
           <!-- v-once: 静态内容不需要重复渲染 -->
           <div class="p-4" v-once>
@@ -1622,7 +1622,7 @@ watch(
     <!-- 右侧工具栏 -->
     <div
       v-if="showRightPanel"
-      class="w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex min-h-0 flex-col overflow-y-auto overscroll-contain"
+      class="apple-inspector w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 flex min-h-0 flex-col overflow-y-auto overscroll-contain"
     >
       <!-- 搜索 -->
       <div class="p-3 border-b border-slate-200 dark:border-slate-800">

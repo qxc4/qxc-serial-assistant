@@ -881,7 +881,7 @@ onUnmounted(cleanupButtonOptimizations)
 </script>
 
 <template>
-  <div class="flex flex-col h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
+  <div class="apple-workbench flex flex-col h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
     <!-- Toast Notification -->
     <div 
       v-if="settingsStore.toastVisible" 
@@ -895,7 +895,7 @@ onUnmounted(cleanupButtonOptimizations)
     <div class="flex flex-1 min-h-0 overflow-hidden">
       
       <!-- Left Panel: Settings -->
-      <div v-show="showLeftPanel" class="w-64 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex min-h-0 flex-col">
+      <div v-show="showLeftPanel" class="apple-sidebar w-64 shrink-0 bg-white/90 dark:bg-slate-800/90 border-r dark:border-slate-700 flex min-h-0 flex-col">
         <!-- Tabs -->
         <div class="flex h-12 border-b dark:border-slate-700 text-center">
           <div 
@@ -1157,9 +1157,9 @@ onUnmounted(cleanupButtonOptimizations)
       </div>
 
       <!-- Middle Panel: Data View & Send -->
-      <div class="flex-1 flex flex-col bg-white dark:bg-slate-800 min-w-0">
+      <div class="apple-content flex-1 flex flex-col bg-white dark:bg-slate-800 min-w-0">
         <!-- Top Toolbar -->
-        <div class="border-b dark:border-slate-700 bg-slate-50 dark:bg-slate-900 shrink-0 px-3 py-2">
+        <div class="apple-toolbar border-b dark:border-slate-700 bg-slate-50/85 dark:bg-slate-900/85 shrink-0 px-3 py-2">
           <div class="flex items-center gap-2">
             <div class="relative min-w-0 flex-1 max-w-sm">
               <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -1220,7 +1220,7 @@ onUnmounted(cleanupButtonOptimizations)
         <!-- 数据解析结果面板 -->
         <div 
           v-if="showParsePanel && parseEnabled && parseMode !== 'none'"
-          class="border-t dark:border-slate-700 bg-slate-100 dark:bg-slate-900 max-h-64 overflow-hidden flex flex-col"
+          class="apple-panel border-t dark:border-slate-700 bg-slate-100 dark:bg-slate-900 max-h-64 overflow-hidden flex flex-col"
         >
           <div class="flex items-center justify-between px-4 py-2 border-b dark:border-slate-700 bg-white dark:bg-slate-800">
             <h3 class="font-bold text-sm flex items-center gap-2">
@@ -1495,9 +1495,9 @@ onUnmounted(cleanupButtonOptimizations)
       </div>
 
       <!-- Right Panel: Quick Commands / Command Group -->
-      <div v-show="showRightPanel" class="w-[400px] shrink-0 bg-slate-50 dark:bg-slate-900 border-l dark:border-slate-700 flex flex-col">
+      <div v-show="showRightPanel" class="apple-inspector w-[400px] shrink-0 bg-slate-50/90 dark:bg-slate-900/90 border-l dark:border-slate-700 flex flex-col">
         <!-- Right Panel Tabs -->
-        <div class="flex h-12 border-b dark:border-slate-700 bg-white dark:bg-slate-800">
+        <div class="apple-toolbar flex h-12 border-b dark:border-slate-700 bg-white/85 dark:bg-slate-800/85">
           <button
             class="flex-1 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors border-b-2"
             :class="activeRightTab === 'quick' ? 'text-blue-600 border-blue-600' : 'text-slate-500 hover:text-slate-700 border-transparent'"
@@ -1516,7 +1516,7 @@ onUnmounted(cleanupButtonOptimizations)
 
         <!-- ===== 快捷输入面板 (原有) ===== -->
         <div v-show="activeRightTab === 'quick'" class="flex min-h-0 flex-col flex-1 overflow-hidden">
-          <div class="h-10 border-b dark:border-slate-700 flex items-center justify-between px-3 bg-white dark:bg-slate-800">
+          <div class="apple-toolbar h-10 border-b dark:border-slate-700 flex items-center justify-between px-3 bg-white/85 dark:bg-slate-800/85">
             <div class="min-w-0">
               <h2 class="font-semibold text-sm text-slate-700 dark:text-slate-300 truncate">{{ t('serial.quickCommands') }}</h2>
               <p class="text-[10px] text-slate-400">
@@ -1539,7 +1539,7 @@ onUnmounted(cleanupButtonOptimizations)
             </div>
           </div>
 
-          <div class="px-3 py-2 flex items-center gap-2 border-b dark:border-slate-700 bg-white dark:bg-slate-800">
+          <div class="px-3 py-2 flex items-center gap-2 border-b dark:border-slate-700 bg-white/70 dark:bg-slate-800/70">
             <button
               @click="toggleLoopSend"
               :disabled="!isConnected || !hasRunnableQuickCommands"
@@ -1852,7 +1852,7 @@ onUnmounted(cleanupButtonOptimizations)
     </div>
 
     <!-- Bottom Status Bar -->
-    <div class="h-8 border-t dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-between px-4 text-xs text-slate-500 dark:text-slate-400">
+    <div class="apple-statusbar h-8 border-t dark:border-slate-700 bg-white/85 dark:bg-slate-800/85 flex items-center justify-between px-4 text-xs text-slate-500 dark:text-slate-400">
       <div class="flex items-center gap-3">
         <!-- Reconnecting status -->
         <span v-if="isReconnecting" class="flex items-center gap-1 font-medium text-amber-600">

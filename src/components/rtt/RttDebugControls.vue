@@ -76,7 +76,7 @@ watch(() => props.pcFocusRequestId, async () => {
       <button
         @click="emit('refreshCoreRegisters')"
         :disabled="!isConnected"
-        class="p-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+        class="p-1 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
         title="刷新寄存器"
       >
         <RefreshCw class="w-3 h-3" />
@@ -89,7 +89,7 @@ watch(() => props.pcFocusRequestId, async () => {
         :key="action"
         @click="emit('debugAction', action)"
         :disabled="!isConnected"
-        class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
+        class="px-2 py-1 rounded-lg text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
       >
         {{ action }}
       </button>
@@ -164,7 +164,7 @@ watch(() => props.pcFocusRequestId, async () => {
         class="flex items-center justify-between rounded px-1.5 py-1"
         :class="item.isKey
           ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
-          : 'bg-slate-50 dark:bg-slate-800/50'"
+          : 'bg-slate-50/80 dark:bg-slate-800/50'"
       >
         <span class="text-slate-400 dark:text-slate-500">{{ item.name }}</span>
         <span class="font-mono text-slate-600 dark:text-slate-300">{{ formatHexAddress(item.value) }}</span>

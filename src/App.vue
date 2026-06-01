@@ -126,19 +126,19 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="flex h-screen w-screen overflow-hidden bg-slate-100 text-slate-800 font-sans transition-colors duration-200 dark:bg-slate-950 dark:text-slate-200">
+  <div class="apple-shell flex h-screen w-screen overflow-hidden bg-slate-100 text-slate-800 font-sans transition-colors duration-200 dark:bg-slate-950 dark:text-slate-200">
     <nav
-      class="flex w-[68px] shrink-0 flex-col border-r border-slate-200 bg-slate-950 px-1.5 py-3 text-slate-400 shadow-sm dark:border-slate-800 dark:bg-slate-950 lg:w-[88px] lg:px-2 lg:py-4"
+      class="apple-rail flex w-[68px] shrink-0 flex-col border-r border-slate-200 bg-white/80 px-1.5 py-3 text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-950/80 dark:text-slate-400 lg:w-[88px] lg:px-2 lg:py-4"
       aria-label="Main Navigation"
     >
       <div class="mb-3 flex flex-col items-center gap-1 px-1 text-center lg:mb-5">
-        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
+        <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500 text-white shadow-sm">
           <Terminal class="h-5 w-5" aria-hidden="true" />
         </div>
-        <div class="hidden w-full truncate text-[10px] font-semibold leading-tight text-slate-100 lg:block">
+        <div class="hidden w-full truncate text-[10px] font-semibold leading-tight text-slate-900 dark:text-slate-100 lg:block">
           {{ t('shell.appName') }}
         </div>
-        <div class="hidden w-full truncate text-[9px] text-slate-500 xl:block">
+        <div class="hidden w-full truncate text-[9px] text-slate-500 dark:text-slate-500 xl:block">
           {{ t('shell.appSubtitle') }}
         </div>
       </div>
@@ -152,10 +152,10 @@ onMounted(() => {
             v-for="item in group.items"
             :key="item.path"
             :to="item.path"
-            class="group flex h-[52px] w-full flex-col items-center justify-center gap-1 rounded-lg px-1 text-center transition-colors lg:h-[58px]"
+            class="group flex h-[52px] w-full flex-col items-center justify-center gap-1 rounded-xl px-1 text-center transition-colors lg:h-[58px]"
             :class="isActive(item.path)
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'"
+              ? 'bg-blue-500 text-white shadow-sm'
+              : 'text-slate-500 hover:bg-slate-200/70 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-slate-100'"
             :title="t(item.titleKey)"
             :aria-label="t(item.titleKey)"
             :aria-current="isActive(item.path) ? 'page' : undefined"
@@ -171,7 +171,7 @@ onMounted(() => {
       <button
         type="button"
         @click="showDonateModal = true"
-        class="mt-3 flex h-[52px] w-full flex-col items-center justify-center gap-1 rounded-lg px-1 text-center text-slate-400 transition-colors hover:bg-slate-800 hover:text-pink-300 lg:mt-4 lg:h-[58px]"
+        class="mt-3 flex h-[52px] w-full flex-col items-center justify-center gap-1 rounded-xl px-1 text-center text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-pink-500 dark:text-slate-400 dark:hover:bg-slate-800/80 dark:hover:text-pink-300 lg:mt-4 lg:h-[58px]"
         :title="t('shell.donateTitle')"
         :aria-label="t('shell.donateTitle')"
       >
@@ -181,10 +181,10 @@ onMounted(() => {
     </nav>
 
     <div class="flex min-w-0 flex-1 flex-col">
-      <header class="flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3 dark:border-slate-800 dark:bg-slate-900 lg:h-16 lg:px-5">
+      <header class="apple-topbar flex h-14 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-3 dark:border-slate-800 dark:bg-slate-900/80 lg:h-16 lg:px-5">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <component :is="currentNavItem.icon" class="h-5 w-5 shrink-0 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+            <component :is="currentNavItem.icon" class="h-5 w-5 shrink-0 text-blue-500 dark:text-blue-400" aria-hidden="true" />
             <h1 class="truncate text-base font-semibold text-slate-950 dark:text-slate-100">
               {{ t(currentNavItem.titleKey) }}
             </h1>
@@ -199,7 +199,7 @@ onMounted(() => {
             <span
               v-for="chip in capabilityChips"
               :key="chip.key"
-              class="inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium"
+              class="inline-flex h-7 items-center gap-1.5 rounded-lg border px-2 text-[11px] font-medium"
               :class="chip.supported
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300'
                 : 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400'"
@@ -214,11 +214,11 @@ onMounted(() => {
             </span>
           </div>
 
-          <div class="flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800">
+          <div class="apple-chip flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800">
             <button
               type="button"
               @click="cycleTheme"
-              class="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+              class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
               :title="t('shell.toggleTheme')"
               :aria-label="t('shell.toggleTheme')"
             >
@@ -227,7 +227,7 @@ onMounted(() => {
             <button
               type="button"
               @click="toggleLanguage"
-              class="flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
+              class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100"
               :title="t('shell.switchLanguage')"
               :aria-label="t('shell.switchLanguage')"
             >
@@ -237,7 +237,7 @@ onMounted(() => {
         </div>
       </header>
 
-      <main class="min-h-0 flex-1 overflow-hidden bg-slate-50 dark:bg-slate-950">
+      <main class="apple-stage min-h-0 flex-1 overflow-hidden bg-slate-50 dark:bg-slate-950">
         <router-view v-slot="{ Component }">
           <keep-alive>
             <component :is="Component" />
