@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { FlashVerifyReport } from '../../debug-core'
+import type { FlashDryRunReport, FlashVerifyReport } from '../../debug-core'
 
 type FlashStatus = 'idle' | 'planning' | 'ready' | 'programming' | 'success' | 'error'
 type FlashStage = 'idle' | 'erase' | 'program' | 'verify' | 'done'
@@ -35,6 +35,7 @@ defineProps<{
   isConnected: boolean
   detectedChipLabel: string
   flashPlanSummary: FlashPlanSummary | null
+  flashDryRunReport: FlashDryRunReport | null
   flashStage: FlashStage
   flashProgress: number
   flashOperationSummary: string
@@ -150,7 +151,7 @@ const emit = defineEmits<{
         :disabled="!hasFirmwareImage || flashStatus === 'programming'"
         class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
       >
-        生成计划
+        Dry-run
       </button>
       <button
         @click="emit('programFirmware')"
@@ -176,6 +177,50 @@ const emit = defineEmits<{
       <div>擦除页: {{ flashPlanSummary.erasePages }}</div>
       <div>写入段: {{ flashPlanSummary.programSections }}</div>
       <div>校验字节: {{ flashPlanSummary.verifyBytes }}</div>
+    </div>
+
+    <div
+      v-if="flashDryRunReport"
+      class="mb-2 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 px-2 py-1.5 text-[10px]"
+    >
+      <div class="flex items-center justify-between gap-2 mb-1 text-slate-500 dark:text-slate-400">
+        <span>Dry-run 明细</span>
+        <span>{{ flashDryRunReport.totalProgramBytes }}B / {{ flashDryRunReport.sections.length }} 段</span>
+      </div>
+      <div
+        v-if="flashDryRunReport.plan.erasePages.length > 0"
+        class="mb-1 text-slate-500 dark:text-slate-400 truncate"
+      >
+        页范围:
+        {{ formatHexAddress(flashDryRunReport.plan.erasePages[0] ?? 0) }}
+        -
+        {{ formatHexAddress(flashDryRunReport.plan.erasePages[flashDryRunReport.plan.erasePages.length - 1] ?? 0) }}
+      </div>
+      <div class="space-y-1">
+        <div
+          v-for="section in flashDryRunReport.sections.slice(0, 3)"
+          :key="`${section.name}-${section.address}`"
+          class="grid grid-cols-[minmax(0,1fr)_auto] gap-2 text-slate-500 dark:text-slate-400"
+        >
+          <span class="truncate" :title="`${section.name} ${formatHexAddress(section.address)}-${formatHexAddress(section.endAddress)}`">
+            {{ section.name }} {{ formatHexAddress(section.address) }}
+          </span>
+          <span>{{ section.bytes }}B / {{ section.erasePages }}页</span>
+        </div>
+      </div>
+      <div
+        v-if="flashDryRunReport.sections.length > 3"
+        class="mt-1 text-slate-400 dark:text-slate-500"
+      >
+        另有 {{ flashDryRunReport.sections.length - 3 }} 个 section 已纳入计划
+      </div>
+      <div
+        v-for="warning in flashDryRunReport.warnings"
+        :key="warning"
+        class="mt-1 text-yellow-600 dark:text-yellow-400"
+      >
+        {{ warning }}
+      </div>
     </div>
 
     <div class="text-[10px] mb-1" :class="flashStatus === 'error' ? 'text-red-600 dark:text-red-400' : flashStatus === 'success' ? 'text-green-600 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'">

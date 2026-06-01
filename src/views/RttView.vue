@@ -3,8 +3,8 @@ import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
-import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer, summarizeFlashOperationProgress } from '../debug-core'
-import type { FlashVerifyReport, VariableSpec, VariableValue } from '../debug-core'
+import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, summarizeFlashOperationProgress } from '../debug-core'
+import type { FlashDryRunReport, FlashVerifyReport, VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
 import RttDebugControls from '../components/rtt/RttDebugControls.vue'
@@ -297,6 +297,7 @@ const flashStartAddressInput = ref('0x08000000')
 const flashEndAddressInput = ref('0x08080000')
 const detectedChipLabel = ref('')
 const flashPlanSummary = ref<{ erasePages: number; programSections: number; verifyBytes: number } | null>(null)
+const flashDryRunReport = ref<FlashDryRunReport | null>(null)
 const flashStatus = ref<'idle' | 'planning' | 'ready' | 'programming' | 'success' | 'error'>('idle')
 const flashError = ref('')
 const flashProgress = ref(0)
@@ -422,15 +423,14 @@ const flashPrecheckItems = computed(() => {
   }
 
   try {
-    const plan = planFlashRanges({
+    const report = createFlashDryRunReport({
       regions: [region],
       sections: firmwareImage.value.sections,
     })
-    const verifyBytes = plan.verifyRanges.reduce((total, range) => total + range.length, 0)
     items.push({
       label: '写入计划',
-      state: plan.programSections.length > 0 ? 'ok' : 'warn',
-      detail: `${plan.erasePages.length} 页 / ${plan.programSections.length} 段 / ${verifyBytes}B`,
+      state: report.plan.programSections.length > 0 && report.warnings.length === 0 ? 'ok' : 'warn',
+      detail: `${report.plan.erasePages.length} 页 / ${report.plan.programSections.length} 段 / ${report.totalVerifyBytes}B`,
     })
   } catch (error) {
     items.push({
@@ -672,6 +672,7 @@ async function handleFirmwareSelected(event: Event): Promise<void> {
   flashStatus.value = 'planning'
   flashError.value = ''
   firmwareName.value = file.name
+  flashDryRunReport.value = null
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer())
@@ -689,6 +690,7 @@ async function handleFirmwareSelected(event: Event): Promise<void> {
     flashError.value = error instanceof Error ? error.message : String(error)
     firmwareImage.value = null
     flashPlanSummary.value = null
+    flashDryRunReport.value = null
     flashVerifyReport.value = null
     flashOperationSummary.value = ''
   } finally {
@@ -705,26 +707,35 @@ function planFirmwareProgramming(): void {
 
   try {
     const region = flashRegionConfig()
-    const plan = planFlashRanges({
+    const report = createFlashDryRunReport({
       regions: [region],
       sections: firmwareImage.value.sections,
     })
+    const plan = report.plan
     flashPlanSummary.value = {
       erasePages: plan.erasePages.length,
       programSections: plan.programSections.length,
-      verifyBytes: plan.verifyRanges.reduce((sum, item) => sum + item.length, 0),
+      verifyBytes: report.totalVerifyBytes,
     }
-    flashStatus.value = 'ready'
+    flashStatus.value = plan.programSections.length > 0 ? 'ready' : 'error'
     flashError.value = ''
     flashProgress.value = 0
     flashStage.value = 'idle'
     flashHint.value = ''
     flashVerifyReport.value = null
     flashOperationSummary.value = ''
+    flashDryRunReport.value = report
+    if (plan.programSections.length === 0) {
+      flashError.value = 'Dry-run 未找到可写入的固件 section'
+    }
+    if (report.warnings.length > 0) {
+      flashHint.value = `Dry-run 警告: ${report.warnings.join(' ')}`
+    }
   } catch (error) {
     flashStatus.value = 'error'
     flashError.value = error instanceof Error ? error.message : String(error)
     flashPlanSummary.value = null
+    flashDryRunReport.value = null
     flashVerifyReport.value = null
     flashOperationSummary.value = ''
   }
@@ -786,10 +797,15 @@ async function programFirmware(): Promise<void> {
     webUsbRtt.setFlashChipFamily(flashChipFamily.value)
     const sections = firmwareImage.value.sections
     const region = flashRegionConfig()
-    const plan = planFlashRanges({
+    const report = createFlashDryRunReport({
       regions: [region],
       sections,
     })
+    flashDryRunReport.value = report
+    const plan = report.plan
+    if (plan.programSections.length === 0) {
+      throw new Error('Dry-run 未找到可写入的固件 section')
+    }
     const programmer = createFlashProgrammer(
       {
         erasePage: (address) => webUsbRtt.eraseFlashPage(address),
@@ -1809,6 +1825,7 @@ watch(
         :is-connected="isConnected"
         :detected-chip-label="detectedChipLabel"
         :flash-plan-summary="flashPlanSummary"
+        :flash-dry-run-report="flashDryRunReport"
         :flash-stage="flashStage"
         :flash-progress="flashProgress"
         :flash-operation-summary="flashOperationSummary"

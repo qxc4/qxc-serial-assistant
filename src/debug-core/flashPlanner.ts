@@ -12,6 +12,23 @@ export interface FlashRangePlanInput {
   sections: ProgramSection[]
 }
 
+export interface FlashDryRunSection {
+  name: string
+  address: number
+  endAddress: number
+  bytes: number
+  erasePages: number
+  regionNames: string[]
+}
+
+export interface FlashDryRunReport {
+  plan: FlashPlan
+  sections: FlashDryRunSection[]
+  totalProgramBytes: number
+  totalVerifyBytes: number
+  warnings: string[]
+}
+
 export function planFlashRanges(input: FlashRangePlanInput): FlashPlan {
   const regions = [...input.regions].sort((left, right) => left.start - right.start)
   validateRegions(regions)
@@ -42,6 +59,53 @@ export function planFlashRanges(input: FlashRangePlanInput): FlashPlan {
       address: section.address,
       length: section.data.length,
     })),
+  }
+}
+
+export function createFlashDryRunReport(input: FlashRangePlanInput): FlashDryRunReport {
+  const regions = [...input.regions].sort((left, right) => left.start - right.start)
+  const plan = planFlashRanges({ ...input, regions })
+  const ignoredSections = input.sections.filter(section => !section.loadable || section.data.length === 0)
+  const warnings: string[] = []
+
+  if (plan.programSections.length === 0) {
+    warnings.push('No loadable program sections were found.')
+  }
+  if (ignoredSections.length > 0) {
+    warnings.push(`${ignoredSections.length} empty or non-loadable section(s) will be skipped.`)
+  }
+
+  const sections = plan.programSections.map(section => {
+    const endAddress = section.address + section.data.length
+    const coveredRegions = regions.filter(region => rangesOverlap(section.address, endAddress, region.start, region.end))
+    const erasePages = coveredRegions.reduce((total, region) => {
+      const start = Math.max(section.address, region.start)
+      const end = Math.min(endAddress, region.end)
+      return total + countRegionPages(region, start, end)
+    }, 0)
+
+    return {
+      name: section.name,
+      address: section.address,
+      endAddress,
+      bytes: section.data.length,
+      erasePages,
+      regionNames: coveredRegions.map(region => region.name),
+    }
+  })
+
+  const totalProgramBytes = sections.reduce((total, section) => total + section.bytes, 0)
+  const totalVerifyBytes = plan.verifyRanges.reduce((total, range) => total + range.length, 0)
+  if (totalVerifyBytes !== totalProgramBytes) {
+    warnings.push('Verify byte count differs from planned program byte count.')
+  }
+
+  return {
+    plan,
+    sections,
+    totalProgramBytes,
+    totalVerifyBytes,
+    warnings,
   }
 }
 
@@ -78,4 +142,11 @@ function addRegionPages(pages: Set<number>, region: FlashRegion, start: number, 
   for (let page = firstPage; page <= lastPage; page++) {
     pages.add(region.start + page * region.pageSize)
   }
+}
+
+function countRegionPages(region: FlashRegion, start: number, end: number): number {
+  if (end <= start) return 0
+  const firstPage = Math.floor((start - region.start) / region.pageSize)
+  const lastPage = Math.floor((end - 1 - region.start) / region.pageSize)
+  return Math.max(0, lastPage - firstPage + 1)
 }
