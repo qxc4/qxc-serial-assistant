@@ -7,6 +7,7 @@ import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables,
 import type { FlashDryRunReport, FlashVerifyReport, VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import { RTT_SOURCE_FILES, RTT_SOURCE_REPOSITORY_URL, downloadRttSourceFile, type RttSourceFile } from '../debug-core/rttSourceDownloads'
+import { createProbeCapabilityMatrix } from '../debug-core/probeCapabilityMatrix'
 import VirtualList from '../components/VirtualList.vue'
 import RttDebugControls from '../components/rtt/RttDebugControls.vue'
 import RttFlashProgrammerPanel from '../components/rtt/RttFlashProgrammerPanel.vue'
@@ -163,6 +164,9 @@ const webUsbScanRangeError = ref('')
 /** WebUSB 探针信息显示 */
 const webUsbProbeName = computed(() => {
   return webUsbRtt.probe.value?.displayName || '未选择设备'
+})
+const probeCapabilityMatrix = computed(() => {
+  return createProbeCapabilityMatrix(webUsbRtt.probe.value?.probeType)
 })
 
 /** WebUSB 调试链路自检 */
@@ -1930,6 +1934,16 @@ watch(
           </span>
           <span
             class="px-1.5 py-0.5 rounded"
+            :class="probeCapabilityMatrix.summary.tone === 'ok'
+              ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'
+              : probeCapabilityMatrix.summary.tone === 'warn'
+                ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'"
+          >
+            {{ probeCapabilityMatrix.summary.label }}
+          </span>
+          <span
+            class="px-1.5 py-0.5 rounded"
             :class="debugSelfCheckSummary.hasWarn
               ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400'
               : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'"
@@ -1939,6 +1953,13 @@ watch(
           <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
             待完成 {{ debugSelfCheckSummary.idleCount }}
           </span>
+        </div>
+
+        <div
+          v-if="probeCapabilityMatrix.warning"
+          class="mb-2 rounded-lg border border-yellow-200 bg-yellow-50 px-2 py-1.5 text-[10px] text-yellow-700 dark:border-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300"
+        >
+          {{ probeCapabilityMatrix.warning }}
         </div>
 
         <div v-if="!showDebugSelfCheckDetails && debugSelfCheckFocusItems.length > 0" class="space-y-1.5">
@@ -1970,6 +1991,41 @@ watch(
         </div>
 
         <div v-else class="space-y-1.5">
+          <div class="rounded-lg border border-slate-200 dark:border-slate-800 p-2">
+            <div class="flex items-center justify-between gap-2 text-[10px]">
+              <span class="font-medium text-slate-600 dark:text-slate-300">探针能力矩阵</span>
+              <span
+                class="truncate text-right"
+                :class="probeCapabilityMatrix.summary.tone === 'ok'
+                  ? 'text-green-600 dark:text-green-400'
+                  : probeCapabilityMatrix.summary.tone === 'warn'
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : 'text-slate-500 dark:text-slate-400'"
+              >
+                {{ probeCapabilityMatrix.summary.detail }}
+              </span>
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-1">
+              <div
+                v-for="capability in probeCapabilityMatrix.capabilities"
+                :key="capability.key"
+                class="rounded border px-1.5 py-1"
+                :class="capability.state === 'ok'
+                  ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900 dark:bg-green-900/20 dark:text-green-300'
+                  : capability.state === 'warn'
+                    ? 'border-yellow-200 bg-yellow-50 text-yellow-700 dark:border-yellow-900 dark:bg-yellow-900/20 dark:text-yellow-300'
+                    : 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400'"
+                :title="capability.detail"
+              >
+                <div class="flex items-center justify-between gap-1 text-[10px]">
+                  <span>{{ capability.label }}</span>
+                  <span class="uppercase">{{ capability.state }}</span>
+                </div>
+                <div class="mt-0.5 truncate text-[9px] opacity-80">{{ capability.detail }}</div>
+              </div>
+            </div>
+          </div>
+
           <div
             v-for="item in webDebugSelfChecks"
             :key="item.label"
