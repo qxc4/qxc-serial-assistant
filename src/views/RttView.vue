@@ -15,7 +15,7 @@ import {
   Usb, Unplug, Play, Pause, Send,
   RefreshCw, Download, Trash2, Search,
   AlertCircle, Radio, Terminal, X, HelpCircle,
-  PanelRight, BookOpen, Cpu, Zap, Wifi, Check, Info, ChevronUp, ChevronDown
+  PanelRight, BookOpen, Cpu, Zap, Check, Info, ChevronUp, ChevronDown
 } from 'lucide-vue-next'
 
 /** 连接状态颜色映射（静态常量，提取到模块级别避免每次实例重建） */
@@ -46,7 +46,7 @@ const LEVEL_BG_MAP: Record<string, string> = {
 
 const { t } = useI18n()
 
-// WebSocket RTT (传统方式)
+// Legacy store is still used for shared filtering/export helpers while the RTT UI defaults to WebUSB.
 const wsRtt = useRtt()
 
 // WebUSB RTT (直接连接)
@@ -152,24 +152,6 @@ const filteredLogs = computed(() => {
   return wsRtt.filteredLogs.value
 })
 
-// ==================== probe-rs 配置 ====================
-
-const elfPath = wsRtt.elfPath
-const chipModel = wsRtt.chipModel
-const protocol = wsRtt.protocol
-const selectedProbe = wsRtt.selectedProbe
-const probes = wsRtt.probes
-
-// ==================== OpenOCD 配置 ====================
-
-const openocdHost = wsRtt.openocdHost
-const openocdPort = wsRtt.openocdPort
-
-// ==================== J-Link 配置 ====================
-
-const jlinkHost = wsRtt.jlinkHost
-const jlinkPort = wsRtt.jlinkPort
-
 // ==================== WebUSB 配置 ====================
 
 /** WebUSB SWD 频率选项 */
@@ -228,7 +210,7 @@ const webDebugSelfChecks = computed(() => {
       state: logCount > 0 ? 'ok' : 'idle',
     },
     {
-      label: 'Bridge 路线',
+      label: '连接路线',
       detail: '纯浏览器直连',
       state: 'ok',
     },
@@ -956,9 +938,6 @@ async function handleConnect(): Promise<void> {
     if (!success) {
       console.log('[RTT] WebUSB 连接失败')
     }
-  } else {
-    // WebSocket 模式
-    wsRtt.connect()
   }
 }
 
@@ -1052,13 +1031,6 @@ function handleExportSession(): void {
  */
 async function handleSelectWebUsbDevice(): Promise<void> {
   await webUsbRtt.requestDevice()
-}
-
-/**
- * 选择 ELF 文件
- */
-function selectElfFile(): void {
-  wsRtt.selectElfFile()
 }
 
 /** 监听日志变化自动滚动 */
@@ -1197,119 +1169,8 @@ watch(
         </div>
 
         <div v-if="showTopConfigDetails" class="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-3 flex-wrap rounded-md bg-slate-50/70 dark:bg-slate-800/30 px-2.5 py-2">
-          <!-- probe-rs 配置 -->
-          <template v-if="backend === 'probe-rs'">
-            <!-- ELF 文件路径 -->
-            <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-500 dark:text-slate-400">ELF</label>
-              <input
-                v-model="elfPath"
-                :disabled="isConnected"
-                type="text"
-                placeholder="固件 ELF 文件路径"
-                class="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 min-w-48 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                readonly
-                @click="selectElfFile"
-              />
-              <button
-                @click="selectElfFile"
-                :disabled="isConnected"
-                class="px-2 py-1 text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 rounded border border-slate-300 dark:border-slate-600 disabled:opacity-50 transition-colors"
-                title="选择 ELF 文件"
-              >
-                <Search class="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-500 dark:text-slate-400">{{ t('rtt.chip') }}</label>
-              <input
-                v-model="chipModel"
-                :disabled="isConnected"
-                type="text"
-                placeholder="STM32F407VGTx"
-                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 w-36 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              />
-            </div>
-            <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-500 dark:text-slate-400">{{ t('rtt.protocol') }}</label>
-              <select
-                v-model="protocol"
-                :disabled="isConnected"
-                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                <option value="Swd">SWD</option>
-                <option value="Jtag">JTAG</option>
-              </select>
-            </div>
-            <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-500 dark:text-slate-400">{{ t('rtt.probe') }}</label>
-              <select
-                v-model="selectedProbe"
-                :disabled="isConnected"
-                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 max-w-[160px] focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                <option value="">{{ t('rtt.autoDetect') }}</option>
-                <option v-for="probe in probes" :key="probe.identifier" :value="probe.identifier">
-                  {{ probe.displayName }}
-                </option>
-              </select>
-              <button
-                @click="wsRtt.refreshProbes()"
-                :disabled="isConnected"
-                class="p-1 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 disabled:opacity-50 transition-colors"
-                :title="t('rtt.refreshProbes')"
-              >
-                <RefreshCw class="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </template>
-
-          <!-- OpenOCD 配置 -->
-          <template v-if="backend === 'openocd'">
-            <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-500 dark:text-slate-400">Host</label>
-              <input
-                v-model="openocdHost"
-                :disabled="isConnected"
-                type="text"
-                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 w-24 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              />
-            </div>
-            <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-500 dark:text-slate-400">Port</label>
-              <input
-                v-model.number="openocdPort"
-                :disabled="isConnected"
-                type="number"
-                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 w-16 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              />
-            </div>
-          </template>
-
-          <!-- J-Link 配置 -->
-          <template v-if="backend === 'jlink'">
-            <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-500 dark:text-slate-400">Host</label>
-              <input
-                v-model="jlinkHost"
-                :disabled="isConnected"
-                type="text"
-                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 w-24 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              />
-            </div>
-            <div class="flex items-center gap-1.5">
-              <label class="text-xs text-slate-500 dark:text-slate-400">Port</label>
-              <input
-                v-model.number="jlinkPort"
-                :disabled="isConnected"
-                type="number"
-                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 w-16 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              />
-            </div>
-          </template>
-
           <!-- WebUSB 配置 -->
-          <template v-if="backend === 'webusb'">
+          <template v-if="isWebUsbMode">
             <!-- 选择设备按钮 -->
             <button
               @click="handleSelectWebUsbDevice"
@@ -1554,22 +1415,12 @@ watch(
                   🚀 快速开始：选择连接方式
                 </h4>
 
-                <!-- 连接方式选择按钮组 -->
-                <div class="grid gap-2 mb-4 grid-cols-1">
-                  <button
-                    @click="backend = 'webusb'"
-                    class="p-3 rounded-lg border-2 transition-all text-left"
-                    :class="backend === 'webusb'
-                      ? 'border-green-500 bg-green-50 dark:bg-green-900/30 shadow-md'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-green-300 dark:hover:border-green-700'"
-                  >
-                    <div class="flex items-center gap-2 mb-1">
-                      <Zap class="w-4 h-4 text-green-600 dark:text-green-400" />
-                      <span class="font-bold text-green-700 dark:text-green-300">WebUSB</span>
-                    </div>
-                    <p class="text-[10px] text-slate-500 dark:text-slate-400">纯浏览器运行，无需服务</p>
-                  </button>
-
+                <div class="p-3 mb-4 rounded-lg border-2 border-green-500 bg-green-50 dark:bg-green-900/30 shadow-md">
+                  <div class="flex items-center gap-2 mb-1">
+                    <Zap class="w-4 h-4 text-green-600 dark:text-green-400" />
+                    <span class="font-bold text-green-700 dark:text-green-300">WebUSB 纯浏览器直连</span>
+                  </div>
+                  <p class="text-[10px] text-slate-500 dark:text-slate-400">无需本地服务、脚本或桌面代理。</p>
                 </div>
 
                 <!-- 当前后端要求提示 -->
@@ -1643,146 +1494,6 @@ watch(
                 </div>
               </div>
 
-              <!-- probe-rs 详细教程 -->
-              <div class="p-4 bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                <h4 class="font-bold text-purple-700 dark:text-purple-300 mb-3 flex items-center gap-2 text-sm">
-                  <Wifi class="w-4 h-4" />
-                  📦 probe-rs 详细教程
-                </h4>
-
-                <!-- 功能亮点 -->
-                <div class="mb-3 p-3 bg-purple-100/50 dark:bg-purple-900/30 rounded-lg">
-                  <div class="font-medium text-purple-700 dark:text-purple-300 mb-2">✨ 功能亮点</div>
-                  <ul class="space-y-1 text-slate-600 dark:text-slate-400">
-                    <li class="flex items-center gap-1.5"><span>🎯</span> 支持多种探针：ST-Link、J-Link、DAPLink、FTDI</li>
-                    <li class="flex items-center gap-1.5"><span>⚡</span> 跨平台支持：Windows、macOS、Linux</li>
-                    <li class="flex items-center gap-1.5"><span>🔍</span> 自动检测 RTT 控制块</li>
-                    <li class="flex items-center gap-1.5"><span>📊</span> 多通道支持</li>
-                  </ul>
-                </div>
-
-                <!-- ⚠️ 重要提示 -->
-                <div class="mb-3 p-3 bg-yellow-100/50 dark:bg-yellow-900/30 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                  <div class="font-medium text-yellow-700 dark:text-yellow-300 mb-1">⚠️ 重要提示（v0.31+）</div>
-                  <p class="text-yellow-600 dark:text-yellow-400">probe-rs v0.31+ 需要 ELF 文件路径才能连接 RTT。请先编译固件并填写 ELF 路径。</p>
-                </div>
-
-                <!-- 支持的探针 -->
-                <div class="mb-3 p-3 bg-white/50 dark:bg-slate-800/50 rounded-lg">
-                  <div class="font-medium text-slate-700 dark:text-slate-300 mb-2">🔌 支持的探针</div>
-                  <div class="flex flex-wrap gap-1.5">
-                    <span class="px-2 py-1 bg-purple-200 dark:bg-purple-800 rounded text-purple-700 dark:text-purple-300 text-[10px] font-medium">ST-Link</span>
-                    <span class="px-2 py-1 bg-purple-200 dark:bg-purple-800 rounded text-purple-700 dark:text-purple-300 text-[10px] font-medium">J-Link</span>
-                    <span class="px-2 py-1 bg-purple-200 dark:bg-purple-800 rounded text-purple-700 dark:text-purple-300 text-[10px] font-medium">DAPLink</span>
-                    <span class="px-2 py-1 bg-purple-200 dark:bg-purple-800 rounded text-purple-700 dark:text-purple-300 text-[10px] font-medium">FTDI</span>
-                    <span class="px-2 py-1 bg-purple-200 dark:bg-purple-800 rounded text-purple-700 dark:text-purple-300 text-[10px] font-medium">ESP32</span>
-                    <span class="px-2 py-1 bg-purple-200 dark:bg-purple-800 rounded text-purple-700 dark:text-purple-300 text-[10px] font-medium">WLink</span>
-                  </div>
-                </div>
-
-                <!-- 安装步骤 -->
-                <div class="space-y-2">
-                  <div class="font-medium text-slate-700 dark:text-slate-300 mb-2">📥 安装步骤</div>
-
-                  <div class="flex items-start gap-3 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                    <span class="w-6 h-6 shrink-0 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold">1</span>
-                    <div>
-                      <div class="font-medium text-slate-700 dark:text-slate-300">下载预编译版本</div>
-                      <a href="https://probe.rs/docs/getting-started/installation" target="_blank" class="text-purple-600 dark:text-purple-400 underline hover:no-underline text-[10px]">
-                        🔗 probe.rs/docs/getting-started/installation
-                      </a>
-                    </div>
-                  </div>
-
-                  <div class="flex items-start gap-3 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                    <span class="w-6 h-6 shrink-0 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold">2</span>
-                    <div>
-                      <div class="font-medium text-slate-700 dark:text-slate-300">Windows 下载</div>
-                      <code class="text-[10px] bg-purple-100 dark:bg-purple-900/40 px-1 rounded">probe-rs-tools-*.zip</code>
-                    </div>
-                  </div>
-
-                  <div class="flex items-start gap-3 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                    <span class="w-6 h-6 shrink-0 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold">3</span>
-                    <div>
-                      <div class="font-medium text-slate-700 dark:text-slate-300">解压到任意目录</div>
-                      <code class="text-[10px] bg-purple-100 dark:bg-purple-900/40 px-1 rounded">如 D:\probe-rs\</code>
-                    </div>
-                  </div>
-
-                  <div class="flex items-start gap-3 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                    <span class="w-6 h-6 shrink-0 rounded-full bg-purple-500 text-white flex items-center justify-center text-xs font-bold">4</span>
-                    <div>
-                      <div class="font-medium text-slate-700 dark:text-slate-300">添加到 PATH 环境变量</div>
-                      <div class="text-[10px] text-slate-500">将解压目录添加到系统 PATH</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="mt-3 p-2 bg-slate-800 rounded-lg">
-                  <div class="text-slate-400 text-[10px] mb-1"># 或使用 Cargo 安装：</div>
-                  <code class="text-green-400 text-[10px]">cargo install probe-rs --features cli</code>
-                </div>
-              </div>
-
-              <!-- OpenOCD 教程 -->
-              <div class="p-4 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
-                <h4 class="font-bold text-orange-700 dark:text-orange-300 mb-3 flex items-center gap-2 text-sm">
-                  <Terminal class="w-4 h-4" />
-                  🔧 OpenOCD 教程
-                </h4>
-
-                <div class="space-y-3">
-                  <div class="p-3 bg-orange-100/50 dark:bg-orange-900/30 rounded-lg">
-                    <div class="font-medium text-orange-700 dark:text-orange-300 mb-2">📋 使用条件</div>
-                    <ul class="space-y-1 text-slate-600 dark:text-slate-400 text-[10px]">
-                      <li>✓ OpenOCD 已安装并添加到 PATH</li>
-                      <li>✓ OpenOCD 已启动并连接目标</li>
-                      <li>✓ OpenOCD 配置了 RTT 支持</li>
-                      <li>✓ RTT TCP 服务已启动（默认端口 9090）</li>
-                    </ul>
-                  </div>
-
-                  <div class="p-3 bg-slate-800 rounded-lg">
-                    <div class="text-slate-400 text-[10px] mb-1"># OpenOCD 配置示例</div>
-                    <pre class="text-green-400 text-[10px] overflow-x-auto">source [find interface/stlink.cfg]
-source [find target/stm32f4x.cfg]
-
-# 启用 RTT
-rtt setup 0x20000000 0x10000 "SEGGER RTT"
-rtt start
-
-# 启动 TCP 服务
-rtt server start 9090 0</pre>
-                  </div>
-                </div>
-              </div>
-
-              <!-- J-Link 教程 -->
-              <div class="p-4 bg-gradient-to-br from-cyan-50 to-teal-50 dark:from-cyan-900/20 dark:to-teal-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
-                <h4 class="font-bold text-cyan-700 dark:text-cyan-300 mb-3 flex items-center gap-2 text-sm">
-                  <Cpu class="w-4 h-4" />
-                  🔌 J-Link 教程
-                </h4>
-
-                <div class="space-y-3">
-                  <div class="p-3 bg-cyan-100/50 dark:bg-cyan-900/30 rounded-lg">
-                    <div class="font-medium text-cyan-700 dark:text-cyan-300 mb-2">📋 使用条件</div>
-                    <ul class="space-y-1 text-slate-600 dark:text-slate-400 text-[10px]">
-                      <li>✓ J-Link 调试器已连接</li>
-                      <li>✓ J-Link GDB Server 已启动</li>
-                      <li>✓ RTT 已在 GDB Server 中启用</li>
-                      <li>✓ RTT Telnet 服务已启动（默认端口 19021）</li>
-                    </ul>
-                  </div>
-
-                  <div class="p-3 bg-slate-800 rounded-lg">
-                    <div class="text-slate-400 text-[10px] mb-1"># J-Link GDB Server 启动</div>
-                    <pre class="text-green-400 text-[10px]">JLinkGDBServer -device STM32F407VG -if SWD -speed 4000 -rtt</pre>
-                  </div>
-                </div>
-              </div>
-
               <!-- 什么是 RTT -->
               <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
                 <h4 class="font-bold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2 text-sm">
@@ -1842,18 +1553,6 @@ rtt server start 9090 0</pre>
                 </h4>
 
                 <div class="space-y-3">
-                  <!-- 错误1 -->
-                  <div class="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                    <div class="font-medium text-red-600 dark:text-red-400 mb-1 flex items-center gap-1">
-                      <span class="text-red-500">❌</span> spawn probe-rs ENOENT
-                    </div>
-                    <div class="text-slate-500 dark:text-slate-400 text-[10px] mb-2">系统未安装 probe-rs 工具</div>
-                    <div class="p-2 bg-green-50 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300 text-[10px]">
-                      <strong>✅ 解决：</strong>参考上方 probe-rs 安装说明，安装后重启终端
-                    </div>
-                  </div>
-
-                  <!-- 错误2 -->
                   <div class="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
                     <div class="font-medium text-red-600 dark:text-red-400 mb-1 flex items-center gap-1">
                       <span class="text-red-500">❌</span> 未找到 RTT 控制块
@@ -1864,7 +1563,6 @@ rtt server start 9090 0</pre>
                     </div>
                   </div>
 
-                  <!-- 错误3 -->
                   <div class="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
                     <div class="font-medium text-red-600 dark:text-red-400 mb-1 flex items-center gap-1">
                       <span class="text-red-500">❌</span> WebUSB 授权失败
@@ -1875,18 +1573,6 @@ rtt server start 9090 0</pre>
                     </div>
                   </div>
 
-                  <!-- 错误4 -->
-                  <div class="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                    <div class="font-medium text-red-600 dark:text-red-400 mb-1 flex items-center gap-1">
-                      <span class="text-red-500">❌</span> Bridge 连接失败
-                    </div>
-                    <div class="text-slate-500 dark:text-slate-400 text-[10px] mb-2">无法连接到 RTT Bridge 服务</div>
-                    <div class="p-2 bg-green-50 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300 text-[10px]">
-                      <strong>✅ 解决：</strong>检查 Bridge 是否已启动，端口是否正确（默认 19022）
-                    </div>
-                  </div>
-
-                  <!-- 错误5 -->
                   <div class="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
                     <div class="font-medium text-red-600 dark:text-red-400 mb-1 flex items-center gap-1">
                       <span class="text-red-500">❌</span> 探针连接失败
@@ -1897,25 +1583,13 @@ rtt server start 9090 0</pre>
                     </div>
                   </div>
 
-                  <!-- 错误6 -->
                   <div class="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
                     <div class="font-medium text-red-600 dark:text-red-400 mb-1 flex items-center gap-1">
-                      <span class="text-red-500">❌</span> ELF 文件路径无效
+                      <span class="text-red-500">❌</span> 固件文件无效
                     </div>
-                    <div class="text-slate-500 dark:text-slate-400 text-[10px] mb-2">指定的 ELF 文件不存在或无法访问</div>
+                    <div class="text-slate-500 dark:text-slate-400 text-[10px] mb-2">导入的 BIN/HEX/ELF 文件无法解析或地址范围不匹配</div>
                     <div class="p-2 bg-green-50 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300 text-[10px]">
-                      <strong>✅ 解决：</strong>确认文件路径正确，使用「选择文件」按钮浏览选择
-                    </div>
-                  </div>
-
-                  <!-- 错误7 -->
-                  <div class="p-3 bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-                    <div class="font-medium text-red-600 dark:text-red-400 mb-1 flex items-center gap-1">
-                      <span class="text-red-500">❌</span> 芯片型号不支持
-                    </div>
-                    <div class="text-slate-500 dark:text-slate-400 text-[10px] mb-2">指定的芯片型号不被支持</div>
-                    <div class="p-2 bg-green-50 dark:bg-green-900/30 rounded text-green-700 dark:text-green-300 text-[10px]">
-                      <strong>✅ 解决：</strong>检查芯片型号拼写，使用 probe-rs chip list 查看支持的芯片
+                      <strong>✅ 解决：</strong>重新选择固件，并核对 Flash 起始地址、结束地址和页大小
                     </div>
                   </div>
                 </div>
@@ -1925,17 +1599,8 @@ rtt server start 9090 0</pre>
               <div class="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-700">
                 <h4 class="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">🔗 相关链接</h4>
                 <div class="space-y-1.5">
-                  <a href="https://probe.rs/docs/getting-started/installation" target="_blank" class="flex items-center gap-2 text-purple-600 dark:text-purple-400 hover:underline">
-                    <span>📦</span> probe-rs 安装文档
-                  </a>
-                  <a href="https://www.segger.com/products/debug-probes/j-link/technology/about-real-time-transfer/" target="_blank" class="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 hover:underline">
+                  <a href="https://kb.segger.com/RTT" target="_blank" class="flex items-center gap-2 text-cyan-600 dark:text-cyan-400 hover:underline">
                     <span>📚</span> SEGGER RTT 官方文档
-                  </a>
-                  <a href="https://openocd.org/documentation/" target="_blank" class="flex items-center gap-2 text-orange-600 dark:text-orange-400 hover:underline">
-                    <span>🔧</span> OpenOCD 文档
-                  </a>
-                  <a href="https://www.segger.com/downloads/jlink/" target="_blank" class="flex items-center gap-2 text-blue-600 dark:text-blue-400 hover:underline">
-                    <span>🔌</span> J-Link 下载
                   </a>
                 </div>
               </div>
@@ -2272,10 +1937,6 @@ rtt server start 9090 0</pre>
             <span :class="isConnected ? 'text-green-500 dark:text-green-400' : 'text-slate-400 dark:text-slate-500'">
               {{ connectionState }}
             </span>
-          </div>
-          <div v-if="backend === 'probe-rs'" class="flex justify-between">
-            <span>{{ t('rtt.chip') }}</span>
-            <span class="text-slate-700 dark:text-slate-300">{{ chipModel }}</span>
           </div>
           <div class="flex justify-between">
             <span>{{ t('rtt.channels') }}</span>
