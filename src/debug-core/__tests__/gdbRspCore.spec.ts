@@ -84,4 +84,26 @@ describe('gdbRspCore', () => {
     expect(await handleGdbCommand('Z1,8000124,2', adapter)).toBe('OK')
     expect(requests).toEqual(['m:20000000:3', 'z:8000124'])
   })
+
+  it('handles qXfer features read with chunking', async () => {
+    const adapter = {
+      async haltReason() { return 'S05' },
+      async readRegisters() { return '00' },
+      async writeRegisters() { return true },
+      async readMemory() { return new Uint8Array() },
+      async writeMemory() { return true },
+      async continue() { return 'OK' },
+      async step() { return 'S05' },
+      async setBreakpoint() { return true },
+      async clearBreakpoint() { return true },
+      async qSupported() { return 'PacketSize=4000;qXfer:features:read+' },
+      async readFeatureXml(annex: string) {
+        return annex === 'target.xml' ? '<target/>' : null
+      },
+    }
+
+    expect(await handleGdbCommand('qXfer:features:read:target.xml:0,4', adapter)).toBe('m<tar')
+    expect(await handleGdbCommand('qXfer:features:read:target.xml:4,20', adapter)).toBe('lget/>')
+    expect(await handleGdbCommand('qXfer:features:read:does-not-exist:0,10', adapter)).toBe('l')
+  })
 })

@@ -81,7 +81,17 @@ export class DebugTargetRspAdapter implements GdbRspAdapter {
   }
 
   async qSupported(): Promise<string> {
-    return 'PacketSize=4000;qXfer:features:read-'
+    return 'PacketSize=4000;qXfer:features:read+'
+  }
+
+  async readFeatureXml(annex: string): Promise<string | null> {
+    if (annex !== 'target.xml') return null
+    return [
+      '<?xml version="1.0"?>',
+      '<target version="1.0">',
+      '<architecture>arm</architecture>',
+      '</target>',
+    ].join('')
   }
 }
 

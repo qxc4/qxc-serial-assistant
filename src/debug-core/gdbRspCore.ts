@@ -9,6 +9,7 @@ export interface GdbRspAdapter {
   setBreakpoint(address: number, kind: number, type: string): Promise<boolean>
   clearBreakpoint(address: number, kind: number, type: string): Promise<boolean>
   qSupported(): Promise<string>
+  readFeatureXml?(annex: string): Promise<string | null>
 }
 
 export interface DecodedPacket {
@@ -73,6 +74,20 @@ export async function handleGdbCommand(payload: string, adapter: GdbRspAdapter):
   if (payload.startsWith('G')) return (await adapter.writeRegisters(payload.slice(1))) ? 'OK' : 'E01'
   if (payload === 'qSupported') return adapter.qSupported()
   if (payload.startsWith('qSupported:')) return adapter.qSupported()
+  const featureXmlMatch = /^qXfer:features:read:([^:]+):([0-9a-fA-F]+),([0-9a-fA-F]+)$/.exec(payload)
+  if (featureXmlMatch) {
+    const [, annex, offsetHex, lengthHex] = featureXmlMatch
+    if (!adapter.readFeatureXml) return ''
+
+    const featureXml = await adapter.readFeatureXml(annex)
+    if (!featureXml) return 'l'
+
+    const offset = parseHexNumber(offsetHex)
+    const length = parseHexNumber(lengthHex)
+    const chunk = featureXml.slice(offset, offset + length)
+    const prefix = offset + length >= featureXml.length ? 'l' : 'm'
+    return `${prefix}${chunk}`
+  }
 
   const readMemoryMatch = /^m([0-9a-fA-F]+),([0-9a-fA-F]+)$/.exec(payload)
   if (readMemoryMatch) {
