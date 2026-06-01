@@ -41,6 +41,14 @@ const emit = defineEmits<{
 
 const registerPanelRef = ref<HTMLElement | null>(null)
 
+async function readMemoryAtRegister(name: 'PC' | 'SP'): Promise<void> {
+  const register = props.coreRegisterItems.find(item => item.name === name)
+  if (!register) return
+  emit('update:memoryViewAddressInput', props.formatHexAddress(register.value))
+  await nextTick()
+  emit('readMemoryPreview')
+}
+
 watch(() => props.pcFocusRequestId, async () => {
   await nextTick()
   registerPanelRef.value
@@ -146,13 +154,29 @@ watch(() => props.pcFocusRequestId, async () => {
     <div class="mt-2 border-t border-slate-200 dark:border-slate-700 pt-2">
       <div class="flex items-center justify-between mb-1.5">
         <span class="text-[10px] text-slate-500 dark:text-slate-400">内存查看</span>
-        <button
-          @click="emit('readMemoryPreview')"
-          :disabled="!isConnected"
-          class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
-        >
-          读取
-        </button>
+        <div class="flex items-center gap-1">
+          <button
+            @click="readMemoryAtRegister('PC')"
+            :disabled="!isConnected"
+            class="px-1.5 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+          >
+            PC
+          </button>
+          <button
+            @click="readMemoryAtRegister('SP')"
+            :disabled="!isConnected"
+            class="px-1.5 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+          >
+            SP
+          </button>
+          <button
+            @click="emit('readMemoryPreview')"
+            :disabled="!isConnected"
+            class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+          >
+            读取
+          </button>
+        </div>
       </div>
       <div class="grid grid-cols-[1fr_auto] gap-1.5 mb-1.5">
         <input

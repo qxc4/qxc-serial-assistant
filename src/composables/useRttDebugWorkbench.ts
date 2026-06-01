@@ -232,7 +232,10 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
         const hexText = Array.from(chunk)
           .map(item => item.toString(16).toUpperCase().padStart(2, '0'))
           .join(' ')
-        lines.push(`${addrText}: ${hexText}`)
+        const asciiText = Array.from(chunk)
+          .map(item => item >= 0x20 && item <= 0x7e ? String.fromCharCode(item) : '.')
+          .join('')
+        lines.push(`${addrText}: ${hexText.padEnd(47, ' ')} |${asciiText}|`)
       }
       memoryViewHexLines.value = lines
       memoryViewError.value = ''
