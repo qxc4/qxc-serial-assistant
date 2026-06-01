@@ -89,4 +89,18 @@ describe('CortexMDebugTarget', () => {
       [0xe0002008, 0],
     ])
   })
+
+  it('reports hardware breakpoint slot usage', async () => {
+    const memory = new RegisterMemory()
+    memory.registers.set(0xe0002000, 0x00000030)
+    const target = new CortexMDebugTarget(memory)
+
+    await target.setHardwareBreakpoint(0x08000124)
+
+    expect(await target.getHardwareBreakpointStatus()).toEqual({
+      used: 1,
+      total: 3,
+      remaining: 2,
+    })
+  })
 })

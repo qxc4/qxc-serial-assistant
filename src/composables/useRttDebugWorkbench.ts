@@ -4,6 +4,12 @@ import { CortexMDebugTarget } from '../debug-core'
 export type DebugControlState = 'idle' | 'running' | 'halted' | 'reset' | 'error'
 export type DebugAction = 'halt' | 'resume' | 'step' | 'reset'
 
+export interface BreakpointSlotStatus {
+  used: number
+  total: number
+  remaining: number
+}
+
 interface DebugMemoryApi {
   readMemory(address: number, bytes: number): Promise<Uint8Array>
   writeMemory(address: number, data: Uint8Array): Promise<void>
@@ -26,6 +32,7 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
   const breakpointInput = ref('0x08000000')
   const hardwareBreakpoints = ref<number[]>([])
   const breakpointRestoreStatus = ref('')
+  const breakpointSlotStatus = ref<BreakpointSlotStatus | null>(null)
   const memoryViewAddressInput = ref('0x20000000')
   const memoryViewLengthInput = ref(128)
   const memoryViewHexLines = ref<string[]>([])
@@ -89,6 +96,18 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
     }
   }
 
+  async function refreshBreakpointSlotStatus(): Promise<void> {
+    if (!options.isConnected.value) {
+      breakpointSlotStatus.value = null
+      return
+    }
+    try {
+      breakpointSlotStatus.value = await createDebugTarget().getHardwareBreakpointStatus()
+    } catch {
+      breakpointSlotStatus.value = null
+    }
+  }
+
   function persistHardwareBreakpoints(): void {
     sessionStorage.setItem(BREAKPOINT_SESSION_KEY, JSON.stringify(hardwareBreakpoints.value))
   }
@@ -146,6 +165,7 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
         hardwareBreakpoints.value = [...hardwareBreakpoints.value, address].sort((a, b) => a - b)
         persistHardwareBreakpoints()
       }
+      breakpointSlotStatus.value = await target.getHardwareBreakpointStatus()
       debugControlError.value = ''
     } catch (error) {
       debugControlError.value = error instanceof Error ? error.message : String(error)
@@ -162,6 +182,7 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
       await target.clearHardwareBreakpoint(address)
       hardwareBreakpoints.value = hardwareBreakpoints.value.filter(item => item !== address)
       persistHardwareBreakpoints()
+      breakpointSlotStatus.value = await target.getHardwareBreakpointStatus()
       debugControlError.value = ''
     } catch (error) {
       debugControlError.value = error instanceof Error ? error.message : String(error)
@@ -169,8 +190,12 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
   }
 
   async function reapplyHardwareBreakpoints(): Promise<void> {
-    if (!options.isConnected.value || hardwareBreakpoints.value.length === 0) return
+    if (!options.isConnected.value) return
     const target = createDebugTarget()
+    if (hardwareBreakpoints.value.length === 0) {
+      await refreshBreakpointSlotStatus()
+      return
+    }
     const failed: number[] = []
     let successCount = 0
     for (const address of hardwareBreakpoints.value) {
@@ -181,6 +206,7 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
         failed.push(address)
       }
     }
+    breakpointSlotStatus.value = await target.getHardwareBreakpointStatus()
     if (failed.length > 0) {
       breakpointRestoreStatus.value = `断点恢复: 成功 ${successCount} / 失败 ${failed.length}`
       debugControlError.value = `部分断点恢复失败: ${failed.map(item => options.formatHexAddress(item)).join(', ')}`
@@ -194,6 +220,7 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
       hardwareBreakpoints.value = []
       persistHardwareBreakpoints()
       breakpointRestoreStatus.value = '断点列表已清空（未连接目标）'
+      breakpointSlotStatus.value = null
       return
     }
     try {
@@ -203,6 +230,7 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
       }
       hardwareBreakpoints.value = []
       persistHardwareBreakpoints()
+      breakpointSlotStatus.value = await target.getHardwareBreakpointStatus()
       debugControlError.value = ''
       breakpointRestoreStatus.value = '断点已全部清除'
     } catch (error) {
@@ -280,6 +308,7 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
       debugControlState.value = 'idle'
       coreRegisters.value = new Uint32Array(17)
       breakpointRestoreStatus.value = ''
+      breakpointSlotStatus.value = null
       debugTargetInstance = null
     } else {
       debugTargetInstance = null
@@ -297,6 +326,7 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
     breakpointInput,
     hardwareBreakpoints,
     breakpointRestoreStatus,
+    breakpointSlotStatus,
     coreRegisterItems,
     memoryViewAddressInput,
     memoryViewLengthInput,

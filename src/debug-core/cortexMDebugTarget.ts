@@ -23,6 +23,12 @@ export interface CortexMDebugTargetOptions {
   breakpointSlots?: number
 }
 
+export interface HardwareBreakpointStatus {
+  used: number
+  total: number
+  remaining: number
+}
+
 export class CortexMDebugTarget implements DebugTarget {
   private readonly memory: MemoryAccess
   private readonly coreRegisterCount: number
@@ -91,6 +97,16 @@ export class CortexMDebugTarget implements DebugTarget {
 
     await this.writeRegister(FP_COMP0 + slot * 4, 0)
     this.breakpoints.delete(address)
+  }
+
+  async getHardwareBreakpointStatus(): Promise<HardwareBreakpointStatus> {
+    const total = await this.getBreakpointSlotCount()
+    const used = this.breakpoints.size
+    return {
+      used,
+      total,
+      remaining: Math.max(0, total - used),
+    }
   }
 
   private async allocateBreakpointSlot(): Promise<number> {

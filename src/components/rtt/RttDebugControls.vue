@@ -11,6 +11,12 @@ interface CoreRegisterItem {
   isKey: boolean
 }
 
+interface BreakpointSlotStatus {
+  used: number
+  total: number
+  remaining: number
+}
+
 const props = defineProps<{
   isConnected: boolean
   debugControlState: DebugControlState
@@ -18,6 +24,7 @@ const props = defineProps<{
   breakpointInput: string
   hardwareBreakpoints: number[]
   breakpointRestoreStatus: string
+  breakpointSlotStatus: BreakpointSlotStatus | null
   coreRegisterItems: CoreRegisterItem[]
   memoryViewAddressInput: string
   memoryViewLengthInput: number
@@ -126,8 +133,16 @@ watch(() => props.pcFocusRequestId, async () => {
     </div>
 
     <div class="flex items-center justify-between mb-2">
-      <div v-if="breakpointRestoreStatus" class="text-[10px] text-slate-500 dark:text-slate-400">
-        {{ breakpointRestoreStatus }}
+      <div class="min-w-0 text-[10px] text-slate-500 dark:text-slate-400">
+        <span v-if="breakpointSlotStatus">
+          断点槽: {{ breakpointSlotStatus.used }}/{{ breakpointSlotStatus.total }}，剩余 {{ breakpointSlotStatus.remaining }}
+        </span>
+        <span v-else>
+          断点槽: {{ isConnected ? '读取中' : '未连接' }}
+        </span>
+        <span v-if="breakpointRestoreStatus" class="ml-1">
+          {{ breakpointRestoreStatus }}
+        </span>
       </div>
       <button
         @click="emit('clearAllHardwareBreakpoints')"

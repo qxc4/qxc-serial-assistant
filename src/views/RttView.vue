@@ -339,6 +339,7 @@ const {
   breakpointInput,
   hardwareBreakpoints,
   breakpointRestoreStatus,
+  breakpointSlotStatus,
   coreRegisterItems,
   memoryViewAddressInput,
   memoryViewLengthInput,
@@ -2015,6 +2016,7 @@ rtt server start 9090 0</pre>
         v-model:breakpoint-input="breakpointInput"
         :hardware-breakpoints="hardwareBreakpoints"
         :breakpoint-restore-status="breakpointRestoreStatus"
+        :breakpoint-slot-status="breakpointSlotStatus"
         :core-register-items="coreRegisterItems"
         v-model:memory-view-address-input="memoryViewAddressInput"
         v-model:memory-view-length-input="memoryViewLengthInput"
