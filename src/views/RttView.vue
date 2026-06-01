@@ -1,20 +1,18 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
-import { onClickOutside } from '@vueuse/core'
+import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
 import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
-import { getPlatformGuide } from '../composables/useBridgeStatus'
 import { useI18n } from '../composables/useI18n'
 import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer } from '../debug-core'
 import type { VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
-import type { RttLogLevel, RttBackend, BackendCapabilities } from '../types/rtt'
+import type { RttLogLevel, RttBackend } from '../types/rtt'
 import {
   Usb, Unplug, Play, Pause, Send,
   RefreshCw, Download, Trash2, Search,
   AlertCircle, Radio, Terminal, X, HelpCircle,
-  PanelRight, BookOpen, Cpu, Zap, Wifi, WifiOff, Copy, Check, Info, ChevronUp, ChevronDown
+  PanelRight, BookOpen, Cpu, Zap, Wifi, Check, Info, ChevronUp, ChevronDown
 } from 'lucide-vue-next'
 
 /** 连接状态颜色映射（静态常量，提取到模块级别避免每次实例重建） */
@@ -51,308 +49,16 @@ const wsRtt = useRtt()
 // WebUSB RTT (直接连接)
 const webUsbRtt = useWebUsbRtt()
 
-// Bridge 已退出产品路线；保留离线状态对象仅用于迁移期模板兼容，避免后台轮询本地 WebSocket。
-const bridgeStatus = { status: ref<'offline' | 'online'>('offline') }
-
-/** 当前使用的后端：产品路线转向纯浏览器调试，Bridge 后端仅保留为迁移期遗留代码 */
+/** 当前使用的后端：产品路线转向纯浏览器调试 */
 const backend = ref<RttBackend>('webusb')
-const legacyBridgeEnabled = false
-
 /** 是否使用 WebUSB 模式 */
 const isWebUsbMode = computed(() => backend.value === 'webusb')
-
-/** 是否需要 Bridge */
-const needsBridge = computed(() => legacyBridgeEnabled && backend.value !== 'webusb')
-
-/** Bridge 是否离线 */
-const isBridgeOffline = computed(() => needsBridge.value && bridgeStatus.status.value === 'offline')
-
-/** 平台启动指引 */
-const platformGuide = getPlatformGuide()
-
-/** 是否显示 Bridge 离线提示 */
-const showBridgeWarning = ref(true)
-
-/** 是否已复制命令 */
-const copiedCommand = ref(false)
-
-/** 当前后端的能力信息 */
-const currentBackendCapabilities = computed(() => {
-  if (isWebUsbMode.value) return undefined
-  return wsRtt.backendCapabilities.value.find((c: BackendCapabilities) => c.name === backend.value)
-})
-
-/** 当前后端是否可用 */
-const isCurrentBackendAvailable = computed(() => {
-  if (isWebUsbMode.value) return webUsbRtt.isSupported.value
-  return currentBackendCapabilities.value?.available ?? false
-})
 
 /** 当前后端的使用条件 */
 const currentBackendRequirements = computed(() => {
   return BACKEND_REQUIREMENTS[backend.value]
 })
 
-/** 是否显示后端不可用提示 */
-const showBackendUnavailable = computed(() => {
-  return needsBridge.value && !isBridgeOffline.value && !isCurrentBackendAvailable.value
-})
-
-/** 当 Bridge 连接后检测能力 */
-watch(() => bridgeStatus.status.value, (status) => {
-  if (status === 'online' && needsBridge.value) {
-    wsRtt.checkCapabilities()
-  }
-})
-
-/** 组件挂载时，仅在 Bridge 已在线且当前未检测过能力时检测 */
-onMounted(() => {
-  if (bridgeStatus.status.value === 'online' && needsBridge.value && wsRtt.backendCapabilities.value.length === 0) {
-    wsRtt.checkCapabilities()
-  }
-})
-
-/**
- * 复制启动命令
- */
-async function copyCommand(): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(platformGuide.command)
-    copiedCommand.value = true
-    setTimeout(() => {
-      copiedCommand.value = false
-    }, 2000)
-  } catch {
-    // 忽略复制失败
-  }
-}
-
-/**
- * 关闭 Bridge 离线提示
- */
-function dismissBridgeWarning(): void {
-  showBridgeWarning.value = false
-}
-
-/** 是否显示 Bridge 启动弹窗 */
-const showBridgeModal = ref(false)
-
-/** 是否显示下载脚本下拉菜单 */
-const showDownloadDropdown = ref(false)
-
-/** 下载下拉菜单容器引用 */
-const downloadDropdownRef = ref<HTMLElement | null>(null)
-
-/** 点击外部关闭下拉菜单 */
-onClickOutside(downloadDropdownRef, () => {
-  showDownloadDropdown.value = false
-})
-
-/**
- * 打开 Bridge 启动弹窗
- */
-function openBridgeModal(): void {
-  showBridgeModal.value = true
-}
-
-/**
- * 关闭 Bridge 启动弹窗
- */
-function closeBridgeModal(): void {
-  showBridgeModal.value = false
-}
-
-/**
- * 下载 start.bat 文件
- */
-function downloadStartBat(): void {
-  const batContent = `@echo off
-chcp 65001 >nul
-title QXC Serial RTT Bridge
-
-echo.
-echo ╔════════════════════════════════════════════════════════════╗
-echo ║           QXC Serial RTT Bridge 启动器                     ║
-echo ╚════════════════════════════════════════════════════════════╝
-echo.
-
-:: 设置 RTT Bridge 目录路径（请根据实际情况修改）
-:: 如果自动检测失败，请手动修改下面的路径
-set "BRIDGE_DIR="
-
-:: 尝试自动检测路径
-if not exist "%BRIDGE_DIR%" (
-    if exist "%~dp0rtt-bridge" (
-        set "BRIDGE_DIR=%~dp0rtt-bridge"
-    ) else if exist "%~dp0..\\rtt-bridge" (
-        set "BRIDGE_DIR=%~dp0..\\rtt-bridge"
-    ) else if exist "%USERPROFILE%\\Desktop\\串口助手\\qxc\\serial-assistant\\rtt-bridge" (
-        set "BRIDGE_DIR=%USERPROFILE%\\Desktop\\串口助手\\qxc\\serial-assistant\\rtt-bridge"
-    ) else if exist "%USERPROFILE%\\Desktop\\串口助手\\rtt-bridge" (
-        set "BRIDGE_DIR=%USERPROFILE%\\Desktop\\串口助手\\rtt-bridge"
-    )
-)
-
-:: 检查目录是否存在
-if not exist "%BRIDGE_DIR%" (
-    echo [错误] 无法找到 rtt-bridge 目录
-    echo.
-    echo 请执行以下步骤：
-    echo 1. 右键编辑此脚本
-    echo 2. 找到 "set BRIDGE_DIR=" 行
-    echo 3. 修改为您的 rtt-bridge 实际路径
-    echo    例如: set "BRIDGE_DIR=D:\\Projects\\serial-assistant\\rtt-bridge"
-    echo.
-    pause
-    exit /b 1
-)
-
-echo [信息] RTT Bridge 目录: %BRIDGE_DIR%
-echo.
-
-:: 切换到 Bridge 目录
-cd /d "%BRIDGE_DIR%"
-
-:: 检查 Node.js 是否安装
-where node >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [错误] 未检测到 Node.js，请先安装 Node.js
-    echo 下载地址: https://nodejs.org/
-    pause
-    exit /b 1
-)
-
-:: 检查 node_modules 是否存在
-if not exist "node_modules" (
-    echo [提示] 首次运行，正在安装依赖...
-    call npm install
-    if %errorlevel% neq 0 (
-        echo [错误] 依赖安装失败
-        pause
-        exit /b 1
-    )
-)
-
-:: 检查是否已编译
-if not exist "dist\\index.js" (
-    echo [提示] 正在编译...
-    call npm run build
-    if %errorlevel% neq 0 (
-        echo [错误] 编译失败
-        pause
-        exit /b 1
-    )
-)
-
-echo [启动] RTT Bridge 服务启动中...
-echo.
-node dist/index.js
-
-pause
-`
-
-  const blob = new Blob([batContent], { type: 'application/bat' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = 'start-rtt-bridge.bat'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-}
-
-/**
- * 下载 start.sh 文件
- */
-function downloadStartSh(): void {
-  const shContent = `#!/bin/bash
-
-echo ""
-echo "╔════════════════════════════════════════════════════════════╗"
-echo "║           QXC Serial RTT Bridge 启动器                     ║"
-echo "╚════════════════════════════════════════════════════════════╝"
-echo ""
-
-# 设置 RTT Bridge 目录路径（请根据实际情况修改）
-BRIDGE_DIR=""
-
-# 尝试自动检测路径
-if [ -z "$BRIDGE_DIR" ] || [ ! -d "$BRIDGE_DIR" ]; then
-    SCRIPT_DIR="\$(cd "\$(dirname "\$0")" 2>/dev/null && pwd)"
-
-    if [ -d "\$SCRIPT_DIR/rtt-bridge" ]; then
-        BRIDGE_DIR="\$SCRIPT_DIR/rtt-bridge"
-    elif [ -d "\$SCRIPT_DIR/../rtt-bridge" ]; then
-        BRIDGE_DIR="\$SCRIPT_DIR/../rtt-bridge"
-    elif [ -d "\$HOME/Desktop/串口助手/qxc/serial-assistant/rtt-bridge" ]; then
-        BRIDGE_DIR="\$HOME/Desktop/串口助手/qxc/serial-assistant/rtt-bridge"
-    elif [ -d "\$HOME/Desktop/串口助手/rtt-bridge" ]; then
-        BRIDGE_DIR="\$HOME/Desktop/串口助手/rtt-bridge"
-    fi
-fi
-
-# 检查目录是否存在
-if [ ! -d "\$BRIDGE_DIR" ]; then
-    echo "[错误] 无法找到 rtt-bridge 目录"
-    echo ""
-    echo "请执行以下步骤："
-    echo "1. 编辑此脚本"
-    echo "2. 找到 BRIDGE_DIR= 行"
-    echo "3. 修改为您的 rtt-bridge 实际路径"
-    echo "   例如: BRIDGE_DIR=\"/home/user/projects/serial-assistant/rtt-bridge\""
-    echo ""
-    exit 1
-fi
-
-echo "[信息] RTT Bridge 目录: \$BRIDGE_DIR"
-echo ""
-
-# 切换到 Bridge 目录
-cd "\$BRIDGE_DIR" || exit 1
-
-# 检查 Node.js
-if ! command -v node &> /dev/null; then
-    echo "[错误] 未检测到 Node.js，请先安装 Node.js"
-    echo "下载地址: https://nodejs.org/"
-    exit 1
-fi
-
-# 检查 node_modules
-if [ ! -d "node_modules" ]; then
-    echo "[提示] 首次运行，正在安装依赖..."
-    npm install
-    if [ \$? -ne 0 ]; then
-        echo "[错误] 依赖安装失败"
-        exit 1
-    fi
-fi
-
-# 检查编译
-if [ ! -f "dist/index.js" ]; then
-    echo "[提示] 正在编译..."
-    npm run build
-    if [ \$? -ne 0 ]; then
-        echo "[错误] 编译失败"
-        exit 1
-    fi
-fi
-
-echo "[启动] RTT Bridge 服务启动中..."
-echo ""
-node dist/index.js
-`
-
-  const blob = new Blob([shContent], { type: 'application/x-sh' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = 'start-rtt-bridge.sh'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-}
 
 // ==================== 统一的状态接口 ====================
 
@@ -1238,15 +944,6 @@ watch(
 
           <!-- 统计信息 -->
           <div class="ml-auto flex items-center gap-1.5 text-[11px]">
-            <span
-              v-if="needsBridge"
-              class="flex items-center gap-1 px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
-              :title="bridgeStatus.status.value === 'online' ? 'RTT Bridge 已连接' : 'RTT Bridge 未运行'"
-            >
-              <Wifi v-if="bridgeStatus.status.value === 'online'" class="w-3.5 h-3.5 text-green-500" />
-              <WifiOff v-else class="w-3.5 h-3.5 text-yellow-500 animate-pulse" />
-              <span>{{ bridgeStatus.status.value === 'online' ? 'Bridge 在线' : 'Bridge 离线' }}</span>
-            </span>
             <span class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">{{ logStats.total }} {{ t('rtt.entries') }}</span>
             <span v-if="logStats.errors > 0" class="px-2 py-1 rounded bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400">
               {{ logStats.errors }} {{ t('rtt.errors') }}
@@ -1488,141 +1185,6 @@ watch(
             <Radio class="w-3.5 h-3.5" />
           </button>
 
-          <!-- 下载启动脚本按钮 -->
-          <div ref="downloadDropdownRef" class="relative">
-            <button
-              @click="showDownloadDropdown = !showDownloadDropdown"
-              class="flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs transition-all"
-              :class="showDownloadDropdown ? 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'"
-              title="下载 RTT Bridge 启动脚本"
-            >
-              <Terminal class="w-3.5 h-3.5" />
-              <span class="hidden sm:inline">启动脚本</span>
-            </button>
-            <!-- 下拉菜单 -->
-            <div
-              v-if="showDownloadDropdown"
-              class="absolute right-0 top-full mt-1 z-50 flex flex-col gap-1 p-2 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 min-w-[180px]"
-            >
-              <div class="px-2 py-1 text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider">启动脚本</div>
-              <button
-                @click="downloadStartBat(); showDownloadDropdown = false"
-                class="flex items-center gap-2 px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-              >
-                <svg class="w-4 h-4 text-blue-500" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
-                </svg>
-                Windows (.bat)
-              </button>
-              <button
-                @click="downloadStartSh(); showDownloadDropdown = false"
-                class="flex items-center gap-2 px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
-              >
-                <svg class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-1-6v-2h2v2h-2zm0-4V6h2v4h-2z"/>
-                </svg>
-                Linux/Mac (.sh)
-              </button>
-              <div class="my-1 border-t border-slate-200 dark:border-slate-700"></div>
-              <div class="px-2 py-1 text-[10px] text-slate-400 dark:text-slate-500 uppercase tracking-wider">源码下载</div>
-              <a
-                href="https://github.com/qxc4/qxc-serial-assistant/tree/main/rtt-bridge"
-                target="_blank"
-                rel="noopener noreferrer"
-                @click="showDownloadDropdown = false"
-                class="flex items-center gap-2 px-3 py-2 rounded text-xs text-slate-700 dark:text-slate-300 hover:bg-green-50 dark:hover:bg-green-900/30 hover:text-green-600 dark:hover:text-green-400 transition-colors"
-              >
-                <Download class="w-4 h-4 text-green-500" />
-                RTT Bridge 源码
-              </a>
-              <div class="px-2 py-1 text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                需要自行安装 Node.js 环境
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Bridge 离线提示 -->
-        <div
-          v-if="isBridgeOffline && showBridgeWarning"
-          class="mt-2 flex items-start gap-3 text-xs bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded px-4 py-3"
-        >
-          <WifiOff class="w-4 h-4 shrink-0 text-yellow-600 dark:text-yellow-400 mt-0.5" />
-          <div class="flex-1">
-            <div class="font-medium text-yellow-700 dark:text-yellow-300 mb-1">RTT Bridge 未运行</div>
-            <div class="text-yellow-600 dark:text-yellow-400 mb-2">
-              使用此后端需要先启动 RTT Bridge 服务
-            </div>
-            <div class="flex flex-wrap items-center gap-2 mb-2">
-              <button
-                @click="openBridgeModal"
-                class="flex items-center gap-1.5 px-3 py-1.5 rounded bg-yellow-200 dark:bg-yellow-800 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-300 dark:hover:bg-yellow-700 transition-colors font-medium"
-              >
-                <Download class="w-3.5 h-3.5" />
-                下载启动脚本
-              </button>
-              <span class="text-yellow-500 dark:text-yellow-500">或</span>
-              <code class="bg-yellow-100 dark:bg-yellow-900/40 px-2 py-1 rounded font-mono text-yellow-700 dark:text-yellow-300">
-                {{ platformGuide.command }}
-              </code>
-              <button
-                @click="copyCommand"
-                class="p-1 rounded hover:bg-yellow-200 dark:hover:bg-yellow-900/40 transition-colors"
-                :title="copiedCommand ? '已复制' : '复制命令'"
-              >
-                <Check v-if="copiedCommand" class="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                <Copy v-else class="w-3.5 h-3.5 text-yellow-600 dark:text-yellow-400" />
-              </button>
-            </div>
-            <div class="text-yellow-500 dark:text-yellow-500">
-              💡 提示：选择 <strong>WebUSB (直连)</strong> 后端可无需 Bridge 直接连接 ST-Link
-            </div>
-          </div>
-          <button
-            @click="dismissBridgeWarning"
-            class="text-yellow-500 hover:text-yellow-600 dark:text-yellow-400 dark:hover:text-yellow-300"
-          >
-            <X class="w-4 h-4" />
-          </button>
-        </div>
-
-        <!-- 后端不可用提示 -->
-        <div
-          v-if="showBackendUnavailable"
-          class="mt-2 flex items-start gap-3 text-xs bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded px-4 py-3"
-        >
-          <AlertCircle class="w-4 h-4 shrink-0 text-orange-600 dark:text-orange-400 mt-0.5" />
-          <div class="flex-1">
-            <div class="font-medium text-orange-700 dark:text-orange-300 mb-1">
-              {{ currentBackendCapabilities?.name }} 后端不可用
-            </div>
-            <div class="text-orange-600 dark:text-orange-400 mb-2">
-              {{ currentBackendCapabilities?.reason }}
-            </div>
-            <div v-if="currentBackendCapabilities?.installGuide" class="text-orange-500 dark:text-orange-500 whitespace-pre-line">
-              {{ currentBackendCapabilities.installGuide }}
-            </div>
-          </div>
-        </div>
-
-        <!-- 后端使用条件提示 -->
-        <div
-          v-if="needsBridge && !isBridgeOffline && isCurrentBackendAvailable && currentBackendRequirements"
-          class="mt-2 flex items-start gap-3 text-xs bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded px-4 py-3"
-        >
-          <Info class="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400 mt-0.5" />
-          <div class="flex-1">
-            <div class="font-medium text-blue-700 dark:text-blue-300 mb-2">
-              {{ currentBackendRequirements.title }} 使用条件
-            </div>
-            <div class="space-y-1 text-blue-600 dark:text-blue-400">
-              <div v-for="(req, idx) in currentBackendRequirements.requirements" :key="idx" class="flex items-start gap-1.5">
-                <span class="text-blue-400 dark:text-blue-500">•</span>
-                <span>{{ req }}</span>
-              </div>
-            </div>
-          </div>
         </div>
 
         <!-- 错误消息 -->
@@ -1751,7 +1313,7 @@ watch(
                 </h4>
 
                 <!-- 连接方式选择按钮组 -->
-                <div class="grid gap-2 mb-4" :class="legacyBridgeEnabled ? 'grid-cols-2' : 'grid-cols-1'">
+                <div class="grid gap-2 mb-4 grid-cols-1">
                   <button
                     @click="backend = 'webusb'"
                     class="p-3 rounded-lg border-2 transition-all text-left"
@@ -1766,50 +1328,6 @@ watch(
                     <p class="text-[10px] text-slate-500 dark:text-slate-400">纯浏览器运行，无需服务</p>
                   </button>
 
-                  <button
-                    v-if="legacyBridgeEnabled"
-                    @click="backend = 'probe-rs'"
-                    class="p-3 rounded-lg border-2 transition-all text-left"
-                    :class="backend === 'probe-rs'
-                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30 shadow-md'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-700'"
-                  >
-                    <div class="flex items-center gap-2 mb-1">
-                      <Wifi class="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                      <span class="font-bold text-purple-700 dark:text-purple-300">probe-rs</span>
-                    </div>
-                    <p class="text-[10px] text-slate-500 dark:text-slate-400">跨平台，支持多探针</p>
-                  </button>
-
-                  <button
-                    v-if="legacyBridgeEnabled"
-                    @click="backend = 'openocd'"
-                    class="p-3 rounded-lg border-2 transition-all text-left"
-                    :class="backend === 'openocd'
-                      ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/30 shadow-md'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-orange-300 dark:hover:border-orange-700'"
-                  >
-                    <div class="flex items-center gap-2 mb-1">
-                      <Terminal class="w-4 h-4 text-orange-600 dark:text-orange-400" />
-                      <span class="font-bold text-orange-700 dark:text-orange-300">OpenOCD</span>
-                    </div>
-                    <p class="text-[10px] text-slate-500 dark:text-slate-400">成熟稳定，配置灵活</p>
-                  </button>
-
-                  <button
-                    v-if="legacyBridgeEnabled"
-                    @click="backend = 'jlink'"
-                    class="p-3 rounded-lg border-2 transition-all text-left"
-                    :class="backend === 'jlink'
-                      ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/30 shadow-md'
-                      : 'border-slate-200 dark:border-slate-700 hover:border-cyan-300 dark:hover:border-cyan-700'"
-                  >
-                    <div class="flex items-center gap-2 mb-1">
-                      <Cpu class="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-                      <span class="font-bold text-cyan-700 dark:text-cyan-300">J-Link</span>
-                    </div>
-                    <p class="text-[10px] text-slate-500 dark:text-slate-400">SEGGER 官方工具</p>
-                  </button>
                 </div>
 
                 <!-- 当前后端要求提示 -->
@@ -1880,54 +1398,6 @@ watch(
                 <!-- 重要提示 -->
                 <div class="mt-3 p-2 bg-yellow-100/50 dark:bg-yellow-900/30 rounded-lg text-yellow-700 dark:text-yellow-300">
                   <strong>⚠️ 注意：</strong>目标程序必须已集成 RTT 库（SEGGER_RTT.c/h）
-                </div>
-              </div>
-
-              <!-- RTT Bridge 启动说明 -->
-              <div v-if="legacyBridgeEnabled" class="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <h4 class="font-bold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2 text-sm">
-                  <Terminal class="w-4 h-4" />
-                  🔧 RTT Bridge 启动方式
-                </h4>
-                <p class="mb-3 text-slate-600 dark:text-slate-400">使用 probe-rs / OpenOCD / J-Link 后端需要先启动 Bridge 服务</p>
-
-                <!-- 一键启动按钮 -->
-                <div class="grid grid-cols-2 gap-2 mb-3">
-                  <button
-                    @click="downloadStartBat"
-                    class="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all"
-                  >
-                    <Download class="w-4 h-4" />
-                    下载 Windows 启动脚本
-                  </button>
-                  <button
-                    @click="downloadStartSh"
-                    class="flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 text-white rounded-lg font-medium shadow-md hover:shadow-lg transition-all"
-                  >
-                    <Download class="w-4 h-4" />
-                    下载 Linux/Mac 启动脚本
-                  </button>
-                </div>
-
-                <!-- 命令行方式 -->
-                <div class="p-3 bg-slate-800 text-green-400 rounded-lg font-mono text-[10px] overflow-x-auto">
-                  <div class="text-slate-400 mb-1"># 进入 Bridge 目录</div>
-                  <div class="text-yellow-400">cd rtt-bridge</div>
-                  <div class="text-slate-400 mt-2 mb-1"># 安装依赖（首次运行）</div>
-                  <div>npm install</div>
-                  <div class="text-slate-400 mt-2 mb-1"># 启动服务</div>
-                  <div class="text-cyan-400">npm run dev</div>
-                </div>
-
-                <div class="mt-3 flex items-center gap-4 text-xs">
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-slate-500">默认端口：</span>
-                    <code class="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 rounded text-blue-700 dark:text-blue-300 font-mono">19022</code>
-                  </div>
-                  <div class="flex items-center gap-1.5">
-                    <span class="text-slate-500">连接地址：</span>
-                    <code class="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/40 rounded text-blue-700 dark:text-blue-300 font-mono">ws://127.0.0.1:19022</code>
-                  </div>
                 </div>
               </div>
 
@@ -2575,134 +2045,6 @@ rtt server start 9090 0</pre>
     </div>
   </div>
 
-  <!-- Bridge 启动脚本下载弹窗 -->
-  <Teleport to="body">
-    <Transition name="fade">
-      <div
-        v-if="showBridgeModal"
-        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-        @click.self="closeBridgeModal"
-      >
-        <div class="bg-white dark:bg-slate-900 rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden">
-          <!-- 标题栏 -->
-          <div class="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
-            <h3 class="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-              <Download class="w-4 h-4" />
-              下载 RTT Bridge 启动脚本
-            </h3>
-            <button
-              @click="closeBridgeModal"
-              class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-            >
-              <X class="w-4 h-4" />
-            </button>
-          </div>
-
-          <!-- 内容区 -->
-          <div class="p-4 space-y-4">
-            <!-- 重要提示：没有源码的用户 -->
-            <div class="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-              <div class="text-sm font-medium text-blue-700 dark:text-blue-300 mb-2 flex items-center gap-2">
-                <Info class="w-4 h-4" />
-                如果您没有 rtt-bridge 源码
-              </div>
-              <p class="text-xs text-blue-600 dark:text-blue-400 mb-2">
-                RTT Bridge 是一个独立的后端服务，需要单独下载：
-              </p>
-              <div class="space-y-2">
-                <a
-                  href="https://github.com/qiaoxinchao/qxc-serial-assistant/tree/main/rtt-bridge"
-                  target="_blank"
-                  class="flex items-center gap-2 px-3 py-2 bg-blue-100 dark:bg-blue-800 rounded text-xs text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-700 transition-colors"
-                >
-                  <Download class="w-4 h-4" />
-                  从 GitHub 下载 rtt-bridge 源码
-                </a>
-                <div class="text-xs text-blue-500 dark:text-blue-400 px-1">
-                  或使用命令：<code class="bg-blue-100 dark:bg-blue-800 px-1.5 py-0.5 rounded">git clone https://github.com/qiaoxinchao/qxc-serial-assistant.git</code>
-                </div>
-              </div>
-            </div>
-
-            <p class="text-sm text-slate-600 dark:text-slate-400">
-              如果您已有 rtt-bridge 源码，选择适合您操作系统的启动脚本：
-            </p>
-
-            <!-- 下载按钮 -->
-            <div class="grid grid-cols-2 gap-3">
-              <button
-                @click="downloadStartBat"
-                class="flex flex-col items-center gap-2 p-4 rounded-lg border-2 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
-              >
-                <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-800 flex items-center justify-center">
-                  <svg class="w-5 h-5 text-blue-600 dark:text-blue-400" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
-                  </svg>
-                </div>
-                <span class="text-sm font-medium text-blue-700 dark:text-blue-300">Windows</span>
-                <span class="text-xs text-blue-600 dark:text-blue-400">start-rtt-bridge.bat</span>
-              </button>
-
-              <button
-                @click="downloadStartSh"
-                class="flex flex-col items-center gap-2 p-4 rounded-lg border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              >
-                <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
-                  <svg class="w-5 h-5 text-slate-600 dark:text-slate-400" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm0 18c-4.411 0-8-3.589-8-8s3.589-8 8-8 8 3.589 8 8-3.589 8-8 8zm-1-6v-2h2v2h-2zm0-4V6h2v4h-2z"/>
-                  </svg>
-                </div>
-                <span class="text-sm font-medium text-slate-700 dark:text-slate-300">macOS / Linux</span>
-                <span class="text-xs text-slate-500 dark:text-slate-400">start-rtt-bridge.sh</span>
-              </button>
-            </div>
-
-            <!-- 使用说明 -->
-            <div class="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-xs text-slate-600 dark:text-slate-400">
-              <div class="font-medium text-slate-700 dark:text-slate-300 mb-2">完整使用步骤：</div>
-              <ol class="list-decimal list-inside space-y-1">
-                <li>下载 rtt-bridge 源码（见上方链接）</li>
-                <li>解压后进入 <code class="bg-slate-200 dark:bg-slate-700 px-1 rounded">rtt-bridge/</code> 目录</li>
-                <li>下载启动脚本到该目录（或任意位置）</li>
-                <li>运行脚本（Windows 双击，macOS/Linux 终端运行）</li>
-                <li>等待服务启动后，返回此页面连接</li>
-              </ol>
-            </div>
-
-            <!-- 前置要求 -->
-            <div class="flex items-start gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-xs text-yellow-700 dark:text-yellow-300">
-              <AlertCircle class="w-4 h-4 shrink-0 mt-0.5" />
-              <div>
-                <strong>前置要求：</strong>需要先安装 Node.js（v18+）
-                <a href="https://nodejs.org/" target="_blank" class="underline ml-1">下载 Node.js</a>
-              </div>
-            </div>
-
-            <!-- 推荐方式 -->
-            <div class="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-xs text-green-700 dark:text-green-300">
-              <div class="font-medium flex items-center gap-1 mb-1">
-                <Zap class="w-3.5 h-3.5" />
-                更简单的方式：使用 WebUSB 直连
-              </div>
-              <p class="text-green-600 dark:text-green-400">
-                如果您有 ST-Link 调试器，可以切换到「WebUSB (直连)」模式，无需安装任何后端服务，直接在浏览器中调试 RTT！
-              </p>
-            </div>
-          </div>
-
-          <!-- 底部按钮 -->
-          <div class="flex justify-end gap-2 px-4 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
-            <button
-              @click="closeBridgeModal"
-              class="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
-            >
-              关闭
-            </button>
-          </div>
-        </div>
-      </div>
-    </Transition>
-  </Teleport>
 </template>
 
 <style scoped>
