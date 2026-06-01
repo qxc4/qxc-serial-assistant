@@ -329,6 +329,43 @@ const flashError = ref('')
 const flashProgress = ref(0)
 const flashStage = ref<'idle' | 'erase' | 'program' | 'verify' | 'done'>('idle')
 const flashHint = ref('')
+type FlashDiagCode = 'permission' | 'disconnected' | 'range' | 'verify' | 'protected' | 'config' | 'generic'
+const flashDiagnosis = computed(() => {
+  const message = flashError.value.trim()
+  if (!message) return null
+
+  const lower = message.toLowerCase()
+  const has = (...keywords: string[]) => keywords.some(k => lower.includes(k))
+  let code: FlashDiagCode = 'generic'
+  if (has('notallowederror', 'permission', 'denied', '授权')) code = 'permission'
+  else if (has('disconnect', 'not connected', 'device unavailable', '掉线', '断开')) code = 'disconnected'
+  else if (has('outside flash regions', 'out of range', '地址范围', '起始地址', '结束地址')) code = 'range'
+  else if (has('verify', 'mismatch', '校验')) code = 'verify'
+  else if (has('read protected', 'write protected', '保护')) code = 'protected'
+  else if (has('family', 'page size', 'chip', '配置')) code = 'config'
+
+  const actions: Record<FlashDiagCode, string[]> = {
+    permission: ['重新选择 WebUSB 设备并授权访问调试探针。', '关闭占用探针的软件（如 ST-Link Utility/IDE）后重试。'],
+    disconnected: ['检查 USB 线缆和供电，确认探针与目标板连接稳定。', '断开后重新连接，再执行“生成计划 -> 执行写入”。'],
+    range: ['核对 Flash 起始/结束地址是否覆盖固件 section 地址。', '确认页大小和芯片族匹配目标 MCU。'],
+    verify: ['先执行擦除后重试写入。', '降低 SWD 频率并再次烧录。'],
+    protected: ['检查目标芯片读写保护（RDP/WRP）状态。', '必要时先解锁或全片擦除后重试。'],
+    config: ['点击“识别芯片”自动填充，再人工复核页大小与地址范围。', '若芯片族不在支持范围，先使用受支持芯片验证流程。'],
+    generic: ['检查连接状态与芯片参数后重试。', '保留报错文本用于后续定位。'],
+  }
+
+  const titles: Record<FlashDiagCode, string> = {
+    permission: '权限问题',
+    disconnected: '连接中断',
+    range: '地址范围错误',
+    verify: '校验失败',
+    protected: '芯片保护',
+    config: '配置不匹配',
+    generic: '通用错误',
+  }
+
+  return { code, title: titles[code], actions: actions[code] }
+})
 
 const filteredVariableValues = computed(() => {
   const keyword = variableFilterText.value.trim().toLowerCase()
@@ -2043,6 +2080,19 @@ rtt server start 9090 0</pre>
         <div class="text-[10px] text-slate-500 dark:text-slate-400 mb-1">{{ flashProgress }}%</div>
         <div v-if="flashError" class="text-[10px] text-red-600 dark:text-red-400 mb-1">
           {{ flashError }}
+        </div>
+        <div
+          v-if="flashDiagnosis"
+          class="mb-1 rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 px-2 py-1.5 text-[10px]"
+        >
+          <div class="text-amber-700 dark:text-amber-300 mb-1">诊断: {{ flashDiagnosis.title }}</div>
+          <div
+            v-for="(advice, idx) in flashDiagnosis.actions"
+            :key="`flash-advice-${idx}`"
+            class="text-amber-600 dark:text-amber-400"
+          >
+            {{ idx + 1 }}. {{ advice }}
+          </div>
         </div>
         <div v-if="flashHint" class="text-[10px] text-slate-500 dark:text-slate-400 mb-1">
           {{ flashHint }}
