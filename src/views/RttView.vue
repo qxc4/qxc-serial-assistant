@@ -5,7 +5,7 @@ import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
 import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, planFlashRanges, createFlashProgrammer } from '../debug-core'
-import type { VariableSpec, VariableValue } from '../debug-core'
+import type { FlashVerifyReport, VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
 import RttDebugControls from '../components/rtt/RttDebugControls.vue'
@@ -331,6 +331,7 @@ const flashError = ref('')
 const flashProgress = ref(0)
 const flashStage = ref<'idle' | 'erase' | 'program' | 'verify' | 'done'>('idle')
 const flashHint = ref('')
+const flashVerifyReport = ref<FlashVerifyReport | null>(null)
 const {
   debugControlState,
   debugControlError,
@@ -715,6 +716,7 @@ async function handleFirmwareSelected(event: Event): Promise<void> {
     flashError.value = error instanceof Error ? error.message : String(error)
     firmwareImage.value = null
     flashPlanSummary.value = null
+    flashVerifyReport.value = null
   } finally {
     input.value = ''
   }
@@ -743,10 +745,12 @@ function planFirmwareProgramming(): void {
     flashProgress.value = 0
     flashStage.value = 'idle'
     flashHint.value = ''
+    flashVerifyReport.value = null
   } catch (error) {
     flashStatus.value = 'error'
     flashError.value = error instanceof Error ? error.message : String(error)
     flashPlanSummary.value = null
+    flashVerifyReport.value = null
   }
 }
 
@@ -799,6 +803,7 @@ async function programFirmware(): Promise<void> {
   flashProgress.value = 0
   flashStage.value = 'erase'
   flashHint.value = ''
+  flashVerifyReport.value = null
 
   try {
     webUsbRtt.setFlashChipFamily(flashChipFamily.value)
@@ -831,9 +836,14 @@ async function programFirmware(): Promise<void> {
     }
 
     flashStage.value = 'verify'
-    const verified = await programmer.verifySections(plan.programSections)
-    if (!verified) {
-      throw new Error('校验失败：读回数据与镜像不一致')
+    const verifyReport = await programmer.verifySectionsDetailed(plan.programSections)
+    flashVerifyReport.value = verifyReport
+    if (!verifyReport.ok) {
+      const mismatch = verifyReport.mismatch
+      const detail = mismatch
+        ? `${mismatch.sectionName} ${formatHexAddress(mismatch.address)} offset ${mismatch.offset}: expected 0x${mismatch.expected.toString(16).padStart(2, '0')}, actual 0x${mismatch.actual.toString(16).padStart(2, '0')}`
+        : '未知地址'
+      throw new Error(`校验失败：读回数据与镜像不一致（${detail}）`)
     }
     flashProgress.value = 100
     flashStage.value = 'done'
@@ -2222,6 +2232,35 @@ rtt server start 9090 0</pre>
           <div class="h-full bg-blue-500 transition-all duration-200" :style="{ width: `${flashProgress}%` }" />
         </div>
         <div class="text-[10px] text-slate-500 dark:text-slate-400 mb-1">{{ flashProgress }}%</div>
+        <div
+          v-if="flashVerifyReport"
+          class="mb-1 rounded border px-2 py-1.5 text-[10px]"
+          :class="flashVerifyReport.ok
+            ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20'
+            : 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20'"
+        >
+          <div
+            class="mb-1"
+            :class="flashVerifyReport.ok
+              ? 'text-green-700 dark:text-green-300'
+              : 'text-red-700 dark:text-red-300'"
+          >
+            校验: {{ flashVerifyReport.ok ? '通过' : '失败' }} / {{ flashVerifyReport.checkedBytes }}B
+          </div>
+          <div
+            v-if="flashVerifyReport.mismatch"
+            class="grid grid-cols-2 gap-x-2 gap-y-0.5 text-red-600 dark:text-red-400"
+          >
+            <span>段: {{ flashVerifyReport.mismatch.sectionName }}</span>
+            <span>偏移: {{ flashVerifyReport.mismatch.offset }}</span>
+            <span>地址: {{ formatHexAddress(flashVerifyReport.mismatch.address) }}</span>
+            <span>
+              {{ `0x${flashVerifyReport.mismatch.expected.toString(16).padStart(2, '0')}` }}
+              /
+              {{ `0x${flashVerifyReport.mismatch.actual.toString(16).padStart(2, '0')}` }}
+            </span>
+          </div>
+        </div>
         <div v-if="flashError" class="text-[10px] text-red-600 dark:text-red-400 mb-1">
           {{ flashError }}
         </div>

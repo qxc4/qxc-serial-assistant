@@ -50,5 +50,20 @@ export interface FlashProgrammer {
   erasePages(addresses: number[]): Promise<void>
   programSections(sections: ProgramSection[]): Promise<void>
   verifySections(sections: ProgramSection[]): Promise<boolean>
+  verifySectionsDetailed(sections: ProgramSection[]): Promise<FlashVerifyReport>
   programImage(image: ProgramImage): Promise<void>
+}
+
+export interface FlashVerifyMismatch {
+  sectionName: string
+  address: number
+  expected: number
+  actual: number
+  offset: number
+}
+
+export interface FlashVerifyReport {
+  ok: boolean
+  checkedBytes: number
+  mismatch: FlashVerifyMismatch | null
 }

@@ -71,4 +71,27 @@ describe('flashProgrammer', () => {
     const ok = await programmer.verifySections([section])
     expect(ok).toBe(false)
   })
+
+  it('reports the first verify mismatch address and bytes', async () => {
+    const backend = new MockFlashBackend()
+    const programmer = createFlashProgrammer(
+      backend,
+      [{ name: 'flash', start: 0x08000000, end: 0x08010000, pageSize: 0x200 }],
+    )
+    const section = imageWithSingleSection().sections[0]!
+
+    await programmer.programSections([section])
+    backend.memory.set(section.address + 3, 0xaa)
+
+    const report = await programmer.verifySectionsDetailed([section])
+
+    expect(report.ok).toBe(false)
+    expect(report.mismatch).toEqual({
+      sectionName: '.text',
+      address: section.address + 3,
+      expected: 4,
+      actual: 0xaa,
+      offset: 3,
+    })
+  })
 })

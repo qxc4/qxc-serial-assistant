@@ -1,4 +1,4 @@
-import type { FlashProgrammer } from './debugInterfaces'
+import type { FlashProgrammer, FlashVerifyReport } from './debugInterfaces'
 import type { ProgramImage, ProgramSection } from './programImage'
 import type { FlashRegion } from './flashPlanner'
 import { planFlashRanges } from './flashPlanner'
@@ -35,14 +35,39 @@ class CoreFlashProgrammer implements FlashProgrammer {
   }
 
   async verifySections(sections: ProgramSection[]): Promise<boolean> {
+    const report = await this.verifySectionsDetailed(sections)
+    return report.ok
+  }
+
+  async verifySectionsDetailed(sections: ProgramSection[]): Promise<FlashVerifyReport> {
+    let checkedBytes = 0
     for (const section of sections) {
       if (!section.loadable || section.data.length === 0) continue
       const readback = await this.backend.read(section.address, section.data.length)
-      if (!sameBytes(readback, section.data)) {
-        return false
+      for (let index = 0; index < section.data.length; index++) {
+        checkedBytes++
+        const expected = section.data[index] ?? 0
+        const actual = readback[index] ?? 0xff
+        if (actual !== expected) {
+          return {
+            ok: false,
+            checkedBytes,
+            mismatch: {
+              sectionName: section.name,
+              address: section.address + index,
+              expected,
+              actual,
+              offset: index,
+            },
+          }
+        }
       }
     }
-    return true
+    return {
+      ok: true,
+      checkedBytes,
+      mismatch: null,
+    }
   }
 
   async programImage(image: ProgramImage): Promise<void> {
@@ -53,8 +78,8 @@ class CoreFlashProgrammer implements FlashProgrammer {
 
     await this.erasePages(plan.erasePages)
     await this.programSections(plan.programSections)
-    const verified = await this.verifySections(plan.programSections)
-    if (!verified) {
+    const report = await this.verifySectionsDetailed(plan.programSections)
+    if (!report.ok) {
       throw new Error('Flash verify failed after programming')
     }
   }
@@ -65,12 +90,4 @@ export function createFlashProgrammer(
   regions: FlashRegion[],
 ): FlashProgrammer {
   return new CoreFlashProgrammer(backend, regions)
-}
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  if (left.length !== right.length) return false
-  for (let index = 0; index < left.length; index++) {
-    if (left[index] !== right[index]) return false
-  }
-  return true
 }
