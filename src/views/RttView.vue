@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
-import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
@@ -10,7 +9,7 @@ import type { ProgramImage } from '../debug-core'
 import VirtualList from '../components/VirtualList.vue'
 import RttDebugControls from '../components/rtt/RttDebugControls.vue'
 import RttFlashProgrammerPanel from '../components/rtt/RttFlashProgrammerPanel.vue'
-import type { RttLogLevel, RttBackend } from '../types/rtt'
+import type { RttLogLevel, RttBackend, RttFilter } from '../types/rtt'
 import {
   Usb, Unplug, Play, Pause, Send,
   RefreshCw, Download, Trash2, Search,
@@ -46,9 +45,6 @@ const LEVEL_BG_MAP: Record<string, string> = {
 
 const { t } = useI18n()
 
-// Legacy store is still used for shared filtering/export helpers while the RTT UI defaults to WebUSB.
-const wsRtt = useRtt()
-
 // WebUSB RTT (直接连接)
 const webUsbRtt = useWebUsbRtt()
 
@@ -58,98 +54,90 @@ const backend = ref<RttBackend>('webusb')
 const isWebUsbMode = computed(() => backend.value === 'webusb')
 
 /** 当前后端的使用条件 */
-const currentBackendRequirements = computed(() => {
-  return BACKEND_REQUIREMENTS[backend.value]
-})
+const currentBackendRequirements = computed(() => ({
+  title: 'WebUSB 直连',
+  requirements: [
+    'Chrome/Edge 89+ 浏览器',
+    'ST-Link V2 / V2-1 / V3 调试器',
+    '目标程序已集成 RTT（SEGGER_RTT.c/h）',
+    '目标程序正在运行',
+  ],
+}))
 
 
 // ==================== 统一的状态接口 ====================
 
 /** 统一的连接状态 */
 const connectionState = computed(() => {
-  if (isWebUsbMode.value) {
-    // WebUSB 状态映射
-    const stateMap: Record<string, string> = {
-      disconnected: 'disconnected',
-      requesting: 'connecting',
-      connecting: 'connecting',
-      connected: 'connected',
-      scanning: 'connecting',
-      running: 'connected',
-      error: 'error',
-    }
-    return stateMap[webUsbRtt.state.value] || 'disconnected'
+  const stateMap: Record<string, string> = {
+    disconnected: 'disconnected',
+    requesting: 'connecting',
+    connecting: 'connecting',
+    connected: 'connected',
+    scanning: 'connecting',
+    running: 'connected',
+    error: 'error',
   }
-  return wsRtt.connectionState.value
+  return stateMap[webUsbRtt.state.value] || 'disconnected'
 })
 
 /** 是否已连接 */
-const isConnected = computed(() => {
-  if (isWebUsbMode.value) {
-    return webUsbRtt.isConnected.value
-  }
-  return wsRtt.isConnected.value
-})
+const isConnected = computed(() => webUsbRtt.isConnected.value)
 
 /** 通道列表 */
-const channels = computed(() => {
-  if (isWebUsbMode.value) {
-    return webUsbRtt.channels.value
-  }
-  return wsRtt.channels.value
-})
+const channels = computed(() => webUsbRtt.channels.value)
 
 /** 过滤器 */
-const filter = computed(() => wsRtt.filter.value)
+const filter = ref<RttFilter>({
+  levels: ['debug', 'info', 'warn', 'error', 'trace'],
+  channels: [],
+  searchText: '',
+})
 
 /** 是否暂停 */
-const isPaused = computed(() => {
-  if (isWebUsbMode.value) {
-    return webUsbRtt.isPaused.value
-  }
-  return wsRtt.isPaused.value
-})
+const isPaused = computed(() => webUsbRtt.isPaused.value)
 
 /** 自动滚动 */
 const autoScroll = ref(true)
 
 /** 错误消息 */
-const errorMessage = computed(() => {
-  if (isWebUsbMode.value) {
-    return webUsbRtt.error.value?.message || ''
-  }
-  return wsRtt.errorMessage.value
-})
+const errorMessage = computed(() => webUsbRtt.error.value?.message || '')
 
 /** 日志统计 */
-const logStats = computed(() => wsRtt.logStats.value)
+const logStats = computed(() => ({
+  total: webUsbRtt.logs.value.length,
+  errors: webUsbRtt.logs.value.filter(log => log.level === 'error').length,
+  warnings: webUsbRtt.logs.value.filter(log => log.level === 'warn').length,
+}))
 
 /** 过滤后的日志 */
 const filteredLogs = computed(() => {
-  if (isWebUsbMode.value) {
-    // WebUSB 模式：本地过滤
-    let logs = webUsbRtt.logs.value
-    const f = filter.value
+  let logs = webUsbRtt.logs.value
+  const f = filter.value
 
-    // 级别过滤
-    if (f.levels.length < 5) {
-      logs = logs.filter(log => f.levels.includes(log.level))
-    }
-
-    // 通道过滤
-    if (f.channels.length > 0) {
-      logs = logs.filter(log => f.channels.includes(log.channel))
-    }
-
-    // 文本搜索
-    if (f.searchText.trim()) {
-      const query = f.searchText.toLowerCase()
-      logs = logs.filter(log => log.text.toLowerCase().includes(query))
-    }
-
-    return logs
+  if (f.levels.length < 5) {
+    logs = logs.filter(log => f.levels.includes(log.level))
   }
-  return wsRtt.filteredLogs.value
+
+  if (f.channels.length > 0) {
+    logs = logs.filter(log => f.channels.includes(log.channel))
+  }
+
+  if (f.searchText.trim()) {
+    const query = f.searchText.toLowerCase()
+    logs = logs.filter(log => log.text.toLowerCase().includes(query))
+  }
+
+  return logs
+})
+
+watch(channels, channelList => {
+  if (filter.value.channels.length === 0 && channelList.length > 0) {
+    filter.value = {
+      ...filter.value,
+      channels: channelList.map(channel => channel.number),
+    }
+  }
 })
 
 // ==================== WebUSB 配置 ====================
@@ -896,7 +884,7 @@ function toggleLevelFilter(level: RttLogLevel): void {
   } else {
     levels.push(level)
   }
-  wsRtt.setFilter({ levels })
+  filter.value = { ...filter.value, levels }
 }
 
 /**
@@ -913,7 +901,14 @@ function toggleChannelFilter(ch: number): void {
   } else {
     chs.push(ch)
   }
-  wsRtt.setFilter({ channels: chs })
+  filter.value = { ...filter.value, channels: chs }
+}
+
+/**
+ * 更新日志搜索文本
+ */
+function setSearchText(searchText: string): void {
+  filter.value = { ...filter.value, searchText }
 }
 
 /**
@@ -945,11 +940,7 @@ async function handleConnect(): Promise<void> {
  * 处理断开
  */
 async function handleDisconnect(): Promise<void> {
-  if (isWebUsbMode.value) {
-    await webUsbRtt.disconnect()
-  } else {
-    wsRtt.disconnect()
-  }
+  await webUsbRtt.disconnect()
 }
 
 /**
@@ -958,11 +949,7 @@ async function handleDisconnect(): Promise<void> {
 function handleSend(): void {
   if (!sendInput.value.trim() || !isConnected.value) return
 
-  if (isWebUsbMode.value) {
-    webUsbRtt.send(sendInput.value, sendChannel.value)
-  } else {
-    wsRtt.send(sendInput.value, sendChannel.value)
-  }
+  webUsbRtt.send(sendInput.value, sendChannel.value)
   sendInput.value = ''
 }
 
@@ -970,30 +957,21 @@ function handleSend(): void {
  * 处理清空日志
  */
 function handleClearLogs(): void {
-  if (isWebUsbMode.value) {
-    webUsbRtt.clearLogs()
-  } else {
-    wsRtt.clearLogs()
-  }
+  webUsbRtt.clearLogs()
 }
 
 /**
  * 处理暂停/恢复
  */
 function handleTogglePause(): void {
-  if (isWebUsbMode.value) {
-    webUsbRtt.togglePause()
-  } else {
-    wsRtt.togglePause()
-  }
+  webUsbRtt.togglePause()
 }
 
 /**
  * 处理导出日志
  */
 function handleExport(): void {
-  const logs = isWebUsbMode.value ? webUsbRtt.logs.value : filteredLogs.value
-  const content = logs.map(log => {
+  const content = filteredLogs.value.map(log => {
     const d = new Date(log.timestamp)
     const ts = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}.${d.getMilliseconds().toString().padStart(3, '0')}`
     return `[${ts}] [${log.level.toUpperCase()}] Ch${log.channel}: ${log.text}`
@@ -1014,7 +992,22 @@ function handleExport(): void {
  * 处理导出会话
  */
 function handleExportSession(): void {
-  const content = wsRtt.exportSession()
+  const content = JSON.stringify({
+    exportTime: Date.now(),
+    backend: 'webusb',
+    probe: webUsbRtt.probe.value
+      ? {
+          displayName: webUsbRtt.probe.value.displayName,
+          vendorId: webUsbRtt.probe.value.vendorId,
+          productId: webUsbRtt.probe.value.productId,
+          serialNumber: webUsbRtt.probe.value.serialNumber,
+        }
+      : null,
+    scanRange: webUsbRtt.scanRange.value,
+    channels: channels.value,
+    filter: filter.value,
+    logs: filteredLogs.value,
+  }, null, 2)
   const blob = new Blob([content], { type: 'application/json;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -1621,7 +1614,7 @@ watch(
           <Search class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             :value="filter.searchText"
-            @input="wsRtt.setFilter({ searchText: ($event.target as HTMLInputElement).value })"
+            @input="setSearchText(($event.target as HTMLInputElement).value)"
             type="text"
             :placeholder="t('rtt.searchPlaceholder')"
             class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded pl-8 pr-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"

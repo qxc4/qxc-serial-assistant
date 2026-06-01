@@ -1,7 +1,7 @@
 /// <reference path="./webusb.d.ts" />
 
 /** RTT 后端类型 */
-export type RttBackend = 'probe-rs' | 'openocd' | 'jlink' | 'webusb'
+export type RttBackend = 'webusb'
 
 /** RTT 连接状态 */
 export type RttConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error'
@@ -63,134 +63,12 @@ export interface RttFilter {
   searchText: string
 }
 
-/** probe-rs 连接配置 */
-export interface ProbeRsConfig {
-  /** ELF 文件路径 (probe-rs v0.31+ 必需) */
-  elfPath: string
-  /** 芯片型号 */
-  chip: string
-  /** 调试协议 */
-  protocol: 'Swd' | 'Jtag'
-  /** 探针标识（多探针时指定） */
-  probe?: string
-  /** SWD/JTAG 时钟频率（Hz） */
-  frequency?: number
-  /** RTT 扫描范围 */
-  rttScanRange?: string
-}
-
-/** OpenOCD 连接配置 */
-export interface OpenOCDConfig {
-  /** 主机地址 */
-  host: string
-  /** TCP 端口 */
-  port: number
-  /** RTT 通道号 */
-  channel: number
-}
-
-/** J-Link 连接配置 */
-export interface JLinkConfig {
-  /** 主机地址 */
-  host: string
-  /** Telnet 端口 */
-  port: number
-  /** RTT 通道号 */
-  channel: number
-}
-
-/** 统一连接配置 */
-export interface RttConnectConfig {
-  /** 后端类型 */
-  backend: RttBackend
-  /** probe-rs 配置 */
-  probeRs?: ProbeRsConfig
-  /** OpenOCD 配置 */
-  openocd?: OpenOCDConfig
-  /** J-Link 配置 */
-  jlink?: JLinkConfig
-}
-
-// ==================== WebSocket 协议类型 ====================
-
-/** 客户端 → 服务端消息类型 */
-export type ClientMessageType = 'connect' | 'disconnect' | 'send' | 'list_probes' | 'select_file' | 'check_capabilities'
-
-/** 服务端 → 客户端消息类型 */
-export type ServerMessageType = 'connected' | 'disconnected' | 'rtt_data' | 'error' | 'probe_list' | 'channels' | 'file_selected' | 'capabilities'
-
-/** 客户端 → 服务端消息 */
-export interface ClientMessage {
-  type: ClientMessageType
-  /** 连接配置（connect 时必填） */
-  config?: RttConnectConfig
-  /** 发送数据（send 时必填） */
-  data?: string
-  /** 通道号（send 时可选） */
-  channel?: number
-  /** 文件过滤器（select_file 时使用） */
-  filters?: Array<{ name: string; extensions: string[] }>
-}
-
-/** 后端能力信息 */
-export interface BackendCapabilities {
-  /** 后端名称 */
-  name: string
-  /** 是否可用（工具已安装） */
-  available: boolean
-  /** 版本信息 */
-  version?: string
-  /** 不可用原因 */
-  reason?: string
-  /** 安装指引 */
-  installGuide?: string
-  /** 所需配置项 */
-  requiredConfig: string[]
-  /** 可选配置项 */
-  optionalConfig: string[]
-}
-
-/** 服务端 → 客户端消息 */
-export interface ServerMessage {
-  type: ServerMessageType
-  /** RTT 数据（rtt_data 时使用） */
-  data?: RttLogEntry
-  /** 探针列表（probe_list 时使用） */
-  probes?: ProbeInfo[]
-  /** 通道列表（channels 时使用） */
-  channels?: RttChannel[]
-  /** 错误信息（error 时使用） */
-  error?: string
-  /** 连接后端类型 */
-  backend?: RttBackend
-  /** 选中的文件路径（file_selected 时使用） */
-  filePath?: string
-  /** 后端能力列表（capabilities 时使用） */
-  capabilities?: BackendCapabilities[]
-}
-
-/** RTT 服务配置 */
-export interface RttServiceConfig {
-  /** WebSocket 服务地址 */
-  wsUrl: string
-  /** 自动重连 */
-  autoReconnect: boolean
-  /** 重连间隔（ms） */
-  reconnectInterval: number
-  /** 最大重连次数 */
-  maxReconnectAttempts: number
-  /** 心跳发送间隔（ms），0 表示禁用 */
-  heartbeatInterval: number
-  /** 心跳超时时间（ms） */
-  heartbeatTimeout: number
-}
-
 /** RTT 会话导出格式 */
 export interface RttSessionExport {
   /** 导出时间 */
   exportTime: number
-  /** 连接配置 */
-  config: RttConnectConfig
+  /** 后端类型 */
+  backend: RttBackend
   /** 日志条目 */
   logs: RttLogEntry[]
 }
