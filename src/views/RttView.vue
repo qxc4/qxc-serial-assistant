@@ -337,6 +337,10 @@ const hardwareBreakpoints = ref<number[]>([])
 const registerPanelRef = ref<HTMLElement | null>(null)
 const BREAKPOINT_SESSION_KEY = 'qxc-serial-rtt-breakpoints'
 const breakpointRestoreStatus = ref('')
+const memoryViewAddressInput = ref('0x20000000')
+const memoryViewLengthInput = ref(128)
+const memoryViewHexLines = ref<string[]>([])
+const memoryViewError = ref('')
 
 const coreRegisterItems = computed(() => {
   const names = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'SP', 'LR', 'PC', 'XPSR']
@@ -345,6 +349,12 @@ const coreRegisterItems = computed(() => {
     value: coreRegisters.value[index] ?? 0,
     isKey: name === 'SP' || name === 'LR' || name === 'PC',
   }))
+})
+
+const memoryViewByteLength = computed(() => {
+  const value = memoryViewLengthInput.value
+  if (!Number.isFinite(value)) return 0
+  return Math.max(16, Math.min(512, Math.floor(value)))
 })
 type FlashDiagCode = 'permission' | 'disconnected' | 'range' | 'verify' | 'protected' | 'config' | 'generic'
 const flashDiagnosis = computed(() => {
@@ -611,6 +621,35 @@ async function clearAllHardwareBreakpoints(): Promise<void> {
     breakpointRestoreStatus.value = '断点已全部清除'
   } catch (error) {
     debugControlError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+async function readMemoryPreview(): Promise<void> {
+  if (!isConnected.value) {
+    memoryViewError.value = '请先连接调试探针'
+    return
+  }
+  const address = parseHexAddress(memoryViewAddressInput.value)
+  if (address === null) {
+    memoryViewError.value = '内存地址必须是十六进制'
+    return
+  }
+  try {
+    const bytes = await webUsbRtt.readMemory(address, memoryViewByteLength.value)
+    const lines: string[] = []
+    for (let offset = 0; offset < bytes.length; offset += 16) {
+      const chunk = bytes.slice(offset, offset + 16)
+      const addrText = formatHexAddress((address + offset) >>> 0)
+      const hexText = Array.from(chunk)
+        .map(item => item.toString(16).toUpperCase().padStart(2, '0'))
+        .join(' ')
+      lines.push(`${addrText}: ${hexText}`)
+    }
+    memoryViewHexLines.value = lines
+    memoryViewError.value = ''
+  } catch (error) {
+    memoryViewHexLines.value = []
+    memoryViewError.value = error instanceof Error ? error.message : String(error)
   }
 }
 
@@ -2173,6 +2212,41 @@ rtt server start 9090 0</pre>
           >
             <span class="text-slate-400 dark:text-slate-500">{{ item.name }}</span>
             <span class="font-mono text-slate-600 dark:text-slate-300">{{ formatHexAddress(item.value) }}</span>
+          </div>
+        </div>
+
+        <div class="mt-2 border-t border-slate-200 dark:border-slate-700 pt-2">
+          <div class="flex items-center justify-between mb-1.5">
+            <span class="text-[10px] text-slate-500 dark:text-slate-400">内存查看</span>
+            <button
+              @click="readMemoryPreview"
+              :disabled="!isConnected"
+              class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
+            >
+              读取
+            </button>
+          </div>
+          <div class="grid grid-cols-[1fr_auto] gap-1.5 mb-1.5">
+            <input
+              v-model="memoryViewAddressInput"
+              type="text"
+              placeholder="地址(0x...)"
+              class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              v-model.number="memoryViewLengthInput"
+              type="number"
+              min="16"
+              max="512"
+              step="16"
+              class="w-20 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div v-if="memoryViewHexLines.length > 0" class="max-h-28 overflow-auto rounded bg-slate-50 dark:bg-slate-800/50 p-1.5 font-mono text-[10px] text-slate-600 dark:text-slate-300 space-y-0.5">
+            <div v-for="line in memoryViewHexLines" :key="line">{{ line }}</div>
+          </div>
+          <div v-if="memoryViewError" class="text-[10px] text-red-600 dark:text-red-400 mt-1">
+            {{ memoryViewError }}
           </div>
         </div>
 
