@@ -8,9 +8,19 @@ export interface ProgramSection {
   loadable: boolean
 }
 
+export type ProgramSymbolType = 'func' | 'object' | 'unknown'
+
+export interface ProgramSymbol {
+  name: string
+  address: number
+  size: number
+  type: ProgramSymbolType
+}
+
 export interface ProgramImage {
   format: ProgramImageFormat
   sections: ProgramSection[]
+  symbols?: ProgramSymbol[]
   entryPoint?: number
   arch?: ProgramArch
 }
@@ -103,10 +113,67 @@ export function parseElfImage(data: Uint8Array): ProgramImage {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
   const machine = view.getUint16(18, true)
   const entryPoint = view.getUint32(24, true)
+  const sectionHeaderOffset = view.getUint32(32, true)
+  const sectionHeaderSize = view.getUint16(46, true)
+  const sectionHeaderCount = view.getUint16(48, true)
+  const sectionNameTableIndex = view.getUint16(50, true)
+
+  if (sectionHeaderOffset === 0 || sectionHeaderSize < 40 || sectionHeaderCount === 0) {
+    return {
+      format: 'elf',
+      sections: [],
+      symbols: [],
+      entryPoint,
+      arch: machine === 0x28 ? 'arm' : 'unknown',
+    }
+  }
+
+  const headers = readSectionHeaders(view, sectionHeaderOffset, sectionHeaderSize, sectionHeaderCount)
+  const sectionNameHeader = headers[sectionNameTableIndex]
+  const sectionNameTable = sectionNameHeader ? readBytes(data, sectionNameHeader.offset, sectionNameHeader.size) : new Uint8Array()
+
+  const sections = headers
+    .map((header, index) => ({ header, name: readString(sectionNameTable, header.nameOffset) || `.section.${index}` }))
+    .filter(({ header }) => (header.flags & 0x2) !== 0 && header.size > 0)
+    .map(({ header, name }) => ({
+      name,
+      address: header.address,
+      data: readBytes(data, header.offset, header.size),
+      loadable: true,
+    }))
+
+  const symbols: ProgramSymbol[] = []
+  for (const header of headers) {
+    if (header.type !== 2 || header.entrySize < 16 || header.size === 0) continue
+    const stringTableHeader = headers[header.link]
+    if (!stringTableHeader) continue
+
+    const stringTable = readBytes(data, stringTableHeader.offset, stringTableHeader.size)
+    const entryCount = Math.floor(header.size / header.entrySize)
+    for (let symbolIndex = 1; symbolIndex < entryCount; symbolIndex++) {
+      const entryOffset = header.offset + symbolIndex * header.entrySize
+      if (entryOffset + 16 > data.length) break
+
+      const nameOffset = view.getUint32(entryOffset, true)
+      const value = view.getUint32(entryOffset + 4, true)
+      const size = view.getUint32(entryOffset + 8, true)
+      const info = view.getUint8(entryOffset + 12)
+      const name = readString(stringTable, nameOffset)
+      if (!name) continue
+
+      symbols.push({
+        name,
+        address: value,
+        size,
+        type: mapElfSymbolType(info & 0x0f),
+      })
+    }
+  }
 
   return {
     format: 'elf',
-    sections: [],
+    sections,
+    symbols,
     entryPoint,
     arch: machine === 0x28 ? 'arm' : 'unknown',
   }
@@ -133,4 +200,63 @@ export function planFlashOperations(input: FlashPlanInput): FlashPlan {
       length: section.data.length,
     })),
   }
+}
+
+interface ElfSectionHeader {
+  nameOffset: number
+  type: number
+  flags: number
+  address: number
+  offset: number
+  size: number
+  link: number
+  entrySize: number
+}
+
+function readSectionHeaders(
+  view: DataView,
+  offset: number,
+  entrySize: number,
+  count: number,
+): ElfSectionHeader[] {
+  const headers: ElfSectionHeader[] = []
+  for (let index = 0; index < count; index++) {
+    const headerOffset = offset + index * entrySize
+    if (headerOffset + 40 > view.byteLength) break
+
+    headers.push({
+      nameOffset: view.getUint32(headerOffset, true),
+      type: view.getUint32(headerOffset + 4, true),
+      flags: view.getUint32(headerOffset + 8, true),
+      address: view.getUint32(headerOffset + 12, true),
+      offset: view.getUint32(headerOffset + 16, true),
+      size: view.getUint32(headerOffset + 20, true),
+      link: view.getUint32(headerOffset + 24, true),
+      entrySize: view.getUint32(headerOffset + 36, true),
+    })
+  }
+  return headers
+}
+
+function readBytes(data: Uint8Array, offset: number, size: number): Uint8Array {
+  if (offset >= data.length || size <= 0) return new Uint8Array()
+  const end = Math.min(data.length, offset + size)
+  return data.slice(offset, end)
+}
+
+function readString(table: Uint8Array, startOffset: number): string {
+  if (startOffset <= 0 || startOffset >= table.length) return ''
+
+  let end = startOffset
+  while (end < table.length && table[end] !== 0) {
+    end++
+  }
+
+  return new TextDecoder().decode(table.slice(startOffset, end))
+}
+
+function mapElfSymbolType(type: number): ProgramSymbolType {
+  if (type === 2) return 'func'
+  if (type === 1) return 'object'
+  return 'unknown'
 }
