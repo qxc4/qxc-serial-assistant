@@ -231,6 +231,26 @@ const webDebugSelfChecks = computed(() => {
     },
   ]
 })
+const showDebugSelfCheckDetails = ref(false)
+const debugSelfCheckSummary = computed(() => {
+  const items = webDebugSelfChecks.value
+  const warnCount = items.filter(item => item.state === 'warn').length
+  const okCount = items.filter(item => item.state === 'ok').length
+  const idleCount = items.filter(item => item.state === 'idle').length
+  return {
+    total: items.length,
+    warnCount,
+    okCount,
+    idleCount,
+    hasWarn: warnCount > 0,
+    hasIdle: idleCount > 0,
+  }
+})
+const debugSelfCheckFocusItems = computed(() => {
+  const warns = webDebugSelfChecks.value.filter(item => item.state === 'warn')
+  if (warns.length > 0) return warns
+  return webDebugSelfChecks.value.filter(item => item.state === 'idle').slice(0, 2)
+})
 
 const workbenchStatusChips = computed(() => {
   const runState = isConnected.value ? (isPaused.value ? 'paused' : 'running') : 'idle'
@@ -2034,8 +2054,64 @@ rtt server start 9090 0</pre>
 
       <!-- 纯 Web 调试链路自检 -->
       <div class="p-3 border-b border-slate-200 dark:border-slate-800">
-        <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">调试链路自检</h3>
-        <div class="space-y-1.5">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">调试链路自检</h3>
+          <button
+            @click="showDebugSelfCheckDetails = !showDebugSelfCheckDetails"
+            class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-[10px] text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <ChevronUp v-if="showDebugSelfCheckDetails" class="w-3 h-3" />
+            <ChevronDown v-else class="w-3 h-3" />
+            {{ showDebugSelfCheckDetails ? '收起' : '展开' }}
+          </button>
+        </div>
+
+        <div class="flex items-center gap-1 flex-wrap mb-2 text-[10px]">
+          <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            {{ debugSelfCheckSummary.total }} 项
+          </span>
+          <span
+            class="px-1.5 py-0.5 rounded"
+            :class="debugSelfCheckSummary.hasWarn
+              ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400'
+              : 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400'"
+          >
+            告警 {{ debugSelfCheckSummary.warnCount }}
+          </span>
+          <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            待完成 {{ debugSelfCheckSummary.idleCount }}
+          </span>
+        </div>
+
+        <div v-if="!showDebugSelfCheckDetails && debugSelfCheckFocusItems.length > 0" class="space-y-1.5">
+          <div
+            v-for="item in debugSelfCheckFocusItems"
+            :key="`focus-${item.label}`"
+            class="flex items-center justify-between gap-2 text-[10px]"
+          >
+            <span class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+              <AlertCircle
+                v-if="item.state === 'warn'"
+                class="w-3 h-3 text-yellow-500 dark:text-yellow-400"
+              />
+              <Info
+                v-else
+                class="w-3 h-3 text-slate-400 dark:text-slate-500"
+              />
+              {{ item.label }}
+            </span>
+            <span
+              class="truncate text-right"
+              :class="item.state === 'warn'
+                ? 'text-yellow-600 dark:text-yellow-400'
+                : 'text-slate-500 dark:text-slate-400'"
+            >
+              {{ item.detail }}
+            </span>
+          </div>
+        </div>
+
+        <div v-else class="space-y-1.5">
           <div
             v-for="item in webDebugSelfChecks"
             :key="item.label"
