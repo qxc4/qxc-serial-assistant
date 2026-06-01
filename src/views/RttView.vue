@@ -556,6 +556,8 @@ const firmwareImage = ref<ProgramImage | null>(null)
 const firmwareBaseAddressInput = ref('0x08000000')
 const flashPageSizeInput = ref(2048)
 const flashChipFamily = ref<'stm32f1' | 'stm32f4'>('stm32f1')
+const flashStartAddressInput = ref('0x08000000')
+const flashEndAddressInput = ref('0x08080000')
 const detectedChipLabel = ref('')
 const flashPlanSummary = ref<{ erasePages: number; programSections: number; verifyBytes: number } | null>(null)
 const flashStatus = ref<'idle' | 'planning' | 'ready' | 'programming' | 'success' | 'error'>('idle')
@@ -771,6 +773,29 @@ function parseFirmwareBaseAddress(): number {
   return parsed
 }
 
+function parseAddressInput(value: string, label: string): number {
+  const parsed = parseHexAddress(value)
+  if (parsed === null) {
+    throw new Error(`${label} 无效，请使用十六进制`)
+  }
+  return parsed
+}
+
+function flashRegionConfig(): { name: string; start: number; end: number; pageSize: number } {
+  const start = parseAddressInput(flashStartAddressInput.value, 'Flash 起始地址')
+  const end = parseAddressInput(flashEndAddressInput.value, 'Flash 结束地址')
+  const pageSize = flashPageSizeInput.value
+
+  if (!Number.isSafeInteger(pageSize) || pageSize <= 0) {
+    throw new Error('Flash 页大小无效')
+  }
+  if (end <= start) {
+    throw new Error('Flash 结束地址必须大于起始地址')
+  }
+
+  return { name: 'main-flash', start, end, pageSize }
+}
+
 async function handleFirmwareSelected(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -808,18 +833,10 @@ function planFirmwareProgramming(): void {
     return
   }
 
-  const pageSize = flashPageSizeInput.value
-  if (!Number.isSafeInteger(pageSize) || pageSize <= 0) {
-    flashError.value = 'Flash 页大小无效'
-    flashStatus.value = 'error'
-    return
-  }
-
   try {
+    const region = flashRegionConfig()
     const plan = planFlashRanges({
-      regions: [
-        { name: 'main-flash', start: 0x08000000, end: 0x08100000, pageSize },
-      ],
+      regions: [region],
       sections: firmwareImage.value.sections,
     })
     flashPlanSummary.value = {
@@ -851,12 +868,18 @@ async function detectFlashChipFamily(): Promise<void> {
     const normalized = `${info.name} ${info.core}`.toLowerCase()
     if (normalized.includes('f1') || normalized.includes('m3')) {
       flashChipFamily.value = 'stm32f1'
-      flashHint.value = '已自动建议 STM32F1 擦页路径。'
+      flashPageSizeInput.value = 1024
+      flashStartAddressInput.value = '0x08000000'
+      flashEndAddressInput.value = '0x08080000'
+      flashHint.value = '已自动建议 STM32F1 配置（1KB 页，512KB 范围）。'
       return
     }
     if (normalized.includes('f4') || normalized.includes('m4')) {
       flashChipFamily.value = 'stm32f4'
-      flashHint.value = '已自动建议 STM32F4 擦页路径。'
+      flashPageSizeInput.value = 16384
+      flashStartAddressInput.value = '0x08000000'
+      flashEndAddressInput.value = '0x08080000'
+      flashHint.value = '已自动建议 STM32F4 配置（16KB 基础页，示例范围）。'
       return
     }
     flashHint.value = '未能自动识别芯片族，请手动确认芯片族。'
@@ -886,8 +909,9 @@ async function programFirmware(): Promise<void> {
   try {
     webUsbRtt.setFlashChipFamily(flashChipFamily.value)
     const sections = firmwareImage.value.sections
+    const region = flashRegionConfig()
     const plan = planFlashRanges({
-      regions: [{ name: 'main-flash', start: 0x08000000, end: 0x08100000, pageSize: flashPageSizeInput.value }],
+      regions: [region],
       sections,
     })
     const programmer = createFlashProgrammer(
@@ -896,7 +920,7 @@ async function programFirmware(): Promise<void> {
         program: (address, data) => webUsbRtt.writeMemory(address, data),
         read: (address, length) => webUsbRtt.readMemory(address, length),
       },
-      [{ name: 'main-flash', start: 0x08000000, end: 0x08100000, pageSize: flashPageSizeInput.value }],
+      [region],
     )
 
     const eraseTotal = Math.max(plan.erasePages.length, 1)
@@ -2414,6 +2438,21 @@ rtt server start 9090 0</pre>
             <option value="stm32f1">STM32F1</option>
             <option value="stm32f4">STM32F4</option>
           </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1.5 mb-2">
+          <input
+            v-model="flashStartAddressInput"
+            type="text"
+            placeholder="Flash起始(0x...)"
+            class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            v-model="flashEndAddressInput"
+            type="text"
+            placeholder="Flash结束(0x...)"
+            class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
 
         <div class="flex items-center gap-1.5 mb-2">
