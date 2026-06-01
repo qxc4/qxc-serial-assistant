@@ -1,3 +1,4 @@
+export * from './cortexMDebugTarget'
 export * from './cmsisDapDriver'
 export * from './debugInterfaces'
 export * from './gdbRspCore'

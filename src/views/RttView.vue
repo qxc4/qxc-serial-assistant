@@ -472,10 +472,55 @@ const frequencyOptions = [
 /** WebUSB 配置 */
 const webUsbFrequency = ref(4000000)
 const webUsbProtocol = ref<'swd' | 'jtag'>('swd')
+const rttScanStartInput = ref(formatHexAddress(webUsbRtt.scanRange.value.start))
+const rttScanEndInput = ref(formatHexAddress(webUsbRtt.scanRange.value.end))
+const rttScanStepInput = ref(webUsbRtt.scanRange.value.stepSize)
+const webUsbScanRangeError = ref('')
 
 /** WebUSB 探针信息显示 */
 const webUsbProbeName = computed(() => {
   return webUsbRtt.probe.value?.displayName || '未选择设备'
+})
+
+/** WebUSB 调试链路自检 */
+const webDebugSelfChecks = computed(() => {
+  const isUsbReady = webUsbRtt.isSupported.value
+  const hasProbe = Boolean(webUsbRtt.probe.value)
+  const hasChannels = channels.value.length > 0
+  const logCount = isWebUsbMode.value ? webUsbRtt.logs.value.length : logStats.value.total
+
+  return [
+    {
+      label: '浏览器 WebUSB',
+      detail: isUsbReady ? '可用' : '需要 Chrome/Edge 桌面端',
+      state: isUsbReady ? 'ok' : 'warn',
+    },
+    {
+      label: 'USB 授权',
+      detail: hasProbe ? webUsbProbeName.value : '等待选择探针',
+      state: hasProbe ? 'ok' : 'idle',
+    },
+    {
+      label: '探针连接',
+      detail: isConnected.value ? connectionState.value : '未连接',
+      state: isConnected.value ? 'ok' : 'idle',
+    },
+    {
+      label: 'RTT 扫描',
+      detail: hasChannels ? `${channels.value.length} 个通道` : '等待 Control Block',
+      state: hasChannels ? 'ok' : 'idle',
+    },
+    {
+      label: '日志流',
+      detail: logCount > 0 ? `${logCount} 条` : '暂无数据',
+      state: logCount > 0 ? 'ok' : 'idle',
+    },
+    {
+      label: 'Bridge 路线',
+      detail: '纯浏览器直连',
+      state: 'ok',
+    },
+  ]
 })
 
 /** 发送输入框内容 */
@@ -538,6 +583,41 @@ function formatTimestamp(ts: number): string {
   return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}.${d.getMilliseconds().toString().padStart(3, '0')}`
 }
 
+function formatHexAddress(value: number): string {
+  return `0x${value.toString(16).toUpperCase().padStart(8, '0')}`
+}
+
+function parseHexAddress(value: string): number | null {
+  const normalized = value.trim().replace(/^0x/i, '')
+  if (!/^[0-9a-fA-F]+$/.test(normalized)) return null
+  const parsed = Number.parseInt(normalized, 16)
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
+}
+
+function applyWebUsbScanRange(): boolean {
+  const start = parseHexAddress(rttScanStartInput.value)
+  const end = parseHexAddress(rttScanEndInput.value)
+  const stepSize = rttScanStepInput.value
+
+  if (start === null || end === null) {
+    webUsbScanRangeError.value = '扫描地址必须是十六进制'
+    return false
+  }
+
+  try {
+    webUsbRtt.setScanRange({ start, end, stepSize })
+    const normalized = webUsbRtt.scanRange.value
+    rttScanStartInput.value = formatHexAddress(normalized.start)
+    rttScanEndInput.value = formatHexAddress(normalized.end)
+    rttScanStepInput.value = normalized.stepSize
+    webUsbScanRangeError.value = ''
+    return true
+  } catch (error) {
+    webUsbScanRangeError.value = error instanceof Error ? error.message : '扫描范围无效'
+    return false
+  }
+}
+
 /**
  * 切换日志级别过滤
  * @param level 日志级别
@@ -589,6 +669,7 @@ async function handleConnectToggle(): Promise<void> {
 async function handleConnect(): Promise<void> {
   if (isWebUsbMode.value) {
     // WebUSB 模式
+    if (!applyWebUsbScanRange()) return
     const success = await webUsbRtt.connect(webUsbFrequency.value)
     if (!success) {
       console.log('[RTT] WebUSB 连接失败')
@@ -980,6 +1061,48 @@ watch(
                   {{ opt.label }}
                 </option>
               </select>
+            </div>
+
+            <!-- RTT 扫描范围 -->
+            <div class="flex items-center gap-1.5">
+              <label class="text-xs text-slate-500 dark:text-slate-400">扫描</label>
+              <input
+                v-model="rttScanStartInput"
+                :disabled="isConnected"
+                type="text"
+                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 w-28 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                @blur="applyWebUsbScanRange"
+              />
+              <span class="text-xs text-slate-400 dark:text-slate-500">-</span>
+              <input
+                v-model="rttScanEndInput"
+                :disabled="isConnected"
+                type="text"
+                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 w-28 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                @blur="applyWebUsbScanRange"
+              />
+              <input
+                v-model.number="rttScanStepInput"
+                :disabled="isConnected"
+                type="number"
+                min="4"
+                step="4"
+                title="扫描步长"
+                class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 w-16 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                @blur="applyWebUsbScanRange"
+              />
+              <button
+                @click="applyWebUsbScanRange"
+                :disabled="isConnected"
+                class="px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
+              >
+                应用
+              </button>
+            </div>
+
+            <div v-if="webUsbScanRangeError" class="flex items-center gap-1 text-xs text-red-600 dark:text-red-400">
+              <AlertCircle class="w-3.5 h-3.5" />
+              <span>{{ webUsbScanRangeError }}</span>
             </div>
 
             <!-- WebUSB 支持提示 -->
@@ -1836,6 +1959,44 @@ rtt server start 9090 0</pre>
             <Download class="w-3.5 h-3.5" />
             {{ t('rtt.exportSession') }}
           </button>
+        </div>
+      </div>
+
+      <!-- 纯 Web 调试链路自检 -->
+      <div class="p-3 border-b border-slate-200 dark:border-slate-800">
+        <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">调试链路自检</h3>
+        <div class="space-y-1.5">
+          <div
+            v-for="item in webDebugSelfChecks"
+            :key="item.label"
+            class="flex items-center justify-between gap-2 text-[10px]"
+          >
+            <span class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+              <Check
+                v-if="item.state === 'ok'"
+                class="w-3 h-3 text-green-500 dark:text-green-400"
+              />
+              <AlertCircle
+                v-else-if="item.state === 'warn'"
+                class="w-3 h-3 text-yellow-500 dark:text-yellow-400"
+              />
+              <Info
+                v-else
+                class="w-3 h-3 text-slate-400 dark:text-slate-500"
+              />
+              {{ item.label }}
+            </span>
+            <span
+              class="truncate text-right"
+              :class="item.state === 'ok'
+                ? 'text-green-600 dark:text-green-400'
+                : item.state === 'warn'
+                  ? 'text-yellow-600 dark:text-yellow-400'
+                  : 'text-slate-500 dark:text-slate-400'"
+            >
+              {{ item.detail }}
+            </span>
+          </div>
         </div>
       </div>
 

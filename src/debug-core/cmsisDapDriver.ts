@@ -6,6 +6,7 @@ import type {
   ProbeIdentity,
   TargetRunState,
 } from './debugInterfaces'
+import { CortexMDebugTarget } from './cortexMDebugTarget'
 
 type DapJsModule = typeof import('dapjs')
 type CortexMInstance = InstanceType<DapJsModule['CortexM']>
@@ -42,6 +43,7 @@ export class CmsisDapWebDriver implements ProbeDriver, MemoryAccess, DebugTarget
   private device: USBDevice | null = null
   private dapjs: DapJsModule | null = null
   private processor: CortexMInstance | null = null
+  private cortexTarget: CortexMDebugTarget | null = null
   private frequencyHz = 4_000_000
   private protocol: DebugProtocol = 'swd'
   private readonly filters: USBDeviceFilter[]
@@ -76,6 +78,7 @@ export class CmsisDapWebDriver implements ProbeDriver, MemoryAccess, DebugTarget
   async disconnect(): Promise<void> {
     await this.processor?.disconnect()
     this.processor = null
+    this.cortexTarget = null
   }
 
   async setProtocol(protocol: DebugProtocol): Promise<void> {
@@ -146,12 +149,12 @@ export class CmsisDapWebDriver implements ProbeDriver, MemoryAccess, DebugTarget
     await this.getProcessor().writeCoreRegister(registerIndex, value)
   }
 
-  async setHardwareBreakpoint(): Promise<void> {
-    throw new Error('CMSIS-DAP hardware breakpoint programming is not implemented yet')
+  async setHardwareBreakpoint(address: number): Promise<void> {
+    await this.getCortexTarget().setHardwareBreakpoint(address)
   }
 
-  async clearHardwareBreakpoint(): Promise<void> {
-    throw new Error('CMSIS-DAP hardware breakpoint clearing is not implemented yet')
+  async clearHardwareBreakpoint(address: number): Promise<void> {
+    await this.getCortexTarget().clearHardwareBreakpoint(address)
   }
 
   private getProcessor(): CortexMInstance {
@@ -159,5 +162,12 @@ export class CmsisDapWebDriver implements ProbeDriver, MemoryAccess, DebugTarget
       throw new Error('CMSIS-DAP driver is not connected')
     }
     return this.processor
+  }
+
+  private getCortexTarget(): CortexMDebugTarget {
+    if (!this.cortexTarget) {
+      this.cortexTarget = new CortexMDebugTarget(this)
+    }
+    return this.cortexTarget
   }
 }
