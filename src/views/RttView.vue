@@ -341,6 +341,7 @@ const memoryViewAddressInput = ref('0x20000000')
 const memoryViewLengthInput = ref(128)
 const memoryViewHexLines = ref<string[]>([])
 const memoryViewError = ref('')
+let debugTargetInstance: CortexMDebugTarget | null = null
 
 const coreRegisterItems = computed(() => {
   const names = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'SP', 'LR', 'PC', 'XPSR']
@@ -353,7 +354,7 @@ const coreRegisterItems = computed(() => {
 
 const memoryViewByteLength = computed(() => {
   const value = memoryViewLengthInput.value
-  if (!Number.isFinite(value)) return 0
+  if (!Number.isFinite(value)) return null
   return Math.max(16, Math.min(512, Math.floor(value)))
 })
 type FlashDiagCode = 'permission' | 'disconnected' | 'range' | 'verify' | 'protected' | 'config' | 'generic'
@@ -460,7 +461,8 @@ function parseHexAddress(value: string): number | null {
 }
 
 function createDebugTarget(): CortexMDebugTarget {
-  return new CortexMDebugTarget({
+  if (debugTargetInstance) return debugTargetInstance
+  debugTargetInstance = new CortexMDebugTarget({
     read8: (address, length) => webUsbRtt.readMemory(address, length),
     write8: (address, data) => webUsbRtt.writeMemory(address, data),
     read32: async (address, words) => {
@@ -481,6 +483,7 @@ function createDebugTarget(): CortexMDebugTarget {
       await webUsbRtt.writeMemory(address, bytes)
     },
   })
+  return debugTargetInstance
 }
 
 async function refreshCoreRegisters(): Promise<void> {
@@ -634,8 +637,13 @@ async function readMemoryPreview(): Promise<void> {
     memoryViewError.value = '内存地址必须是十六进制'
     return
   }
+  const byteLength = memoryViewByteLength.value
+  if (byteLength === null) {
+    memoryViewError.value = '读取长度必须是数字'
+    return
+  }
   try {
-    const bytes = await webUsbRtt.readMemory(address, memoryViewByteLength.value)
+    const bytes = await webUsbRtt.readMemory(address, byteLength)
     const lines: string[] = []
     for (let offset = 0; offset < bytes.length; offset += 16) {
       const chunk = bytes.slice(offset, offset + 16)
@@ -981,7 +989,9 @@ watch(isConnected, connected => {
     debugControlState.value = 'idle'
     coreRegisters.value = new Uint32Array(17)
     breakpointRestoreStatus.value = ''
+    debugTargetInstance = null
   } else {
+    debugTargetInstance = null
     void reapplyHardwareBreakpoints()
   }
 })
