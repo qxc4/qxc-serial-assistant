@@ -1,6 +1,7 @@
 export * from './cortexMDebugTarget'
 export * from './cmsisDapDriver'
 export * from './debugInterfaces'
+export * from './gdbRspAdapter'
 export * from './gdbRspCore'
 export * from './programImage'
 export * from './rttCore'
