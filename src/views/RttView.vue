@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
+import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 import { useRtt, BACKEND_REQUIREMENTS } from '../composables/useRtt'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useI18n } from '../composables/useI18n'
@@ -334,12 +334,15 @@ const debugControlError = ref('')
 const coreRegisters = ref<Uint32Array>(new Uint32Array(17))
 const breakpointInput = ref('0x08000000')
 const hardwareBreakpoints = ref<number[]>([])
+const registerPanelRef = ref<HTMLElement | null>(null)
+const BREAKPOINT_SESSION_KEY = 'qxc-serial-rtt-breakpoints'
 
 const coreRegisterItems = computed(() => {
   const names = ['R0', 'R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10', 'R11', 'R12', 'SP', 'LR', 'PC', 'XPSR']
   return names.map((name, index) => ({
     name,
     value: coreRegisters.value[index] ?? 0,
+    isKey: name === 'SP' || name === 'LR' || name === 'PC',
   }))
 })
 type FlashDiagCode = 'permission' | 'disconnected' | 'range' | 'verify' | 'protected' | 'config' | 'generic'
@@ -483,6 +486,32 @@ async function refreshCoreRegisters(): Promise<void> {
   }
 }
 
+function persistHardwareBreakpoints(): void {
+  sessionStorage.setItem(BREAKPOINT_SESSION_KEY, JSON.stringify(hardwareBreakpoints.value))
+}
+
+function restoreHardwareBreakpoints(): void {
+  const raw = sessionStorage.getItem(BREAKPOINT_SESSION_KEY)
+  if (!raw) return
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      hardwareBreakpoints.value = parsed
+        .map(item => Number(item))
+        .filter(item => Number.isInteger(item) && item >= 0)
+        .sort((a, b) => a - b)
+    }
+  } catch {
+    // ignore malformed session cache
+  }
+}
+
+async function focusPcRegisterRow(): Promise<void> {
+  await nextTick()
+  const row = registerPanelRef.value?.querySelector<HTMLElement>('[data-reg-name="PC"]')
+  row?.scrollIntoView({ block: 'nearest' })
+}
+
 async function handleDebugAction(action: 'halt' | 'resume' | 'step' | 'reset'): Promise<void> {
   if (!isConnected.value) {
     debugControlError.value = '请先连接调试探针'
@@ -494,6 +523,9 @@ async function handleDebugAction(action: 'halt' | 'resume' | 'step' | 'reset'): 
     debugControlState.value = state === 'unknown' ? 'idle' : state
     debugControlError.value = ''
     await refreshCoreRegisters()
+    if (action === 'step') {
+      await focusPcRegisterRow()
+    }
   } catch (error) {
     debugControlState.value = 'error'
     debugControlError.value = error instanceof Error ? error.message : String(error)
@@ -515,6 +547,7 @@ async function addHardwareBreakpoint(): Promise<void> {
     await target.setHardwareBreakpoint(address)
     if (!hardwareBreakpoints.value.includes(address)) {
       hardwareBreakpoints.value = [...hardwareBreakpoints.value, address].sort((a, b) => a - b)
+      persistHardwareBreakpoints()
     }
     debugControlError.value = ''
   } catch (error) {
@@ -531,6 +564,7 @@ async function removeHardwareBreakpoint(address: number): Promise<void> {
     const target = createDebugTarget()
     await target.clearHardwareBreakpoint(address)
     hardwareBreakpoints.value = hardwareBreakpoints.value.filter(item => item !== address)
+    persistHardwareBreakpoints()
     debugControlError.value = ''
   } catch (error) {
     debugControlError.value = error instanceof Error ? error.message : String(error)
@@ -866,6 +900,10 @@ watch(isConnected, connected => {
     coreRegisters.value = new Uint32Array(17)
     hardwareBreakpoints.value = []
   }
+})
+
+onMounted(() => {
+  restoreHardwareBreakpoints()
 })
 
 onUnmounted(() => {
@@ -2066,8 +2104,16 @@ rtt server start 9090 0</pre>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400">
-          <div v-for="item in coreRegisterItems" :key="item.name" class="flex items-center justify-between rounded bg-slate-50 dark:bg-slate-800/50 px-1.5 py-1">
+        <div ref="registerPanelRef" class="grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400 max-h-36 overflow-auto pr-1">
+          <div
+            v-for="item in coreRegisterItems"
+            :key="item.name"
+            :data-reg-name="item.name"
+            class="flex items-center justify-between rounded px-1.5 py-1"
+            :class="item.isKey
+              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800'
+              : 'bg-slate-50 dark:bg-slate-800/50'"
+          >
             <span class="text-slate-400 dark:text-slate-500">{{ item.name }}</span>
             <span class="font-mono text-slate-600 dark:text-slate-300">{{ formatHexAddress(item.value) }}</span>
           </div>
