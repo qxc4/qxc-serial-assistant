@@ -20,11 +20,11 @@ import {
   useSerialParsePanel,
 } from '../features/serial'
 import SerialSessionReplayPanel from '../components/serial/SerialSessionReplayPanel.vue'
-import SerialSessionStrip from '../components/serial/SerialSessionStrip.vue'
 import SerialParseResultsPanel from '../components/serial/SerialParseResultsPanel.vue'
 import SerialSendPanel from '../components/serial/SerialSendPanel.vue'
 import SerialLogPanel from '../components/serial/SerialLogPanel.vue'
 import SerialMiddleToolbar from '../components/serial/SerialMiddleToolbar.vue'
+import SerialTopToolbar from '../components/serial/SerialTopToolbar.vue'
 import { 
   matchesShortcutFast, 
   preparseShortcuts,
@@ -38,10 +38,9 @@ import {
 import { 
   Trash2, Bluetooth,
   Usb, Plus, Play, Pause, Trash,
-  PanelLeft, PanelBottom, PanelRight, Maximize,
   ListOrdered, Save, FolderOpen, Square,
   ChevronRight, Clock, AlertCircle, CheckCircle2, XCircle, Loader2,
-  Send, RefreshCw, Keyboard, Search, FileCode
+  Send, RefreshCw, Keyboard, FileCode
 } from 'lucide-vue-next'
 
 const settingsStore = useSettingsStore()
@@ -976,90 +975,27 @@ onUnmounted(cleanupButtonOptimizations)
 
       <!-- Middle Panel: Data View & Send -->
       <div class="apple-content flex-1 flex flex-col bg-white dark:bg-slate-800 min-w-0">
-        <!-- Top Toolbar -->
-        <div class="apple-toolbar border-b dark:border-slate-700 bg-slate-50/85 dark:bg-slate-900/85 shrink-0 px-3 py-2">
-          <div class="flex items-center gap-2">
-            <button
-              @click="showLeftPanel = true"
-              class="min-w-0 max-w-[240px] rounded-lg border px-2.5 py-1.5 text-left transition-colors flex items-center gap-2"
-              :class="isConnected
-                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-950/30 dark:text-green-300'
-                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'"
-              title="打开连接抽屉"
-            >
-              <Usb class="h-4 w-4 shrink-0" />
-              <span class="min-w-0">
-                <span class="block truncate text-[11px] font-semibold">
-                  {{ isConnected ? t('serial.connected') : t('serial.serialSettings') }}
-                </span>
-                <span class="block truncate text-[10px] opacity-75">{{ connectionSummary }}</span>
-              </span>
-            </button>
-
-            <div class="relative min-w-0 flex-1 max-w-sm">
-              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                v-model="searchQuery"
-                type="text"
-                :placeholder="t('serial.searchPlaceholder')"
-                class="w-full pl-9 pr-7 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-shadow"
-              />
-              <button
-                v-if="searchQuery"
-                @click="searchQuery = ''"
-                class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              >
-                <XCircle class="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div class="hidden md:flex items-center gap-1.5 text-[10px] text-slate-500 dark:text-slate-400 px-2 py-1 rounded bg-white dark:bg-slate-800 border dark:border-slate-700">
-              <span>{{ filteredReceivedData.length }}</span>
-              <span>/</span>
-              <span>{{ dataCount.toLocaleString() }}</span>
-            </div>
-
-            <div class="hidden xl:flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
-              <span
-                class="rounded-full px-2 py-0.5"
-                :class="serialSessionDiagnostics.receiveAfterLastTx ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300'"
-              >
-                {{ serialResponseState }}
-              </span>
-              <span>TX {{ serialSessionDiagnostics.txEntries }}</span>
-              <span>RX {{ serialSessionDiagnostics.rxEntries }}</span>
-              <span>静默 {{ formatSerialDuration(serialSessionDiagnostics.silenceMs) }}</span>
-              <span v-if="serialSessionDiagnostics.averageTxIntervalMs !== null">
-                均隔 {{ formatSerialDuration(serialSessionDiagnostics.averageTxIntervalMs) }}
-              </span>
-            </div>
-
-            <div class="flex items-center gap-1 text-slate-600 dark:text-slate-400">
-              <button @click="showLeftPanel = !showLeftPanel" :class="showLeftPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换连接抽屉"><PanelLeft class="w-4 h-4" /></button>
-              <button @click="showBottomPanel = !showBottomPanel" :class="showBottomPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换底部栏"><PanelBottom class="w-4 h-4" /></button>
-              <button @click="showRightPanel = !showRightPanel" :class="showRightPanel ? 'text-slate-900 dark:text-slate-100 bg-slate-200 dark:bg-slate-700' : 'text-slate-400'" class="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="切换右侧栏"><PanelRight class="w-4 h-4" /></button>
-              <button @click="showLeftPanel = false; showRightPanel = false; showBottomPanel = false" class="p-1.5 text-slate-400 hover:text-slate-900 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition-colors" title="最大化视图"><Maximize class="w-4 h-4" /></button>
-            </div>
-          </div>
-          <div class="mt-2 flex items-center gap-2">
-            <SerialSessionStrip
-              class="min-w-0 flex-1"
-              :sessions="serialSessions"
-              :active-session-id="activeSerialSessionId"
-              :max-sessions="serialSessionController.state.maxSessions"
-              :is-connected="isConnected"
-              @add-session="addSerialSessionSlot"
-              @remove-session="removeSerialSessionSlot"
-              @set-active-session="setActiveSerialSession"
-            />
-            <div
-              v-if="activeSerialSession"
-              class="hidden shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 lg:block"
-            >
-              {{ activeSerialSession.connectionLabel }}
-            </div>
-          </div>
-        </div>
+        <SerialTopToolbar
+          v-model:search-query="searchQuery"
+          v-model:show-left-panel="showLeftPanel"
+          v-model:show-bottom-panel="showBottomPanel"
+          v-model:show-right-panel="showRightPanel"
+          :is-connected="isConnected"
+          :connection-summary="connectionSummary"
+          :filtered-count="filteredReceivedData.length"
+          :data-count="dataCount"
+          :serial-response-state="serialResponseState"
+          :serial-session-diagnostics="serialSessionDiagnostics"
+          :serial-sessions="serialSessions"
+          :active-serial-session-id="activeSerialSessionId"
+          :active-serial-session="activeSerialSession"
+          :max-sessions="serialSessionController.state.maxSessions"
+          :t="t"
+          :format-serial-duration="formatSerialDuration"
+          @add-session="addSerialSessionSlot"
+          @remove-session="removeSerialSessionSlot"
+          @set-active-session="setActiveSerialSession"
+        />
 
         <SerialLogPanel
           ref="virtualListRef"
