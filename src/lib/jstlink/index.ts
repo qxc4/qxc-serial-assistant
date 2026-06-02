@@ -14,6 +14,7 @@
 
 /// <reference path="../../types/webusb.d.ts" />
 
+import type { FlashChipFamily } from '../../debug-core/flashFamilies'
 import { RttMemorySession } from '../../debug-core/rttMemorySession'
 
 // ==================== 常量定义 ====================
@@ -454,13 +455,13 @@ export class JSTLink {
     }
   }
 
-  /**
-   * 擦除 STM32F1 Flash 页（实验实现）
-   */
   async eraseFlashPage(address: number): Promise<void> {
     if (this.flashChipFamily === 'stm32f4') {
       await this.eraseFlashSectorStm32f4(address)
       return
+    }
+    if (this.flashChipFamily !== 'stm32f1') {
+      throw new Error(`${this.flashChipFamily.toUpperCase()} 纯 Web ST-Link 擦除算法尚未实现，请先使用 Dry-run 校验范围`)
     }
     await this.eraseFlashPageStm32f1(address)
   }
@@ -664,5 +665,3 @@ function stm32f4AddressToSector(address: number): number {
   if (address >= 0x08060000 && address < 0x08080000) return 7
   return -1
 }
-
-export type FlashChipFamily = 'stm32f1' | 'stm32f4'

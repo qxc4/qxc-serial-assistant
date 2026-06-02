@@ -58,7 +58,7 @@
 | 寄存器/内存查看 | experimental | 增加寄存器批量刷新状态；需要目标连接后验证。 |
 | 断点 | experimental | Cortex-M FPB 路线已有基础，增加槽位诊断；需硬件验收。 |
 | 变量查看 | experimental | ELF symbol 基础支持，新增 PC 函数定位、primitive/best-effort 摘要和复合变量标注；完整 DWARF 复杂变量仍 best-effort。 |
-| Flash dry-run/erase/program/verify | experimental | STM32 常见族优先，需硬件验收。 |
+| Flash dry-run/erase/program/verify | experimental | STM32F1/F4 可执行路径保留；G0/G4/H7 已补 profile、dry-run 范围规划和 unsupported 诊断，真实擦除算法需硬件扩展。 |
 | GDB-RSP 内核 | experimental | 内置命令核心，不暴露 TCP server。 |
 | 硬件 mock 集成测试 | done | 已提供 mock probe/memory/flash 基座，覆盖 RTT 扫描、Up/Down、RAM 读写和 Flash verify。 |
 | 桌面 GDB 直连 | blocked-by-browser | 浏览器不能监听本地 TCP；需要未来极小 relay 才能实现。 |
@@ -106,3 +106,4 @@
 - 当前轮次：Serial 协议模板库，覆盖 AT、Modbus、NMEA、STM32 bootloader 和自定义帧快捷命令生成。
 - 当前轮次：Serial 会话录制与回放，覆盖 `.qxc-session.json` 导入导出、TX 原始字节回放和模拟日志时间线。
 - 当前轮次：RTT 变量查看增强，覆盖 ELF 函数/对象符号摘要、PC 所在函数定位和复合变量 best-effort 标注。
+- 当前轮次：Flash 芯片族扩展，覆盖 STM32G0/G4/H7 profile、识别关键字、默认范围、dry-run 规划和未支持擦除算法诊断。

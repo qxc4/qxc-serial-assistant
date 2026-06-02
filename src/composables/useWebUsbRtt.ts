@@ -17,6 +17,7 @@
 /// <reference path="../types/webusb.d.ts" />
 
 import { ref, shallowRef, computed, onUnmounted } from 'vue'
+import type { FlashChipFamily } from '../debug-core/flashFamilies'
 import type {
   WebUsbProbeInfo,
   WebUsbState,
@@ -54,10 +55,10 @@ interface JSTLinkInterface {
   readMemory8(address: number, bytes: number): Promise<Uint8Array>
   /** 写入目标内存 */
   writeMemory8(address: number, data: Uint8Array): Promise<void>
-  /** 擦除 Flash 页（STM32F1 实验路径） */
+  /** 擦除 Flash 页/扇区（按芯片族实验路径） */
   eraseFlashPage(address: number): Promise<void>
   /** 设置 Flash 芯片族 */
-  setFlashChipFamily(family: 'stm32f1' | 'stm32f4'): void
+  setFlashChipFamily(family: FlashChipFamily): void
   /** 设置 SWD 频率 */
   setSpeed(frequency: number): Promise<void>
   /** 注册事件监听 */
@@ -668,7 +669,7 @@ export function useWebUsbRtt() {
     await jstlink.eraseFlashPage(address)
   }
 
-  function setFlashChipFamily(family: 'stm32f1' | 'stm32f4'): void {
+  function setFlashChipFamily(family: FlashChipFamily): void {
     jstlink?.setFlashChipFamily(family)
   }
 

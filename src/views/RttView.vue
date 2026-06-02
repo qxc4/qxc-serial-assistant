@@ -3,8 +3,8 @@ import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
-import { createIdleRttHardwareCheckSteps, createMockRttHardwareCheckDefinitions, parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, runRttHardwareChecks, serializeRttHardwareCheckReport, summarizeFlashOperationProgress, createVariableSpecsFromSymbols, summarizeVariableImage } from '../debug-core'
-import type { FlashDryRunReport, FlashVerifyReport, RttHardwareCheckDefinition, RttHardwareCheckReport, RttHardwareCheckStep, VariableSpec, VariableValue } from '../debug-core'
+import { createIdleRttHardwareCheckSteps, createMockRttHardwareCheckDefinitions, parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, runRttHardwareChecks, serializeRttHardwareCheckReport, summarizeFlashOperationProgress, createVariableSpecsFromSymbols, summarizeVariableImage, getFlashFamilyProfile, detectFlashFamilyFromText, createUnsupportedFlashFamilyMessage } from '../debug-core'
+import type { FlashChipFamily, FlashDryRunReport, FlashVerifyReport, RttHardwareCheckDefinition, RttHardwareCheckReport, RttHardwareCheckStep, VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import { RTT_SOURCE_FILES, RTT_SOURCE_REPOSITORY_URL, downloadRttSourceFile, type RttSourceFile } from '../debug-core/rttSourceDownloads'
 import { createProbeCapabilityMatrix } from '../debug-core/probeCapabilityMatrix'
@@ -280,7 +280,7 @@ const firmwareName = ref('')
 const firmwareImage = ref<ProgramImage | null>(null)
 const firmwareBaseAddressInput = ref('0x08000000')
 const flashPageSizeInput = ref(2048)
-const flashChipFamily = ref<'stm32f1' | 'stm32f4'>('stm32f1')
+const flashChipFamily = ref<FlashChipFamily>('stm32f1')
 const flashStartAddressInput = ref('0x08000000')
 const flashEndAddressInput = ref('0x08080000')
 const detectedChipLabel = ref('')
@@ -293,6 +293,7 @@ const flashStage = ref<'idle' | 'erase' | 'program' | 'verify' | 'done'>('idle')
 const flashHint = ref('')
 const flashVerifyReport = ref<FlashVerifyReport | null>(null)
 const flashOperationSummary = ref('')
+const flashFamilyProfile = computed(() => getFlashFamilyProfile(flashChipFamily.value))
 const {
   debugControlState,
   debugControlError,
@@ -389,6 +390,13 @@ const flashPrecheckItems = computed(() => {
       label: '连接',
       state: isConnected.value ? 'ok' : 'warn',
       detail: isConnected.value ? '探针已连接' : '执行写入前需要连接',
+    },
+    {
+      label: '芯片族算法',
+      state: flashFamilyProfile.value.stlinkEraseSupported ? 'ok' : 'warn',
+      detail: flashFamilyProfile.value.stlinkEraseSupported
+        ? `${flashFamilyProfile.value.label} 可执行擦除`
+        : `${flashFamilyProfile.value.label} 当前仅 dry-run/规划`,
     },
   ]
 
@@ -747,7 +755,16 @@ function flashRegionConfig(): { name: string; start: number; end: number; pageSi
     throw new Error('Flash 结束地址必须大于起始地址')
   }
 
-  return { name: 'main-flash', start, end, pageSize }
+  return { name: `${flashFamilyProfile.value.label} main flash`, start, end, pageSize }
+}
+
+function applyFlashFamilyDefaults(family: FlashChipFamily): void {
+  const profile = getFlashFamilyProfile(family)
+  flashChipFamily.value = family
+  flashPageSizeInput.value = profile.pageSize
+  flashStartAddressInput.value = formatHexAddress(profile.start)
+  flashEndAddressInput.value = formatHexAddress(profile.end)
+  flashHint.value = `已应用 ${profile.label} 配置：${profile.note}`
 }
 
 async function handleFirmwareSelected(event: Event): Promise<void> {
@@ -836,21 +853,10 @@ async function detectFlashChipFamily(): Promise<void> {
   try {
     const info = await webUsbRtt.readChipInfo()
     detectedChipLabel.value = `${info.name} / ${info.core}`
-    const normalized = `${info.name} ${info.core}`.toLowerCase()
-    if (normalized.includes('f1') || normalized.includes('m3')) {
-      flashChipFamily.value = 'stm32f1'
-      flashPageSizeInput.value = 1024
-      flashStartAddressInput.value = '0x08000000'
-      flashEndAddressInput.value = '0x08080000'
-      flashHint.value = '已自动建议 STM32F1 配置（1KB 页，512KB 范围）。'
-      return
-    }
-    if (normalized.includes('f4') || normalized.includes('m4')) {
-      flashChipFamily.value = 'stm32f4'
-      flashPageSizeInput.value = 16384
-      flashStartAddressInput.value = '0x08000000'
-      flashEndAddressInput.value = '0x08080000'
-      flashHint.value = '已自动建议 STM32F4 配置（16KB 基础页，示例范围）。'
+    const profile = detectFlashFamilyFromText(`${info.name} ${info.core}`)
+    if (profile) {
+      applyFlashFamilyDefaults(profile.family)
+      flashHint.value = `已自动建议 ${profile.label} 配置。${profile.note}`
       return
     }
     flashHint.value = '未能自动识别芯片族，请手动确认芯片族。'
@@ -881,6 +887,10 @@ async function programFirmware(): Promise<void> {
 
   try {
     webUsbRtt.setFlashChipFamily(flashChipFamily.value)
+    const unsupportedMessage = createUnsupportedFlashFamilyMessage(flashFamilyProfile.value)
+    if (unsupportedMessage) {
+      throw new Error(unsupportedMessage)
+    }
     const sections = firmwareImage.value.sections
     const region = flashRegionConfig()
     const report = createFlashDryRunReport({
@@ -959,6 +969,13 @@ async function programFirmware(): Promise<void> {
 }
 
 watch([variableAutoRefresh, variableRefreshMs], resetVariableRefreshTimer)
+watch(flashChipFamily, family => {
+  const profile = getFlashFamilyProfile(family)
+  flashPageSizeInput.value = profile.pageSize
+  flashStartAddressInput.value = formatHexAddress(profile.start)
+  flashEndAddressInput.value = formatHexAddress(profile.end)
+  flashHint.value = `已切换到 ${profile.label}：${profile.note}`
+})
 watch(isConnected, connected => {
   if (!connected) {
     variableAutoRefresh.value = false

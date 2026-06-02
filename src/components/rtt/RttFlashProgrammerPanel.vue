@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import type { FlashDryRunReport, FlashVerifyReport } from '../../debug-core'
+import type { FlashChipFamily, FlashDryRunReport, FlashVerifyReport } from '../../debug-core'
 
 type FlashStatus = 'idle' | 'planning' | 'ready' | 'programming' | 'success' | 'error'
 type FlashStage = 'idle' | 'erase' | 'program' | 'verify' | 'done'
-type FlashChipFamily = 'stm32f1' | 'stm32f4'
 
 interface FlashPrecheckItem {
   label: string
@@ -99,6 +98,9 @@ const emit = defineEmits<{
       >
         <option value="stm32f1">STM32F1</option>
         <option value="stm32f4">STM32F4</option>
+        <option value="stm32g0">STM32G0</option>
+        <option value="stm32g4">STM32G4</option>
+        <option value="stm32h7">STM32H7</option>
       </select>
     </div>
 
@@ -285,7 +287,7 @@ const emit = defineEmits<{
       {{ flashHint }}
     </div>
     <div class="text-[10px] text-yellow-600 dark:text-yellow-400">
-      当前为实验擦页：已支持 STM32F1 页擦除与 STM32F4 扇区擦除(0-7)。
+      当前为实验擦页：STM32F1/F4 可执行；STM32G0/G4/H7 已支持 dry-run/范围规划，真实擦除算法待硬件验证。
     </div>
   </div>
 </template>
