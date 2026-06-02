@@ -25,7 +25,7 @@
 | 快捷命令 | done | 支持启用、HEX、延迟、批量发送、循环发送。 |
 | 指令组/版本/恢复点 | done | 功能完整但文件较大，后续可继续拆 UI。 |
 | 快捷键帮助和自定义快捷键 | done | 与设置页联动。 |
-| 多串口会话架构 | experimental | 已新增 `SerialSessionController` 纯状态模型，真实多端口 Web Serial 连接迁移仍待后续阶段。 |
+| 多串口会话架构 | experimental | 已新增 `SerialSessionController` 和 Serial 顶部会话栏，可管理最多 4 个会话槽；真实多端口 Web Serial 连接迁移仍待后续阶段。 |
 | 蓝牙串口 | missing | 当前仅显示 coming soon。 |
 
 ## Modbus
@@ -111,3 +111,4 @@
 - 当前轮次：J-Link 研究诊断，覆盖纯 Web 协议、SEGGER GDB Server、本地 relay、SDK 授权集成四条路线说明。
 - 当前轮次：页面组件化，拆出 Serial 会话录制/回放面板和 RTT J-Link 诊断面板，页面继续保留业务状态组合。
 - 当前轮次：多串口架构 groundwork，新增 SerialSessionController，覆盖默认会话兼容、最多 4 会话、激活/重命名/删除和统计隔离。
+- 当前轮次：Serial 多会话 UI 接入，顶部会话栏显示默认真实连接和占位会话槽，默认会话统计跟随当前 Web Serial 单例。
