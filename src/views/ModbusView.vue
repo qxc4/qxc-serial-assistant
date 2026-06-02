@@ -23,15 +23,23 @@ import { functionCodeNames } from '../types/modbus'
 import type { ModbusParseResult, ModbusMode } from '../types/modbus'
 import {
   bytesToHexInput,
+  createModbusPollingTask,
+  doesModbusResponseMatchTask,
   estimateModbusResponseGap,
   formatModbusPollingProgress,
+  getEnabledModbusPollingTasks,
   normalizeModbusPollingSettings,
   parseCompleteModbusFrame,
   parseRegisterData,
+  serializeModbusPollingTasks,
   shouldContinueModbusPolling,
   summarizeModbusPipeline,
+  summarizeModbusPollingTasks,
+  updateModbusPollingTaskAfterResult,
   type ByteOrder,
   type DataType,
+  type ModbusPollingResult,
+  type ModbusPollingTask,
   type RegisterValue,
 } from '../features/modbus'
 
@@ -97,6 +105,16 @@ const lastPollingSentAt = ref<number | null>(null)
 const lastPollingError = ref('')
 let pollingTimer: ReturnType<typeof setInterval> | null = null
 let isPollingTickInFlight = false
+const pollingTasks = ref<ModbusPollingTask[]>([])
+const pollingResults = ref<ModbusPollingResult[]>([])
+const isTaskPolling = ref(false)
+const activePollingTaskId = ref('')
+const pollingTaskCycle = ref(0)
+const pendingPollingResponse = ref<{
+  task: ModbusPollingTask
+  resolve: (value: { bytes: number[]; result: ModbusParseResult }) => void
+} | null>(null)
+let stopTaskPollingRequested = false
 
 /** 展开的解析结果 */
 const expandedResult = ref<string | null>(null)
@@ -107,6 +125,12 @@ const normalizedPollingSettings = computed(() => normalizeModbusPollingSettings(
 const pollingProgressLabel = computed(() => formatModbusPollingProgress(sentPollingCycles.value, normalizedPollingSettings.value.maxCycles))
 const pipelineDiagnostics = computed(() => summarizeModbusPipeline(parseResults.value))
 const pollingResponseGap = computed(() => estimateModbusResponseGap(sentPollingCycles.value, pipelineDiagnostics.value.total))
+const taskPollingSummary = computed(() => ({
+  ...summarizeModbusPollingTasks(pollingTasks.value),
+  isRunning: isTaskPolling.value,
+  activeTaskId: activePollingTaskId.value,
+  cycle: pollingTaskCycle.value,
+}))
 const activeParseResult = computed(() => {
   return parseResults.value.find(item => item.id === expandedResult.value) || parseResults.value[0] || null
 })
@@ -223,88 +247,95 @@ function handleParse() {
 /**
  * 构建 Modbus 帧
  */
-function handleBuild() {
-  const { address, functionCode, startAddress, quantity, writeValue } = buildSettings.value
-  
-  if (address < 0 || address > 247) {
-    settingsStore.showToast('从站地址必须在 0-247 范围内')
-    return
-  }
-  
+function buildModbusRequestData(functionCode: number, startAddress: number, quantity: number, writeValue: string): number[] | null {
   if (startAddress < 0 || startAddress > 65535) {
     settingsStore.showToast('起始地址必须在 0-65535 范围内')
-    return
+    return null
   }
   
   if (quantity < 1 || quantity > 125) {
     settingsStore.showToast('数量必须在 1-125 范围内')
-    return
+    return null
   }
   
-  try {
-    let data: number[] = []
+  switch (functionCode) {
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+      return [
+        (startAddress >> 8) & 0xFF,
+        startAddress & 0xFF,
+        (quantity >> 8) & 0xFF,
+        quantity & 0xFF
+      ]
     
-    switch (functionCode) {
-      case 1:
-      case 2:
-      case 3:
-      case 4:
-        data = [
-          (startAddress >> 8) & 0xFF,
-          startAddress & 0xFF,
-          (quantity >> 8) & 0xFF,
-          quantity & 0xFF
-        ]
-        break
-      
-      case 5: {
-        const coilValue = writeValue === '1' || writeValue.toUpperCase() === 'ON' ? 0xFF00 : 0x0000
-        data = [
-          (startAddress >> 8) & 0xFF,
-          startAddress & 0xFF,
-          (coilValue >> 8) & 0xFF,
-          coilValue & 0xFF
-        ]
-        break
-      }
-      
-      case 6: {
-        const regValue = parseInt(writeValue, 10) || 0
-        if (regValue < 0 || regValue > 65535) {
-          settingsStore.showToast('写入值必须在 0-65535 范围内')
-          return
-        }
-        data = [
-          (startAddress >> 8) & 0xFF,
-          startAddress & 0xFF,
-          (regValue >> 8) & 0xFF,
-          regValue & 0xFF
-        ]
-        break
-      }
-      
-      case 15:
-      case 16: {
-        const values = writeValue.split(',').map(v => parseInt(v.trim(), 10) || 0)
-        if (values.length === 0 || values.length > 123) {
-          settingsStore.showToast('写入值数量必须在 1-123 范围内')
-          return
-        }
-        const byteCount = functionCode === 15 ? Math.ceil(values.length / 8) : values.length * 2
-        data = [
-          (startAddress >> 8) & 0xFF,
-          startAddress & 0xFF,
-          (values.length >> 8) & 0xFF,
-          values.length & 0xFF,
-          byteCount,
-          ...values.flatMap(v => functionCode === 16 ? [(v >> 8) & 0xFF, v & 0xFF] : [v])
-        ]
-        break
-      }
+    case 5: {
+      const coilValue = writeValue === '1' || writeValue.toUpperCase() === 'ON' ? 0xFF00 : 0x0000
+      return [
+        (startAddress >> 8) & 0xFF,
+        startAddress & 0xFF,
+        (coilValue >> 8) & 0xFF,
+        coilValue & 0xFF
+      ]
     }
     
-    const frame = buildModbusFrame(address, functionCode, data, parseMode.value)
-    buildResult.value = frame.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ')
+    case 6: {
+      const regValue = parseInt(writeValue, 10) || 0
+      if (regValue < 0 || regValue > 65535) {
+        settingsStore.showToast('写入值必须在 0-65535 范围内')
+        return null
+      }
+      return [
+        (startAddress >> 8) & 0xFF,
+        startAddress & 0xFF,
+        (regValue >> 8) & 0xFF,
+        regValue & 0xFF
+      ]
+    }
+    
+    case 15:
+    case 16: {
+      const values = writeValue.split(',').map(v => parseInt(v.trim(), 10) || 0)
+      if (values.length === 0 || values.length > 123) {
+        settingsStore.showToast('写入值数量必须在 1-123 范围内')
+        return null
+      }
+      const byteCount = functionCode === 15 ? Math.ceil(values.length / 8) : values.length * 2
+      return [
+        (startAddress >> 8) & 0xFF,
+        startAddress & 0xFF,
+        (values.length >> 8) & 0xFF,
+        values.length & 0xFF,
+        byteCount,
+        ...values.flatMap(v => functionCode === 16 ? [(v >> 8) & 0xFF, v & 0xFF] : [v])
+      ]
+    }
+  }
+
+  settingsStore.showToast('暂不支持该功能码')
+  return null
+}
+
+function buildFrameHexFromRequest(address: number, functionCode: number, startAddress: number, quantity: number, writeValue: string): string {
+  if (address < 0 || address > 247) {
+    settingsStore.showToast('从站地址必须在 0-247 范围内')
+    return ''
+  }
+
+  const data = buildModbusRequestData(functionCode, startAddress, quantity, writeValue)
+  if (!data) return ''
+  const frame = buildModbusFrame(address, functionCode, data, parseMode.value)
+  return frame.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ')
+}
+
+function handleBuild() {
+  const { address, functionCode, startAddress, quantity, writeValue } = buildSettings.value
+  
+  try {
+    const frame = buildFrameHexFromRequest(address, functionCode, startAddress, quantity, writeValue)
+    if (!frame) return
+    buildResult.value = frame
   } catch (e) {
     settingsStore.showToast(t('modbus.buildFailed') + '：' + (e instanceof Error ? e.message : String(e)))
   }
@@ -401,13 +432,218 @@ function startModbusPolling() {
   }, normalized.intervalMs)
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, ms))
+}
+
+function updatePollingTask(taskId: string, updater: (task: ModbusPollingTask) => ModbusPollingTask): void {
+  pollingTasks.value = pollingTasks.value.map(task => task.id === taskId ? updater(task) : task)
+}
+
+function addCurrentRequestAsPollingTask(): void {
+  const task = createModbusPollingTask({
+    name: `从站 ${buildSettings.value.address} / ${functionCodeNames[buildSettings.value.functionCode] || `FC${buildSettings.value.functionCode}`}`,
+    address: buildSettings.value.address,
+    functionCode: buildSettings.value.functionCode,
+    startAddress: buildSettings.value.startAddress,
+    quantity: buildSettings.value.quantity,
+    writeValue: buildSettings.value.writeValue,
+    intervalMs: pollingSettings.value.intervalMs,
+    timeoutMs: 1000,
+    retries: 1,
+    failurePolicy: 'continue',
+  }, pollingTasks.value.length)
+  pollingTasks.value = [...pollingTasks.value, task]
+}
+
+function removePollingTask(taskId: string): void {
+  if (isTaskPolling.value) return
+  pollingTasks.value = pollingTasks.value.filter(task => task.id !== taskId)
+}
+
+function togglePollingTask(taskId: string): void {
+  if (isTaskPolling.value) return
+  updatePollingTask(taskId, task => ({ ...task, enabled: !task.enabled }))
+}
+
+function buildFrameHexFromTask(task: ModbusPollingTask): string {
+  return buildFrameHexFromRequest(task.address, task.functionCode, task.startAddress, task.quantity, task.writeValue)
+}
+
+function waitForPollingResponse(task: ModbusPollingTask, timeoutMs: number): Promise<{ bytes: number[]; result: ModbusParseResult }> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      if (pendingPollingResponse.value?.task.id === task.id) {
+        pendingPollingResponse.value = null
+      }
+      reject(new Error('响应超时'))
+    }, timeoutMs)
+
+    pendingPollingResponse.value = {
+      task,
+      resolve: value => {
+        window.clearTimeout(timeoutId)
+        pendingPollingResponse.value = null
+        resolve(value)
+      },
+    }
+  })
+}
+
+function recordPollingResult(result: ModbusPollingResult): void {
+  pollingResults.value = [result, ...pollingResults.value].slice(0, 500)
+}
+
+async function runPollingTask(task: ModbusPollingTask): Promise<boolean> {
+  const requestHex = buildFrameHexFromTask(task)
+  if (!requestHex) return false
+
+  updatePollingTask(task.id, current => ({ ...current, status: 'running', lastError: '' }))
+  activePollingTaskId.value = task.id
+
+  for (let attempt = 1; attempt <= task.retries + 1; attempt++) {
+    if (stopTaskPollingRequested) return false
+
+    const startedAt = Date.now()
+    try {
+      const responsePromise = waitForPollingResponse(task, task.timeoutMs)
+      await sendSerial(requestHex, true)
+      const response = await responsePromise
+      const finishedAt = Date.now()
+      const updatedTask = updateModbusPollingTaskAfterResult(task, 'success', finishedAt)
+      updatePollingTask(task.id, current => ({
+        ...updatedTask,
+        enabled: current.enabled,
+        name: current.name,
+        intervalMs: current.intervalMs,
+        timeoutMs: current.timeoutMs,
+        retries: current.retries,
+        failurePolicy: current.failurePolicy,
+      }))
+      recordPollingResult({
+        id: `poll-result-${finishedAt}-${Math.random().toString(36).slice(2, 8)}`,
+        taskId: task.id,
+        taskName: task.name,
+        timestamp: finishedAt,
+        attempt,
+        status: 'success',
+        durationMs: finishedAt - startedAt,
+        requestHex,
+        responseHex: bytesToHexInput(response.bytes),
+        error: '',
+      })
+      return true
+    } catch (error) {
+      if (pendingPollingResponse.value?.task.id === task.id) {
+        pendingPollingResponse.value = null
+      }
+      const finishedAt = Date.now()
+      const message = error instanceof Error ? error.message : String(error)
+      if (attempt <= task.retries) {
+        continue
+      }
+      const failedTask = updateModbusPollingTaskAfterResult(task, message === '响应超时' ? 'timeout' : 'failed', finishedAt, message)
+      updatePollingTask(task.id, current => ({
+        ...failedTask,
+        enabled: current.enabled,
+        name: current.name,
+        intervalMs: current.intervalMs,
+        timeoutMs: current.timeoutMs,
+        retries: current.retries,
+        failurePolicy: current.failurePolicy,
+      }))
+      recordPollingResult({
+        id: `poll-result-${finishedAt}-${Math.random().toString(36).slice(2, 8)}`,
+        taskId: task.id,
+        taskName: task.name,
+        timestamp: finishedAt,
+        attempt,
+        status: message === '响应超时' ? 'timeout' : 'failed',
+        durationMs: finishedAt - startedAt,
+        requestHex,
+        responseHex: '',
+        error: message,
+      })
+      lastPollingError.value = message
+      return task.failurePolicy !== 'stop'
+    }
+  }
+
+  return true
+}
+
+async function startTaskPolling(): Promise<void> {
+  if (!isSerialConnected.value) {
+    settingsStore.showToast('请先在串口页连接设备')
+    return
+  }
+  const enabledTasks = getEnabledModbusPollingTasks(pollingTasks.value)
+  if (enabledTasks.length === 0) {
+    settingsStore.showToast('请先添加并启用轮询任务')
+    return
+  }
+
+  stopModbusPolling()
+  isTaskPolling.value = true
+  stopTaskPollingRequested = false
+  pollingTaskCycle.value = 0
+  lastPollingError.value = ''
+
+  try {
+    while (!stopTaskPollingRequested) {
+      pollingTaskCycle.value += 1
+      const tasks = getEnabledModbusPollingTasks(pollingTasks.value)
+      if (tasks.length === 0) break
+      for (const task of tasks) {
+        if (stopTaskPollingRequested) break
+        const shouldContinue = await runPollingTask(task)
+        if (!shouldContinue) {
+          stopTaskPollingRequested = true
+          break
+        }
+        await delay(task.intervalMs)
+      }
+    }
+  } finally {
+    isTaskPolling.value = false
+    activePollingTaskId.value = ''
+    pendingPollingResponse.value = null
+  }
+}
+
+function stopTaskPolling(): void {
+  stopTaskPollingRequested = true
+  isTaskPolling.value = false
+  activePollingTaskId.value = ''
+  pendingPollingResponse.value = null
+}
+
+function exportPollingTasks(): void {
+  const blob = new Blob([serializeModbusPollingTasks(pollingTasks.value)], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `modbus_polling_tasks_${Date.now()}.json`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+  settingsStore.showToast('轮询任务已导出')
+}
+
 const stopSerialDataListener = onDataReceive((data, direction) => {
-  if (direction !== 'rx' || !autoParseSerialResponse.value || data.length === 0) return
+  if (direction !== 'rx' || data.length === 0) return
 
   try {
     const bytes = Array.from(data)
     const result = parseCompleteModbusFrame(bytes, parseMode.value, baudRate.value)
     if (!result) return
+    const pending = pendingPollingResponse.value
+    const matchedPendingTask = pending && result.success && doesModbusResponseMatchTask(pending.task, result.frame)
+    if (matchedPendingTask) {
+      pending.resolve({ bytes, result })
+    }
+    if (!autoParseSerialResponse.value && !matchedPendingTask) return
     lastSerialResponseAt.value = Date.now()
     appendParseResult(bytesToHexInput(bytes), bytes, result)
   } catch (error) {
@@ -417,6 +653,7 @@ const stopSerialDataListener = onDataReceive((data, direction) => {
 
 onUnmounted(() => {
   stopModbusPolling()
+  stopTaskPolling()
   stopSerialDataListener()
 })
 
@@ -736,6 +973,127 @@ function formatTimestamp(timestamp: number): string {
             <div class="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
               <span v-if="lastPollingSentAt">最近发送 {{ formatTimestamp(lastPollingSentAt) }}</span>
               <span v-if="lastPollingError" class="text-red-500 dark:text-red-300">{{ lastPollingError }}</span>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <h4 class="text-xs font-medium text-slate-600 dark:text-slate-300">多请求轮询</h4>
+                <p class="text-[10px] text-slate-400">启用任务串行发送，按地址/功能码匹配响应</p>
+              </div>
+              <span
+                class="rounded-full px-2 py-0.5 text-[10px]"
+                :class="isTaskPolling ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
+              >
+                {{ isTaskPolling ? `第 ${pollingTaskCycle} 轮` : `${pollingTasks.length} 项` }}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-1.5">
+              <button
+                @click="addCurrentRequestAsPollingTask"
+                :disabled="isTaskPolling"
+                class="rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                加入任务
+              </button>
+              <button
+                v-if="!isTaskPolling"
+                @click="startTaskPolling"
+                :disabled="!isSerialConnected || pollingTasks.filter(task => task.enabled).length === 0"
+                class="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[10px] font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-40 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+              >
+                启动队列
+              </button>
+              <button
+                v-else
+                @click="stopTaskPolling"
+                class="rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] font-medium text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+              >
+                停止队列
+              </button>
+              <button
+                @click="exportPollingTasks"
+                :disabled="pollingTasks.length === 0"
+                class="rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                导出任务
+              </button>
+            </div>
+
+            <div class="mt-2 grid grid-cols-3 gap-1 text-center text-[10px]">
+              <div class="rounded bg-slate-50 py-1 dark:bg-slate-950/60">
+                <div class="font-mono text-slate-700 dark:text-slate-200">{{ taskPollingSummary.sent }}</div>
+                <div class="text-slate-400">发送</div>
+              </div>
+              <div class="rounded bg-emerald-50 py-1 dark:bg-emerald-950/30">
+                <div class="font-mono text-emerald-600 dark:text-emerald-300">{{ taskPollingSummary.success }}</div>
+                <div class="text-slate-400">成功</div>
+              </div>
+              <div class="rounded bg-red-50 py-1 dark:bg-red-950/30">
+                <div class="font-mono text-red-600 dark:text-red-300">{{ taskPollingSummary.failed }}</div>
+                <div class="text-slate-400">失败</div>
+              </div>
+            </div>
+
+            <div class="mt-2 max-h-44 space-y-1 overflow-y-auto pr-1">
+              <div v-if="pollingTasks.length === 0" class="rounded bg-slate-50 px-2 py-3 text-center text-[10px] text-slate-400 dark:bg-slate-950/60">
+                暂无任务，可先构建请求后加入任务
+              </div>
+              <div
+                v-for="task in pollingTasks"
+                :key="task.id"
+                class="rounded-lg border px-2 py-1.5 text-[10px]"
+                :class="activePollingTaskId === task.id
+                  ? 'border-blue-300 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/30'
+                  : 'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-950/50'"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <button
+                    @click="togglePollingTask(task.id)"
+                    :disabled="isTaskPolling"
+                    class="min-w-0 truncate text-left font-medium"
+                    :class="task.enabled ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400 line-through'"
+                  >
+                    {{ task.name }}
+                  </button>
+                  <button
+                    @click="removePollingTask(task.id)"
+                    :disabled="isTaskPolling"
+                    class="text-red-500 disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                </div>
+                <div class="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-slate-400">
+                  <span>FC {{ task.functionCode }}</span>
+                  <span>{{ task.intervalMs }}ms</span>
+                  <span>超时 {{ task.timeoutMs }}ms</span>
+                  <span>重试 {{ task.retries }}</span>
+                </div>
+                <div class="mt-1 flex flex-wrap gap-x-2 gap-y-1">
+                  <span class="text-emerald-600 dark:text-emerald-300">成功 {{ task.success }}</span>
+                  <span class="text-red-600 dark:text-red-300">失败 {{ task.failed }}</span>
+                  <span class="text-slate-400">状态 {{ task.status }}</span>
+                </div>
+                <div v-if="task.lastError" class="mt-1 truncate text-red-500 dark:text-red-300">{{ task.lastError }}</div>
+              </div>
+            </div>
+
+            <div v-if="pollingResults.length > 0" class="mt-2 border-t border-slate-200 pt-2 text-[10px] dark:border-slate-800">
+              <div class="mb-1 flex items-center justify-between text-slate-500">
+                <span>最近轮询结果</span>
+                <span>{{ pollingResults.length }}</span>
+              </div>
+              <div class="max-h-20 space-y-1 overflow-y-auto pr-1">
+                <div v-for="result in pollingResults.slice(0, 5)" :key="result.id" class="flex items-center justify-between gap-2 text-slate-400">
+                  <span class="min-w-0 truncate">{{ result.taskName }}</span>
+                  <span :class="result.status === 'success' ? 'text-emerald-600 dark:text-emerald-300' : 'text-red-600 dark:text-red-300'">
+                    {{ result.status }} / {{ result.durationMs }}ms
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
