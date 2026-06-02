@@ -3,7 +3,6 @@ import { ref, watch, nextTick, onMounted, onUnmounted, computed, shallowRef, typ
 import { useSerial } from '../composables/useSerial'
 import { useCommandGroup } from '../composables/useCommandGroup'
 import { useSettingsStore } from '../stores/settings'
-import type { CustomProtocolConfig } from '../stores/settings'
 import { useI18n } from '../composables/useI18n'
 import { useDataParse } from '../composables/useDataParse'
 import type { CommandStatus } from '../types/command-group'
@@ -18,6 +17,7 @@ import {
   useSerialSessions,
   useSerialReplay,
   useQuickCommands,
+  useSerialParsePanel,
 } from '../features/serial'
 import VirtualList from '../components/VirtualList.vue'
 import SerialSessionReplayPanel from '../components/serial/SerialSessionReplayPanel.vue'
@@ -181,127 +181,24 @@ const {
 
 // ==================== 数据解析功能 ====================
 
-/** 解析模式 */
-const parseMode = computed({
-  get: () => settingsStore.config.parseSettings.mode,
-  set: (val) => { 
-    settingsStore.config.parseSettings.mode = val
-    dataParse.setParseMode(val, baudRate.value)
-  }
+const {
+  parseMode,
+  parseEnabled,
+  showParsePanel,
+  customProtocolConfig,
+  lengthFieldEnabled,
+  parseResultExpanded,
+  initCustomProtocolConfig,
+  toggleParseResultExpand,
+  handleClearParseResults,
+  handleExportParseResults,
+  formatBytes,
+} = useSerialParsePanel({
+  settings: settingsStore,
+  dataParse,
+  baudRate,
+  t,
 })
-
-/** 是否启用解析 */
-const parseEnabled = computed({
-  get: () => settingsStore.config.parseSettings.enabled,
-  set: (val) => { settingsStore.config.parseSettings.enabled = val }
-})
-
-/** 是否显示解析面板 */
-const showParsePanel = ref(false)
-
-/** 自定义协议配置默认值 */
-const DEFAULT_CUSTOM_PROTOCOL = {
-  frameHeader: 'AA 55',
-  frameTail: '',
-  lengthField: {
-    enabled: true,
-    offset: 2,
-    size: 1 as const,
-    includesHeader: false
-  },
-  checksum: {
-    type: 'sum' as 'none' | 'sum' | 'xor' | 'crc16' | 'crc16-modbus',
-    offset: 0
-  },
-  dataOffset: 3
-}
-
-/** 自定义协议配置 (使用 ref 以支持嵌套属性绑定) */
-const customProtocolConfig = ref<CustomProtocolConfig>({ ...DEFAULT_CUSTOM_PROTOCOL, 
-  lengthField: { ...DEFAULT_CUSTOM_PROTOCOL.lengthField },
-  checksum: { ...DEFAULT_CUSTOM_PROTOCOL.checksum }
-})
-
-/** 长度字段启用状态 (computed 用于模板响应式) */
-const lengthFieldEnabled = computed({
-  get: () => customProtocolConfig.value.lengthField.enabled,
-  set: (val: boolean) => {
-    customProtocolConfig.value = {
-      ...customProtocolConfig.value,
-      lengthField: {
-        ...customProtocolConfig.value.lengthField,
-        enabled: val
-      }
-    }
-  }
-})
-
-/** 初始化自定义协议配置 */
-function initCustomProtocolConfig() {
-  const stored = settingsStore.config.parseSettings.customProtocol
-  if (stored) {
-    customProtocolConfig.value = { ...stored,
-      lengthField: { ...stored.lengthField },
-      checksum: { ...stored.checksum }
-    }
-  }
-}
-
-/** 保存自定义协议配置 */
-function saveCustomProtocolConfig() {
-  settingsStore.config.parseSettings.customProtocol = { 
-    ...customProtocolConfig.value,
-    lengthField: { ...customProtocolConfig.value.lengthField },
-    checksum: { ...customProtocolConfig.value.checksum }
-  }
-  dataParse.setCustomProtocolConfig(customProtocolConfig.value)
-}
-
-/** 监听配置变化并保存 */
-watch(customProtocolConfig, () => {
-  saveCustomProtocolConfig()
-}, { deep: true })
-
-/** 解析结果展开状态 */
-const parseResultExpanded = ref<Record<string, boolean>>({})
-
-/**
- * 切换解析结果展开状态
- */
-function toggleParseResultExpand(id: string) {
-  parseResultExpanded.value[id] = !parseResultExpanded.value[id]
-}
-
-/**
- * 清除解析结果
- */
-function handleClearParseResults() {
-  dataParse.clearResults()
-}
-
-/**
- * 导出解析结果
- */
-function handleExportParseResults() {
-  const content = dataParse.exportResults('txt')
-  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `parse_results_${new Date().getTime()}.txt`
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  URL.revokeObjectURL(url)
-  settingsStore.showToast(t('serial.exportSuccess'))
-}
-
-/**
- * 格式化字节数组为十六进制字符串
- */
-function formatBytes(bytes: number[]): string {
-  return bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ')
-}
 
 /**
  * 监听接收编码变化，重新解码所有数据
@@ -309,13 +206,6 @@ function formatBytes(bytes: number[]): string {
 watch(receiveEncoding, () => {
   redecodeAllData()
 })
-
-/**
- * 监听解析模式变化
- */
-watch(parseMode, (newMode) => {
-  dataParse.setParseMode(newMode, baudRate.value)
-}, { immediate: true })
 
 /**
  * 指令组 composable 实例，管理指令组的完整生命周期
