@@ -19,6 +19,7 @@
 | 行尾自动追加 | done | 支持 none/rn/r/n/custom hex。 |
 | 日志搜索/过滤/自动滚动/导出 | done | 使用虚拟列表承载大日志。 |
 | 数据解析面板 | done | 支持 Modbus、HEX/ASCII 显示、自定义帧。 |
+| 会话诊断 | done | 顶部显示 TX/RX 条目、静默时间、最近响应状态、平均发送间隔。 |
 | 快捷命令 | done | 支持启用、HEX、延迟、批量发送、循环发送。 |
 | 指令组/版本/恢复点 | done | 功能完整但文件较大，后续可继续拆 UI。 |
 | 快捷键帮助和自定义快捷键 | done | 与设置页联动。 |
@@ -33,9 +34,10 @@
 | CRC/LRC/多校验显示 | done | 校验信息随结果展示。 |
 | 寄存器类型解析 | done | uint/int/float 与字节序已抽到 feature 模块测试。 |
 | 请求-响应流水线布局 | done | 左请求、中响应、右历史。 |
+| 流水线诊断 | done | 显示响应总数、成功率、失败数、异常帧和轮询响应差值。 |
 | 历史导出 TXT/CSV | done | CSV 兼容 Excel。 |
-| 串口直发 Modbus 帧 | missing | 当前 Modbus 页只构建/解析，不直接调用串口发送。 |
-| 批量轮询/定时请求 | missing | 可作为下一轮功能闭环。 |
+| 串口直发 Modbus 帧 | done | Modbus 页可复用当前 Web Serial 连接发送构建帧。 |
+| 批量轮询/定时请求 | done | 当前帧支持间隔、次数、无限轮询和失败自动停止。 |
 
 ## RTT / Debug
 
@@ -50,8 +52,8 @@
 | 多通道过滤/导出/暂停 | done | UI 和日志存储已支持。 |
 | SEGGER RTT 源码下载 | done | 支持常用 `SEGGER_RTT.c/h` 等文件下载。 |
 | halt/resume/reset/step | experimental | UI 和内核链路已有，依赖探针适配。 |
-| 寄存器/内存查看 | experimental | 需要目标连接后验证。 |
-| 断点 | experimental | Cortex-M FPB 路线已有基础，需硬件验收。 |
+| 寄存器/内存查看 | experimental | 增加寄存器批量刷新状态；需要目标连接后验证。 |
+| 断点 | experimental | Cortex-M FPB 路线已有基础，增加槽位诊断；需硬件验收。 |
 | 变量查看 | experimental | ELF symbol 基础支持，DWARF 复杂变量仍 best-effort。 |
 | Flash dry-run/erase/program/verify | experimental | STM32 常见族优先，需硬件验收。 |
 | GDB-RSP 内核 | experimental | 内置命令核心，不暴露 TCP server。 |
@@ -83,7 +85,14 @@
 
 ## 发布阻塞项
 
-- `missing` 但非阻塞：蓝牙串口、Modbus 串口直发、Modbus 批量轮询。
+- `missing` 但非阻塞：蓝牙串口。
 - `experimental` 需硬件验收：纯 Web RTT、调试控制、变量查看、Flash 烧录、ST-Link/CMSIS-DAP 适配。
 - `blocked-by-browser` 明确边界：桌面 GDB 直连不可作为纯 Web 首版承诺。
 
+## 最近发布证据
+
+- `1d88ac5`：Modbus 构建帧可通过当前串口连接直发，串口 RX 自动进入响应解析流水线。
+- `260f6bb`：Modbus 当前帧轮询控制，支持间隔、次数、无限轮询和失败停止。
+- `04ddea8`：Modbus 流水线诊断摘要，覆盖成功率、异常帧和轮询响应差值。
+- `280a406`：RTT 调试控件增加寄存器刷新状态和断点槽位诊断。
+- `18b7e18`：Serial 顶部会话诊断，覆盖 TX/RX、静默时间、最近响应和平均发送间隔。
