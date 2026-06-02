@@ -57,7 +57,7 @@
 | halt/resume/reset/step | experimental | UI 和内核链路已有，依赖探针适配。 |
 | 寄存器/内存查看 | experimental | 增加寄存器批量刷新状态；需要目标连接后验证。 |
 | 断点 | experimental | Cortex-M FPB 路线已有基础，增加槽位诊断；需硬件验收。 |
-| 变量查看 | experimental | ELF symbol 基础支持，DWARF 复杂变量仍 best-effort。 |
+| 变量查看 | experimental | ELF symbol 基础支持，新增 PC 函数定位、primitive/best-effort 摘要和复合变量标注；完整 DWARF 复杂变量仍 best-effort。 |
 | Flash dry-run/erase/program/verify | experimental | STM32 常见族优先，需硬件验收。 |
 | GDB-RSP 内核 | experimental | 内置命令核心，不暴露 TCP server。 |
 | 硬件 mock 集成测试 | done | 已提供 mock probe/memory/flash 基座，覆盖 RTT 扫描、Up/Down、RAM 读写和 Flash verify。 |
@@ -105,3 +105,4 @@
 - 当前轮次：硬件 mock 集成测试基座，覆盖 ProbeDriver、MemoryAccess、RTT session 和 Flash backend。
 - 当前轮次：Serial 协议模板库，覆盖 AT、Modbus、NMEA、STM32 bootloader 和自定义帧快捷命令生成。
 - 当前轮次：Serial 会话录制与回放，覆盖 `.qxc-session.json` 导入导出、TX 原始字节回放和模拟日志时间线。
+- 当前轮次：RTT 变量查看增强，覆盖 ELF 函数/对象符号摘要、PC 所在函数定位和复合变量 best-effort 标注。

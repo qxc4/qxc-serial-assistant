@@ -3,7 +3,7 @@ import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
-import { createIdleRttHardwareCheckSteps, createMockRttHardwareCheckDefinitions, parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, runRttHardwareChecks, serializeRttHardwareCheckReport, summarizeFlashOperationProgress } from '../debug-core'
+import { createIdleRttHardwareCheckSteps, createMockRttHardwareCheckDefinitions, parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, runRttHardwareChecks, serializeRttHardwareCheckReport, summarizeFlashOperationProgress, createVariableSpecsFromSymbols, summarizeVariableImage } from '../debug-core'
 import type { FlashDryRunReport, FlashVerifyReport, RttHardwareCheckDefinition, RttHardwareCheckReport, RttHardwareCheckStep, VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import { RTT_SOURCE_FILES, RTT_SOURCE_REPOSITORY_URL, downloadRttSourceFile, type RttSourceFile } from '../debug-core/rttSourceDownloads'
@@ -263,6 +263,7 @@ const activeRightPanelTab = ref<RttSidePanelTabKey>('diagnostics')
 const showHelpPanel = ref(false)
 const variableElfInputRef = ref<HTMLInputElement | null>(null)
 const variableElfName = ref('')
+const variableProgramImage = ref<ProgramImage | null>(null)
 const variableSpecs = ref<VariableSpec[]>([])
 const variableValues = ref<VariableValue[]>([])
 const variableError = ref('')
@@ -326,6 +327,10 @@ const {
   parseHexAddress,
   formatHexAddress,
 })
+const currentPcValue = computed(() => coreRegisterItems.value.find(item => item.name === 'PC')?.value ?? 0)
+const variableImageSummary = computed(() =>
+  variableProgramImage.value ? summarizeVariableImage(variableProgramImage.value, currentPcValue.value) : null
+)
 type FlashDiagCode = 'permission' | 'disconnected' | 'range' | 'verify' | 'protected' | 'config' | 'generic'
 const flashDiagnosis = computed(() => {
   const message = flashError.value.trim()
@@ -620,13 +625,6 @@ function openVariableElfPicker(): void {
   variableElfInputRef.value?.click()
 }
 
-function toVariableType(size: number): VariableSpec['type'] | null {
-  if (size <= 0) return null
-  if (size === 1) return 'u8'
-  if (size === 2) return 'u16'
-  return 'u32'
-}
-
 async function handleVariableElfSelected(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -640,15 +638,9 @@ async function handleVariableElfSelected(event: Event): Promise<void> {
     const image = parseElfImage(bytes)
     const symbols = image.symbols ?? []
 
-    const specs = symbols
-      .filter(symbol => symbol.type === 'object' && symbol.address > 0)
-      .map(symbol => ({
-        name: symbol.name,
-        address: symbol.address,
-        type: toVariableType(symbol.size) ?? 'u32',
-      }))
-      .slice(0, 64)
+    const specs = createVariableSpecsFromSymbols(symbols, 64)
 
+    variableProgramImage.value = image
     variableSpecs.value = specs
     variableValues.value = []
     if (specs.length === 0) {
@@ -659,6 +651,7 @@ async function handleVariableElfSelected(event: Event): Promise<void> {
     await refreshVariableValues()
   } catch (error) {
     variableError.value = error instanceof Error ? error.message : String(error)
+    variableProgramImage.value = null
     variableSpecs.value = []
     variableValues.value = []
   } finally {
@@ -1962,9 +1955,23 @@ watch(
         <p class="text-[10px] text-slate-500 dark:text-slate-400 truncate mb-1" :title="variableElfName || '未导入 ELF'">
           {{ variableElfName || '未导入 ELF' }}
         </p>
-        <p class="text-[10px] text-slate-400 dark:text-slate-500 mb-2">
-          {{ variableSpecs.length }} 个对象符号 / {{ filteredVariableValues.length }} 条显示
+        <p class="text-[10px] text-slate-400 dark:text-slate-500 mb-1">
+          {{ variableSpecs.length }} 个变量 / {{ filteredVariableValues.length }} 条显示
+          <template v-if="variableImageSummary">
+            · 函数 {{ variableImageSummary.functionSymbols }} · 对象 {{ variableImageSummary.objectSymbols }}
+          </template>
         </p>
+        <div v-if="variableImageSummary" class="mb-2 grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400">
+          <div class="rounded border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
+            PC 函数：
+            <span class="font-mono text-slate-700 dark:text-slate-200">
+              {{ variableImageSummary.currentFunction?.name ?? '-' }}
+            </span>
+          </div>
+          <div class="rounded border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
+            primitive {{ variableImageSummary.readableVariables }} / best-effort {{ variableImageSummary.bestEffortVariables }}
+          </div>
+        </div>
 
         <div v-if="variableError" class="text-[10px] text-red-600 dark:text-red-400 mb-2">
           {{ variableError }}
@@ -1982,7 +1989,12 @@ watch(
             :key="`${item.name}-${item.address}`"
             class="grid grid-cols-[1.2fr_1fr_1.6fr] gap-1 items-center text-[10px]"
           >
-            <span class="truncate text-slate-600 dark:text-slate-300" :title="item.name">{{ item.name }}({{ item.type }})</span>
+            <span class="truncate text-slate-600 dark:text-slate-300" :title="item.note ? `${item.name}: ${item.note}` : item.name">
+              {{ item.name }}({{ item.type }})
+              <span v-if="item.displayKind && item.displayKind !== 'primitive'" class="text-[9px] text-amber-600 dark:text-amber-300">
+                {{ item.displayKind }}
+              </span>
+            </span>
             <span class="text-slate-500 dark:text-slate-400">{{ formatVariableAddress(item.address) }}</span>
             <span v-if="item.error" class="text-red-500 dark:text-red-400 truncate text-right" :title="item.error">ERR</span>
             <span v-else class="text-slate-500 dark:text-slate-400 text-right" :title="formatVariableValue(item)">{{ formatVariableValue(item) }}</span>
