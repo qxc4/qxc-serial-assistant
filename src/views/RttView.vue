@@ -24,10 +24,11 @@ import RttJLinkDiagnosticPanel from '../components/rtt/RttJLinkDiagnosticPanel.v
 import RttWorkbenchHeader from '../components/rtt/RttWorkbenchHeader.vue'
 import RttSidePanelShell from '../components/rtt/RttSidePanelShell.vue'
 import RttLogFilterPanel from '../components/rtt/RttLogFilterPanel.vue'
+import RttResourcesPanel from '../components/rtt/RttResourcesPanel.vue'
 import type { RttLogLevel, RttBackend, RttFilter } from '../types/rtt'
 import {
   Send,
-  RefreshCw, Download,
+  RefreshCw,
   AlertCircle, Terminal,
   BookOpen, Check, Info, ChevronUp, ChevronDown
 } from 'lucide-vue-next'
@@ -1560,82 +1561,23 @@ watch(
         @toggle-channel="toggleChannelFilter"
       />
 
-      <!-- SEGGER RTT 库文件下载 -->
-      <div v-show="activeRightPanelTab === 'resources'" class="p-3 border-b border-slate-200 dark:border-slate-800">
-        <div class="flex items-center justify-between gap-2 mb-2">
-          <div class="min-w-0">
-            <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">RTT 库文件</h3>
-            <p class="text-[10px] text-slate-400 dark:text-slate-500 truncate">
-              从 SEGGER 官方 GitHub 获取，不随本站打包分发
-            </p>
-          </div>
-          <a
-            :href="RTT_SOURCE_REPOSITORY_URL"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="shrink-0 text-[10px] text-blue-600 dark:text-blue-400 hover:underline"
-          >
-            官方仓库
-          </a>
-        </div>
-
-        <div class="space-y-1.5">
-          <button
-            v-for="file in RTT_SOURCE_FILES"
-            :key="file.id"
-            @click="handleDownloadRttSource(file)"
-            :disabled="Boolean(rttSourceDownloadingId)"
-            class="w-full flex items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1.5 text-left text-[10px] text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50 transition-colors"
-            :title="file.description"
-          >
-            <span class="min-w-0">
-              <span class="block truncate font-mono text-slate-700 dark:text-slate-200">{{ file.fileName }}</span>
-              <span class="block truncate text-slate-400 dark:text-slate-500">{{ file.path }}</span>
-            </span>
-            <RefreshCw
-              v-if="rttSourceDownloadingId === file.id"
-              class="w-3.5 h-3.5 shrink-0 animate-spin text-blue-500"
-            />
-            <Download v-else class="w-3.5 h-3.5 shrink-0 text-slate-400" />
-          </button>
-        </div>
-
-        <p class="mt-2 text-[10px] text-slate-500 dark:text-slate-400">
-          集成：把以上文件加入 MCU 工程，业务代码包含 <span class="font-mono">SEGGER_RTT.h</span>，调用 <span class="font-mono">SEGGER_RTT_WriteString()</span> 或 <span class="font-mono">SEGGER_RTT_printf()</span>。
-        </p>
-        <p v-if="rttSourceDownloadMessage" class="mt-1 text-[10px] text-green-600 dark:text-green-400">
-          {{ rttSourceDownloadMessage }}
-        </p>
-        <p v-if="rttSourceDownloadError" class="mt-1 text-[10px] text-red-600 dark:text-red-400 break-words">
-          {{ rttSourceDownloadError }}
-        </p>
-      </div>
+      <RttResourcesPanel
+        v-show="activeRightPanelTab === 'resources'"
+        :files="RTT_SOURCE_FILES"
+        :repository-url="RTT_SOURCE_REPOSITORY_URL"
+        :downloading-id="rttSourceDownloadingId"
+        :download-message="rttSourceDownloadMessage"
+        :download-error="rttSourceDownloadError"
+        :t="t"
+        @download-source="handleDownloadRttSource"
+        @export-txt="handleExport"
+        @export-session="handleExportSession"
+      />
 
       <RttJLinkDiagnosticPanel
         v-show="activeRightPanelTab === 'resources'"
         :report="jlinkDiagnosticReport"
       />
-
-      <!-- 导出选项 -->
-      <div v-show="activeRightPanelTab === 'resources'" class="p-3 border-b border-slate-200 dark:border-slate-800">
-        <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{{ t('rtt.exportOptions') }}</h3>
-        <div class="flex flex-col gap-1.5">
-          <button
-            @click="handleExport"
-            class="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-          >
-            <Download class="w-3.5 h-3.5" />
-            {{ t('rtt.exportTxt') }}
-          </button>
-          <button
-            @click="handleExportSession"
-            class="flex items-center gap-1.5 px-2 py-1.5 rounded text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
-          >
-            <Download class="w-3.5 h-3.5" />
-            {{ t('rtt.exportSession') }}
-          </button>
-        </div>
-      </div>
 
       <RttDebugControls
         v-show="activeRightPanelTab === 'diagnostics'"
