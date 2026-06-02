@@ -23,10 +23,10 @@
 | 协议模板库 | done | 内置 AT、Modbus RTU、NMEA、STM32 bootloader、自定义帧模板，可追加快捷命令和解析建议。 |
 | 会话录制与回放 | done | 支持录制 RX/TX、导出/导入 `.qxc-session.json`、按时间轴 TX 回放和模拟 RX/TX 预览。 |
 | 快捷命令 | done | 支持启用、HEX、延迟、批量发送、循环发送。 |
-| 指令组/版本/恢复点 | done | 功能完整；指令组右侧 UI 仍在 `SerialView.vue` 内，后续继续拆 `SerialCommandGroupPanel`。 |
+| 指令组/版本/恢复点 | done | 功能完整；指令组右侧 UI 已拆为 `SerialCommandGroupPanel`，页面只保留事件连线。 |
 | 快捷键帮助和自定义快捷键 | done | 与设置页联动。 |
 | 多串口会话架构 | experimental | 已新增 `SerialSessionController` 和 Serial 顶部会话栏，可管理最多 4 个会话槽；真实多端口 Web Serial 连接迁移仍待后续阶段。 |
-| SerialView 架构拆分 | experimental | 已抽出 `useSerialSessions`、`useSerialReplay`、`useQuickCommands`、`useSerialParsePanel`，并拆出顶部工具栏、日志、发送区、中间工具栏、解析结果面板；连接抽屉、快捷命令面板、指令组面板仍待继续拆分。 |
+| SerialView 架构拆分 | done | 已抽出会话、录制回放、快捷命令、解析面板 composable，并拆出连接抽屉、顶部工具栏、日志、发送区、中间工具栏、快捷命令、指令组和解析结果组件；真实多串口仍按独立架构项跟踪。 |
 | 蓝牙串口 | missing | 当前仅显示 coming soon。 |
 
 ## Modbus
@@ -38,6 +38,7 @@
 | CRC/LRC/多校验显示 | done | 校验信息随结果展示。 |
 | 寄存器类型解析 | done | uint/int/float 与字节序已抽到 feature 模块测试。 |
 | 请求-响应流水线布局 | done | 左请求、中响应、右历史。 |
+| Modbus 请求构建器组件化 | done | 请求参数、单帧轮询和多任务队列已拆为 `ModbusRequestPanel`，页面保留发送/监听/调度状态。 |
 | 流水线诊断 | done | 显示响应总数、成功率、失败数、异常帧和轮询响应差值。 |
 | 历史导出 TXT/CSV | done | CSV 兼容 Excel。 |
 | 串口直发 Modbus 帧 | done | Modbus 页可复用当前 Web Serial 连接发送构建帧。 |
@@ -63,6 +64,7 @@
 | Flash dry-run/erase/program/verify | experimental | STM32F1/F4 可执行路径保留；G0/G4/H7 已补 profile、dry-run 范围规划和 unsupported 诊断，真实擦除算法需硬件扩展。 |
 | GDB-RSP 内核 | experimental | 内置命令核心，不暴露 TCP server。 |
 | 硬件 mock 集成测试 | done | 已提供 mock probe/memory/flash 基座，覆盖 RTT 扫描、Up/Down、RAM 读写和 Flash verify。 |
+| RTT 工作台组件化 | experimental | 顶部状态/配置栏已拆为 `RttWorkbenchHeader`；右侧 tabs、日志区和硬件自检仍需继续拆分。 |
 | 桌面 GDB 直连 | blocked-by-browser | 浏览器不能监听本地 TCP；需要未来极小 relay 才能实现。 |
 
 ## Shell / Chart / Tools
@@ -110,6 +112,10 @@
 - 当前轮次：RTT 变量查看增强，覆盖 ELF 函数/对象符号摘要、PC 所在函数定位和复合变量 best-effort 标注。
 - 当前轮次：Flash 芯片族扩展，覆盖 STM32G0/G4/H7 profile、识别关键字、默认范围、dry-run 规划和未支持擦除算法诊断。
 - 当前轮次：J-Link 研究诊断，覆盖纯 Web 协议、SEGGER GDB Server、本地 relay、SDK 授权集成四条路线说明。
-- 当前轮次：Serial 架构拆分第一轮，抽出会话、录制回放、快捷命令、解析面板 composable，并拆出顶部工具栏、日志、发送区、中间工具栏、解析结果面板；剩余连接抽屉、快捷命令面板、指令组面板继续作为架构债跟踪。
+- 当前轮次：Serial 架构拆分完成主要 UI 收敛，`SerialView.vue` 降至约 34KB，连接抽屉、快捷命令、指令组、日志、发送区和解析结果均已组件化。
 - 当前轮次：多串口架构 groundwork，新增 SerialSessionController，覆盖默认会话兼容、最多 4 会话、激活/重命名/删除和统计隔离。
 - 当前轮次：Serial 多会话 UI 接入，顶部会话栏显示默认真实连接和占位会话槽，默认会话统计跟随当前 Web Serial 单例。
+- 当前轮次：`useCommandGroup` 抽出纯模型 helper，覆盖空组/空指令、旧数据 version 归一化、执行统计和进度计算。
+- 当前轮次：Modbus 请求构建器拆为 `ModbusRequestPanel`，保留构帧、当前串口发送、单帧轮询、多任务队列和响应流水线闭环。
+- 当前轮次：RTT 顶部工作台拆为 `RttWorkbenchHeader`，保留纯 WebUSB 路线、J-Link 诊断、SEGGER RTT 下载、硬件自检和 Flash dry-run/verify 能力。
+- 当前轮次：项目清理移除重复 agent 指南 `CLAUDE.md`、本地工具目录 `.claude/`，并清理本地产物 `dist/`、`coverage/`、`.superpowers/`。

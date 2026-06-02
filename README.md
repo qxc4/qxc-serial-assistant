@@ -265,11 +265,15 @@ server {
 
 ```
 src/
+├── features/                 # feature/domain 分层模块
+│   ├── serial/               #   串口会话、协议模板、回放、快捷命令、指令组模型
+│   ├── modbus/               #   Modbus 构帧/解析、轮询调度、流水线诊断
+│   └── rtt/                  #   RTT 显示选项、调试诊断 UI 辅助
 ├── composables/              # 组合式函数
 │   ├── useSerial.ts          #   串口通信核心（单例模式）
 │   ├── useChart.ts           #   ECharts 数据图表
 │   ├── useDataParse.ts       #   数据协议解析
-│   ├── useCommandGroup.ts    #   指令组管理 & 执行引擎
+│   ├── useCommandGroup.ts    #   指令组 Vue 适配层 & 执行控制
 │   ├── useI18n.ts            #   国际化 (中/英)
 │   ├── useWebUsbRtt.ts       #   WebUSB RTT / 调试探针
 │   ├── useRttDebugWorkbench.ts # 调试工作台状态
@@ -285,10 +289,16 @@ src/
 │   ├── AsciiView.vue         #   ASCII 表
 │   ├── NumConverterView.vue  #   数制转换
 │   └── ProfileView.vue       #   关于
-├── components/               # 公共组件
+├── components/               # 公共与页面组件
 │   ├── VirtualList.vue       #   虚拟滚动列表
+│   ├── serial/               #   Serial 连接抽屉、日志、发送、快捷命令、指令组面板
+│   ├── modbus/               #   Modbus 请求构建/轮询面板
+│   ├── rtt/                  #   RTT 顶部状态、调试、Flash、J-Link 诊断面板
 │   ├── DonateModal.vue       #   赞助弹窗
 │   └── SaveStatusToast.vue   #   保存状态提示
+├── locales/                  # 自研 i18n 语言包
+│   ├── zh-CN.ts
+│   └── en-US.ts
 ├── stores/                   # Pinia 状态管理
 │   └── settings.ts           #   全局设置 (localStorage 持久化)
 ├── debug-core/               # 浏览器端调试内核
