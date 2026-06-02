@@ -12,7 +12,10 @@ import {
   createDefaultQuickCommands,
   createLineEndingOptions,
   formatSerialDuration,
+  applyProtocolTemplate,
+  getProtocolTemplate,
   previewLineEndingValue,
+  PROTOCOL_TEMPLATES,
   resolveLineEndingValue,
   summarizeSerialSession,
   type QuickCommand,
@@ -462,6 +465,8 @@ const sendPreview = computed(() => {
 
 // Quick Commands Panel
 const quickCommands = ref<QuickCommand[]>(createDefaultQuickCommands())
+const selectedProtocolTemplateId = ref(PROTOCOL_TEMPLATES[0]?.id ?? '')
+const protocolTemplateHint = ref('')
 
 const loopInterval = ref(5000)
 const isLooping = ref(false)
@@ -473,6 +478,7 @@ const enabledQuickCommands = computed(() =>
 )
 
 const hasRunnableQuickCommands = computed(() => enabledQuickCommands.value.length > 0)
+const selectedProtocolTemplate = computed(() => getProtocolTemplate(selectedProtocolTemplateId.value))
 
 function waitForQuickCommandDelay(ms: number, signal: AbortSignal): Promise<void> {
   if (ms <= 0 || signal.aborted) return Promise.resolve()
@@ -801,6 +807,16 @@ const sendSelected = async () => {
     isSendingQuickCommands.value = false
     sendSelectedAbortController = null
   }
+}
+
+function applySelectedProtocolTemplate() {
+  const template = selectedProtocolTemplate.value
+  if (!template) return
+  let nextId = Date.now()
+  const result = applyProtocolTemplate(template, () => nextId++)
+  quickCommands.value.push(...result.addedCommands)
+  protocolTemplateHint.value = result.parseHint
+  settingsStore.showToast(`已应用模板：${template.name}`)
 }
 
 /**
@@ -1588,6 +1604,35 @@ onUnmounted(cleanupButtonOptimizations)
               <input type="number" v-model="loopInterval" class="w-14 border dark:border-slate-700 rounded px-1 py-1 text-center outline-none">
               <span>ms</span>
             </div>
+          </div>
+
+          <div class="border-b border-slate-200 bg-white/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/80">
+            <div class="mb-1.5 flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <h3 class="truncate text-xs font-medium text-slate-600 dark:text-slate-300">协议模板库</h3>
+                <p class="truncate text-[10px] text-slate-400">生成快捷命令和解析建议</p>
+              </div>
+              <button
+                @click="applySelectedProtocolTemplate"
+                class="shrink-0 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300"
+              >
+                应用
+              </button>
+            </div>
+            <select
+              v-model="selectedProtocolTemplateId"
+              class="mb-1.5 w-full rounded border border-slate-300 bg-white px-2 py-1 text-[10px] text-slate-700 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+            >
+              <option v-for="template in PROTOCOL_TEMPLATES" :key="template.id" :value="template.id">
+                {{ template.name }}
+              </option>
+            </select>
+            <p class="line-clamp-2 text-[10px] text-slate-500 dark:text-slate-400">
+              {{ selectedProtocolTemplate?.description }}
+            </p>
+            <p v-if="protocolTemplateHint" class="mt-1 line-clamp-2 text-[10px] text-blue-600 dark:text-blue-300">
+              {{ protocolTemplateHint }}
+            </p>
           </div>
 
           <div class="flex-1 min-h-0 overflow-y-auto p-2">

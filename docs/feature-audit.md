@@ -20,6 +20,7 @@
 | 日志搜索/过滤/自动滚动/导出 | done | 使用虚拟列表承载大日志。 |
 | 数据解析面板 | done | 支持 Modbus、HEX/ASCII 显示、自定义帧。 |
 | 会话诊断 | done | 顶部显示 TX/RX 条目、静默时间、最近响应状态、平均发送间隔。 |
+| 协议模板库 | done | 内置 AT、Modbus RTU、NMEA、STM32 bootloader、自定义帧模板，可追加快捷命令和解析建议。 |
 | 快捷命令 | done | 支持启用、HEX、延迟、批量发送、循环发送。 |
 | 指令组/版本/恢复点 | done | 功能完整但文件较大，后续可继续拆 UI。 |
 | 快捷键帮助和自定义快捷键 | done | 与设置页联动。 |
@@ -101,3 +102,4 @@
 - 当前轮次：Modbus 多请求轮询任务，覆盖任务列表、串行调度、响应匹配、超时重试和任务导出。
 - 当前轮次：RTT 硬件验收向导，覆盖固定步骤、Mock 预演、真实自检入口和 JSON 报告导出。
 - 当前轮次：硬件 mock 集成测试基座，覆盖 ProbeDriver、MemoryAccess、RTT session 和 Flash backend。
+- 当前轮次：Serial 协议模板库，覆盖 AT、Modbus、NMEA、STM32 bootloader 和自定义帧快捷命令生成。
