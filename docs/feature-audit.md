@@ -58,6 +58,7 @@
 | 变量查看 | experimental | ELF symbol 基础支持，DWARF 复杂变量仍 best-effort。 |
 | Flash dry-run/erase/program/verify | experimental | STM32 常见族优先，需硬件验收。 |
 | GDB-RSP 内核 | experimental | 内置命令核心，不暴露 TCP server。 |
+| 硬件 mock 集成测试 | done | 已提供 mock probe/memory/flash 基座，覆盖 RTT 扫描、Up/Down、RAM 读写和 Flash verify。 |
 | 桌面 GDB 直连 | blocked-by-browser | 浏览器不能监听本地 TCP；需要未来极小 relay 才能实现。 |
 
 ## Shell / Chart / Tools
@@ -99,3 +100,4 @@
 - `18b7e18`：Serial 顶部会话诊断，覆盖 TX/RX、静默时间、最近响应和平均发送间隔。
 - 当前轮次：Modbus 多请求轮询任务，覆盖任务列表、串行调度、响应匹配、超时重试和任务导出。
 - 当前轮次：RTT 硬件验收向导，覆盖固定步骤、Mock 预演、真实自检入口和 JSON 报告导出。
+- 当前轮次：硬件 mock 集成测试基座，覆盖 ProbeDriver、MemoryAccess、RTT session 和 Flash backend。
