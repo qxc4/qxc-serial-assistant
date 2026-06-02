@@ -32,6 +32,21 @@
 
 ---
 
+## 当前发布状态
+
+QXC Serial 目前是纯浏览器单页应用，核心路线为 Web Serial + WebUSB：
+
+| 模块 | 当前状态 |
+|:----:|:-----|
+| Serial | 已完成高密度工作台 UI、连接抽屉、虚拟日志、快捷命令、指令组、协议模板、会话录制与回放 |
+| Modbus | 已形成“构建请求 → 当前串口发送 → 接收响应 → 自动解析 → 历史导出”的闭环，并支持多请求轮询任务 |
+| RTT / Debug | 纯 WebUSB 调试工作台，包含 RTT 日志、硬件自检、J-Link 能力诊断、SEGGER RTT 文件下载、变量/Flash/调试实验能力 |
+| 工程结构 | 已按 feature/domain 拆分 Serial、Modbus、RTT 主要面板，保留 `debug-core` 作为浏览器端调试内核 |
+
+> 本项目不再维护本地 RTT Bridge 路线。J-Link 完整 debug/RTT 直连目前显示为实验诊断能力，不会误标为已完全支持。
+
+---
+
 ## 为什么选择 QXC Serial？
 
 <table>
@@ -83,16 +98,19 @@
 | | 显示模式 | 仅接收 / 仅发送 / 混合模式 |
 | | 时间戳 & 搜索 | 可选时间戳显示，支持内容搜索过滤 |
 | ⚡ **指令系统** | 快捷指令 | 一键发送常用指令，支持循环定时发送 |
+| | 协议模板 | AT、Modbus RTU、NMEA、STM32 Bootloader、自定义帧模板 |
+| | 会话录制 | 录制 TX/RX 和串口配置，支持导出、导入和回放 |
 | | 指令组管理 | 创建、保存、加载、另存为，版本控制 |
 | | 执行控制 | 开始 / 暂停 / 停止，灵活控制指令执行 |
 | 🛠️ **数据工具** | 数制转换 | 二进制 / 八进制 / 十进制 / 十六进制互转 |
 | | ASCII 表 | 完整 ASCII 字符参考表 |
-| | Modbus 解析 | RTU / ASCII 协议实时解析 |
+| | Modbus 工作台 | RTU / ASCII 构帧、当前串口直发、响应解析、多任务轮询 |
 | | 数据图表 | 基于 ECharts 的实时数据可视化 |
-| 📡 **RTT 调试** | WebUSB 直连 | RTT 日志 / 调试控制 / Flash 烧录 |
+| 📡 **RTT 调试** | WebUSB 直连 | RTT 日志 / 调试控制 / Flash 烧录实验能力 |
 | | 高性能日志 | 虚拟滚动，5 万条日志流畅显示 |
 | | 日志过滤 | 按级别 / 通道 / 关键词多维度过滤 |
 | | 双向通信 | 向 MCU 发送命令，多通道支持 |
+| | 硬件诊断 | 探针能力矩阵、硬件自检向导、J-Link 实验状态说明 |
 | 🎨 **用户体验** | 主题切换 | 亮色 / 暗色 / 跟随系统 |
 | | 国际化 | 中文 / English 双语支持 |
 | | 快捷键 | 完整的键盘快捷键体系 |
@@ -192,11 +210,23 @@ RTT (Real Time Transfer) 是 SEGGER 提供的高速调试输出技术。本项�
 |:----:|:-----|
 | RTT Control Block 扫描 | 已支持 |
 | RTT Up/Down 通道 | 已支持 |
+| SEGGER RTT 源文件下载 | 已支持 |
+| 硬件自检向导 | 已支持，含 Mock 预演和 JSON 诊断报告 |
+| 探针能力矩阵 | 已支持，区分 ST-Link / CMSIS-DAP / J-Link 可用路线 |
+| J-Link 诊断 | 已支持实验状态说明；完整纯 Web J-Link debug 尚未启用 |
 | 寄存器批量刷新 | 已支持 |
 | 内存 Hex 预览 | 已支持 |
 | 硬件断点状态诊断 | 已支持 |
 | Flash dry-run / erase / program / verify | 实验支持 |
 | GDB-RSP 内核 | 内置命令核心，暂不暴露本地 TCP Server |
+
+### 探针支持边界
+
+| 探针 | 状态 | 说明 |
+|:----:|:-----|:-----|
+| ST-Link | 实验支持 | 纯 WebUSB 路线，RTT/debug/Flash 需要真实硬件验收 |
+| CMSIS-DAP / DAPLink / PicoProbe | 实验支持 | 依赖浏览器 WebUSB 能力和探针固件兼容性 |
+| J-Link | 诊断支持 | 当前提供能力矩阵和可行路线说明；完整协议层需要 SEGGER SDK/本地 GDB Server/relay 路线 |
 
 ---
 
@@ -293,7 +323,7 @@ src/
 │   ├── VirtualList.vue       #   虚拟滚动列表
 │   ├── serial/               #   Serial 连接抽屉、日志、发送、快捷命令、指令组面板
 │   ├── modbus/               #   Modbus 请求构建/轮询面板
-│   ├── rtt/                  #   RTT 顶部状态、调试、Flash、J-Link 诊断面板
+│   ├── rtt/                  #   RTT 顶部状态、右侧 tabs、过滤、资源、调试、Flash、J-Link 诊断面板
 │   ├── DonateModal.vue       #   赞助弹窗
 │   └── SaveStatusToast.vue   #   保存状态提示
 ├── locales/                  # 自研 i18n 语言包
