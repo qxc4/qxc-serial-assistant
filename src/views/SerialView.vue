@@ -9,7 +9,6 @@ import { useDataParse } from '../composables/useDataParse'
 import type { CommandStatus } from '../types/command-group'
 import {
   baudRatePresets,
-  createSerialSessionController,
   createDefaultQuickCommands,
   createLineEndingOptions,
   formatSerialDuration,
@@ -30,7 +29,7 @@ import {
   type SerialReplayEvent,
   type SerialReplayMode,
   type SerialSessionRecording,
-  type SerialSessionDescriptor,
+  useSerialSessions,
 } from '../features/serial'
 import VirtualList from '../components/VirtualList.vue'
 import SerialSessionReplayPanel from '../components/serial/SerialSessionReplayPanel.vue'
@@ -106,8 +105,6 @@ watch(searchQuery, (value) => {
   debouncedSearch(value)
 })
 
-watch([txBytes, rxBytes, dataCount, isConnected], refreshDefaultSerialSessionStats, { immediate: true })
-
 /** 根据显示模式和搜索关键词过滤接收数据（优化版） */
 const filteredReceivedData = computed(() => {
   const data = receivedData.value
@@ -178,53 +175,21 @@ const toolbarExpanded = computed({
   get: () => settingsStore.config.uiSettings.toolbarExpanded,
   set: (val) => { settingsStore.config.uiSettings.toolbarExpanded = val }
 })
-const serialSessionController = createSerialSessionController()
-const serialSessions = ref<SerialSessionDescriptor[]>([...serialSessionController.state.sessions])
-const activeSerialSessionId = ref(serialSessionController.state.activeSessionId)
-const activeSerialSession = computed(() =>
-  serialSessions.value.find(session => session.id === activeSerialSessionId.value) ?? serialSessions.value[0] ?? null
-)
-
-function syncSerialSessionState() {
-  serialSessions.value = serialSessionController.state.sessions.map(session => ({ ...session, stats: { ...session.stats } }))
-  activeSerialSessionId.value = serialSessionController.state.activeSessionId
-}
-
-function refreshDefaultSerialSessionStats() {
-  serialSessionController.updateSessionStats('default', {
-    txBytes: txBytes.value,
-    rxBytes: rxBytes.value,
-    events: dataCount.value,
-  })
-  const defaultSession = serialSessionController.state.sessions.find(session => session.id === 'default')
-  if (defaultSession) {
-    defaultSession.connectionLabel = isConnected.value ? '当前 Web Serial 连接已连接' : '当前 Web Serial 连接未连接'
-  }
-  syncSerialSessionState()
-}
-
-function addSerialSessionSlot() {
-  try {
-    serialSessionController.addSession()
-    syncSerialSessionState()
-    settingsStore.showToast('已新增串口会话槽；真实多端口连接将在下一阶段启用')
-  } catch (error) {
-    settingsStore.showToast(error instanceof Error ? error.message : String(error))
-  }
-}
-
-function removeSerialSessionSlot(id: string) {
-  serialSessionController.removeSession(id)
-  syncSerialSessionState()
-}
-
-function setActiveSerialSession(id: string) {
-  if (!serialSessionController.setActiveSession(id)) return
-  syncSerialSessionState()
-  if (id !== 'default') {
-    settingsStore.showToast('该会话槽当前为占位模式，真实串口仍由默认会话承载')
-  }
-}
+const {
+  serialSessionController,
+  serialSessions,
+  activeSerialSessionId,
+  activeSerialSession,
+  addSerialSessionSlot,
+  removeSerialSessionSlot,
+  setActiveSerialSession,
+} = useSerialSessions({
+  txBytes,
+  rxBytes,
+  dataCount,
+  isConnected,
+  showToast: message => settingsStore.showToast(message),
+})
 
 // ==================== 数据解析功能 ====================
 
