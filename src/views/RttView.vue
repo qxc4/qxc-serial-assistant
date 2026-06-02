@@ -296,6 +296,9 @@ const {
   breakpointRestoreStatus,
   breakpointSlotStatus,
   coreRegisterItems,
+  isRefreshingCoreRegisters,
+  lastCoreRegisterRefreshAt,
+  coreRegisterRefreshCount,
   memoryViewAddressInput,
   memoryViewLengthInput,
   memoryViewHexLines,
@@ -1770,6 +1773,9 @@ watch(
         :breakpoint-restore-status="breakpointRestoreStatus"
         :breakpoint-slot-status="breakpointSlotStatus"
         :core-register-items="coreRegisterItems"
+        :is-refreshing-core-registers="isRefreshingCoreRegisters"
+        :last-core-register-refresh-at="lastCoreRegisterRefreshAt"
+        :core-register-refresh-count="coreRegisterRefreshCount"
         v-model:memory-view-address-input="memoryViewAddressInput"
         v-model:memory-view-length-input="memoryViewLengthInput"
         :memory-view-hex-lines="memoryViewHexLines"

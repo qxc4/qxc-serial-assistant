@@ -29,6 +29,9 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
   const debugControlState = ref<DebugControlState>('idle')
   const debugControlError = ref('')
   const coreRegisters = ref<Uint32Array>(new Uint32Array(17))
+  const isRefreshingCoreRegisters = ref(false)
+  const lastCoreRegisterRefreshAt = ref<number | null>(null)
+  const coreRegisterRefreshCount = ref(0)
   const breakpointInput = ref('0x08000000')
   const hardwareBreakpoints = ref<number[]>([])
   const breakpointRestoreStatus = ref('')
@@ -88,11 +91,16 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
       return
     }
     try {
+      isRefreshingCoreRegisters.value = true
       const target = createDebugTarget()
       coreRegisters.value = await target.readCoreRegisters()
+      lastCoreRegisterRefreshAt.value = Date.now()
+      coreRegisterRefreshCount.value += 1
       debugControlError.value = ''
     } catch (error) {
       debugControlError.value = error instanceof Error ? error.message : String(error)
+    } finally {
+      isRefreshingCoreRegisters.value = false
     }
   }
 
@@ -307,6 +315,9 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
     if (!connected) {
       debugControlState.value = 'idle'
       coreRegisters.value = new Uint32Array(17)
+      isRefreshingCoreRegisters.value = false
+      lastCoreRegisterRefreshAt.value = null
+      coreRegisterRefreshCount.value = 0
       breakpointRestoreStatus.value = ''
       breakpointSlotStatus.value = null
       debugTargetInstance = null
@@ -328,6 +339,9 @@ export function useRttDebugWorkbench(options: RttDebugWorkbenchOptions) {
     breakpointRestoreStatus,
     breakpointSlotStatus,
     coreRegisterItems,
+    isRefreshingCoreRegisters,
+    lastCoreRegisterRefreshAt,
+    coreRegisterRefreshCount,
     memoryViewAddressInput,
     memoryViewLengthInput,
     memoryViewHexLines,

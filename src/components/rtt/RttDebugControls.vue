@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { RefreshCw } from 'lucide-vue-next'
+import { summarizeBreakpointSlots } from '../../features/rtt'
 
 type DebugControlState = 'idle' | 'running' | 'halted' | 'reset' | 'error'
 type DebugAction = 'halt' | 'resume' | 'step' | 'reset'
@@ -26,6 +27,9 @@ const props = defineProps<{
   breakpointRestoreStatus: string
   breakpointSlotStatus: BreakpointSlotStatus | null
   coreRegisterItems: CoreRegisterItem[]
+  isRefreshingCoreRegisters: boolean
+  lastCoreRegisterRefreshAt: number | null
+  coreRegisterRefreshCount: number
   memoryViewAddressInput: string
   memoryViewLengthInput: number
   memoryViewHexLines: string[]
@@ -52,6 +56,11 @@ const emit = defineEmits<{
 }>()
 
 const registerPanelRef = ref<HTMLElement | null>(null)
+const breakpointDiagnostic = computed(() => summarizeBreakpointSlots(
+  props.breakpointSlotStatus,
+  props.hardwareBreakpoints.length,
+  props.isConnected,
+))
 
 async function readMemoryAtRegister(name: 'PC' | 'SP'): Promise<void> {
   const register = props.coreRegisterItems.find(item => item.name === name)
@@ -75,11 +84,11 @@ watch(() => props.pcFocusRequestId, async () => {
       <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">调试控制</h3>
       <button
         @click="emit('refreshCoreRegisters')"
-        :disabled="!isConnected"
+        :disabled="!isConnected || isRefreshingCoreRegisters"
         class="p-1 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
         title="刷新寄存器"
       >
-        <RefreshCw class="w-3 h-3" />
+        <RefreshCw class="w-3 h-3" :class="isRefreshingCoreRegisters ? 'animate-spin' : ''" />
       </button>
     </div>
 
@@ -132,6 +141,21 @@ watch(() => props.pcFocusRequestId, async () => {
       </div>
     </div>
 
+    <div class="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] dark:border-slate-800 dark:bg-slate-950/50">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-slate-500 dark:text-slate-400">寄存器批量刷新</span>
+        <span
+          class="rounded-full px-2 py-0.5"
+          :class="isRefreshingCoreRegisters ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
+        >
+          {{ isRefreshingCoreRegisters ? '刷新中' : `${coreRegisterRefreshCount} 次` }}
+        </span>
+      </div>
+      <div class="mt-1 text-slate-400">
+        {{ lastCoreRegisterRefreshAt ? `最近 ${new Date(lastCoreRegisterRefreshAt).toLocaleTimeString()}` : '尚未读取核心寄存器' }}
+      </div>
+    </div>
+
     <div class="flex items-center justify-between mb-2">
       <div class="min-w-0 text-[10px] text-slate-500 dark:text-slate-400">
         <span v-if="breakpointSlotStatus">
@@ -151,6 +175,24 @@ watch(() => props.pcFocusRequestId, async () => {
       >
         清空断点
       </button>
+    </div>
+
+    <div class="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] dark:border-slate-800 dark:bg-slate-950/50">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-slate-500 dark:text-slate-400">断点诊断</span>
+        <span
+          class="rounded-full px-2 py-0.5"
+          :class="{
+            'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300': breakpointDiagnostic.tone === 'ok',
+            'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300': breakpointDiagnostic.tone === 'warn',
+            'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-300': breakpointDiagnostic.tone === 'error',
+            'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400': breakpointDiagnostic.tone === 'idle',
+          }"
+        >
+          {{ breakpointDiagnostic.label }}
+        </span>
+      </div>
+      <div class="mt-1 text-slate-400">{{ breakpointDiagnostic.detail }}</div>
     </div>
 
     <div
