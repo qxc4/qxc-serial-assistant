@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 QXC Serial (超联串口助手) — a browser-based serial port debugging tool built on the Web Serial API. Targets Chrome/Edge 89+. UI and documentation are primarily in Chinese with bilingual (zh-CN/en-US) i18n support.
 
-**纯 Web 版本**：本项目为纯浏览器应用，无桌面端依赖。RTT/调试工作台走 WebUSB 直连路线，不再维护 RTT Bridge。
+**纯 Web 版本**：本项目为纯浏览器应用，无桌面端依赖。RTT/调试工作台走 WebUSB 直连路线，不再维护本地转发服务。
 
 ## Commands
 
@@ -75,4 +75,4 @@ The codebase has a strong performance focus: button optimization composables, `w
 
 ## RTT / Debug Workbench
 
-`/rtt` is a pure browser debug workbench. It uses WebUSB for supported probes, scans SEGGER RTT control blocks in target RAM, and hosts the debugger/flash-programming UI in the SPA. Browser support is Chrome/Edge desktop with WebUSB enabled. Do not reintroduce the old WebSocket/RTT Bridge route unless the product direction explicitly changes.
+`/rtt` is a pure browser debug workbench. It uses WebUSB for supported probes, scans SEGGER RTT control blocks in target RAM, and hosts the debugger/flash-programming UI in the SPA. Browser support is Chrome/Edge desktop with WebUSB enabled. Do not reintroduce a local WebSocket relay unless the product direction explicitly changes.
