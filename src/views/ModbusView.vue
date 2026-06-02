@@ -23,8 +23,11 @@ import { functionCodeNames } from '../types/modbus'
 import type { ModbusParseResult, ModbusMode } from '../types/modbus'
 import {
   bytesToHexInput,
+  formatModbusPollingProgress,
+  normalizeModbusPollingSettings,
   parseCompleteModbusFrame,
   parseRegisterData,
+  shouldContinueModbusPolling,
   type ByteOrder,
   type DataType,
   type RegisterValue,
@@ -82,12 +85,24 @@ const buildResult = ref('')
 const autoParseSerialResponse = ref(true)
 const isSendingModbusRequest = ref(false)
 const lastSerialResponseAt = ref<number | null>(null)
+const pollingSettings = ref({
+  intervalMs: 1000,
+  maxCycles: 0,
+})
+const isPollingModbus = ref(false)
+const sentPollingCycles = ref(0)
+const lastPollingSentAt = ref<number | null>(null)
+const lastPollingError = ref('')
+let pollingTimer: ReturnType<typeof setInterval> | null = null
+let isPollingTickInFlight = false
 
 /** 展开的解析结果 */
 const expandedResult = ref<string | null>(null)
 
 const successfulResultCount = computed(() => parseResults.value.filter(item => item.result?.success).length)
 const failedResultCount = computed(() => parseResults.value.filter(item => !item.result?.success).length)
+const normalizedPollingSettings = computed(() => normalizeModbusPollingSettings(pollingSettings.value))
+const pollingProgressLabel = computed(() => formatModbusPollingProgress(sentPollingCycles.value, normalizedPollingSettings.value.maxCycles))
 const activeParseResult = computed(() => {
   return parseResults.value.find(item => item.id === expandedResult.value) || parseResults.value[0] || null
 })
@@ -297,24 +312,89 @@ function useBuildResultAsResponseInput() {
 }
 
 async function handleSendBuiltFrame() {
-  if (!buildResult.value) {
-    handleBuild()
-  }
-  if (!buildResult.value) return
-  if (!isSerialConnected.value) {
-    settingsStore.showToast('请先在串口页连接设备')
-    return
-  }
-
   try {
     isSendingModbusRequest.value = true
-    await sendSerial(buildResult.value, true)
+    await sendCurrentModbusFrame()
     settingsStore.showToast('Modbus 请求已发送')
   } catch (error) {
     settingsStore.showToast(`发送失败：${error instanceof Error ? error.message : String(error)}`)
   } finally {
     isSendingModbusRequest.value = false
   }
+}
+
+async function sendCurrentModbusFrame(): Promise<void> {
+  if (!buildResult.value) {
+    handleBuild()
+  }
+  if (!buildResult.value) {
+    throw new Error('请先构建有效的 Modbus 帧')
+  }
+  if (!isSerialConnected.value) {
+    throw new Error('请先在串口页连接设备')
+  }
+
+  await sendSerial(buildResult.value, true)
+}
+
+function stopModbusPolling(reason?: string) {
+  if (pollingTimer) {
+    clearInterval(pollingTimer)
+    pollingTimer = null
+  }
+  isPollingModbus.value = false
+  isPollingTickInFlight = false
+  if (reason) {
+    lastPollingError.value = reason
+  }
+}
+
+async function runModbusPollingTick() {
+  if (isPollingTickInFlight || !isPollingModbus.value) return
+  if (!shouldContinueModbusPolling(sentPollingCycles.value, normalizedPollingSettings.value.maxCycles)) {
+    stopModbusPolling()
+    return
+  }
+
+  try {
+    isPollingTickInFlight = true
+    await sendCurrentModbusFrame()
+    sentPollingCycles.value += 1
+    lastPollingSentAt.value = Date.now()
+
+    if (!shouldContinueModbusPolling(sentPollingCycles.value, normalizedPollingSettings.value.maxCycles)) {
+      stopModbusPolling()
+    }
+  } catch (error) {
+    stopModbusPolling(error instanceof Error ? error.message : String(error))
+  } finally {
+    isPollingTickInFlight = false
+  }
+}
+
+function startModbusPolling() {
+  stopModbusPolling()
+  const normalized = normalizedPollingSettings.value
+  pollingSettings.value.intervalMs = normalized.intervalMs
+  pollingSettings.value.maxCycles = normalized.maxCycles
+  lastPollingError.value = ''
+  sentPollingCycles.value = 0
+
+  if (!isSerialConnected.value) {
+    settingsStore.showToast('请先在串口页连接设备')
+    return
+  }
+
+  if (!buildResult.value) {
+    handleBuild()
+  }
+  if (!buildResult.value) return
+
+  isPollingModbus.value = true
+  void runModbusPollingTick()
+  pollingTimer = setInterval(() => {
+    void runModbusPollingTick()
+  }, normalized.intervalMs)
 }
 
 const stopSerialDataListener = onDataReceive((data, direction) => {
@@ -332,6 +412,7 @@ const stopSerialDataListener = onDataReceive((data, direction) => {
 })
 
 onUnmounted(() => {
+  stopModbusPolling()
   stopSerialDataListener()
 })
 
@@ -584,6 +665,73 @@ function formatTimestamp(timestamp: number): string {
               >
                 填入解析
               </button>
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <div>
+                <h4 class="text-xs font-medium text-slate-600 dark:text-slate-300">轮询发送</h4>
+                <p class="text-[10px] text-slate-400">按当前构建帧周期发送，响应进入流水线</p>
+              </div>
+              <span
+                class="rounded-full px-2 py-0.5 text-[10px]"
+                :class="isPollingModbus ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
+              >
+                {{ isPollingModbus ? '运行中' : '已停止' }}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2">
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] text-slate-500">间隔 ms</label>
+                <input
+                  v-model.number="pollingSettings.intervalMs"
+                  type="number"
+                  min="100"
+                  max="60000"
+                  step="100"
+                  :disabled="isPollingModbus"
+                  class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-blue-500 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-[10px] text-slate-500">次数 0=无限</label>
+                <input
+                  v-model.number="pollingSettings.maxCycles"
+                  type="number"
+                  min="0"
+                  max="999999"
+                  :disabled="isPollingModbus"
+                  class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-blue-500 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 gap-2">
+              <button
+                v-if="!isPollingModbus"
+                @click="startModbusPolling"
+                :disabled="!isSerialConnected"
+                class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-45 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/60"
+              >
+                开始轮询
+              </button>
+              <button
+                v-else
+                @click="stopModbusPolling()"
+                class="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/60"
+              >
+                停止轮询
+              </button>
+              <div class="flex items-center justify-center rounded-lg bg-slate-50 px-2 py-1.5 text-[10px] text-slate-500 dark:bg-slate-950/60 dark:text-slate-400">
+                {{ pollingProgressLabel }}
+              </div>
+            </div>
+
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+              <span v-if="lastPollingSentAt">最近发送 {{ formatTimestamp(lastPollingSentAt) }}</span>
+              <span v-if="lastPollingError" class="text-red-500 dark:text-red-300">{{ lastPollingError }}</span>
             </div>
           </div>
 
