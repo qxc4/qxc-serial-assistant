@@ -25,6 +25,7 @@ import SerialSendPanel from '../components/serial/SerialSendPanel.vue'
 import SerialLogPanel from '../components/serial/SerialLogPanel.vue'
 import SerialMiddleToolbar from '../components/serial/SerialMiddleToolbar.vue'
 import SerialTopToolbar from '../components/serial/SerialTopToolbar.vue'
+import SerialConnectionDrawer from '../components/serial/SerialConnectionDrawer.vue'
 import { 
   matchesShortcutFast, 
   preparseShortcuts,
@@ -36,11 +37,10 @@ import {
   BatchDOMUpdater
 } from '../composables/useButtonOptimizer'
 import { 
-  Trash2, Bluetooth,
-  Usb, Plus, Play, Pause, Trash,
+  Trash2, Plus, Play, Pause, Trash,
   ListOrdered, Save, FolderOpen, Square,
   ChevronRight, Clock, AlertCircle, CheckCircle2, XCircle, Loader2,
-  Send, RefreshCw, Keyboard, FileCode
+  Send, RefreshCw, Keyboard
 } from 'lucide-vue-next'
 
 const settingsStore = useSettingsStore()
@@ -444,32 +444,6 @@ const isCustomBaudRate = ref(false)
  */
 const customBaudRateInput = ref('')
 
-/**
- * 切换到自定义波特率模式，将当前波特率填入输入框
- */
-const enableCustomBaudRate = () => {
-  isCustomBaudRate.value = true
-  customBaudRateInput.value = String(baudRate.value)
-}
-
-/**
- * 确认应用自定义波特率值
- */
-const applyCustomBaudRate = () => {
-  const val = parseInt(customBaudRateInput.value, 10)
-  if (!isNaN(val) && val > 0) {
-    baudRate.value = val
-  }
-}
-
-/**
- * 选择预设波特率时关闭自定义模式
- */
-const selectPresetBaudRate = (val: number) => {
-  isCustomBaudRate.value = false
-  baudRate.value = val
-}
-
 // Watchers & Handlers
 watch(receivedData, async () => {
   if (autoScroll.value && virtualListRef.value) {
@@ -702,276 +676,31 @@ onUnmounted(cleanupButtonOptimizations)
     <!-- Top / Main Content Area -->
     <div class="relative flex flex-1 min-h-0 overflow-hidden">
       
-      <!-- Left Drawer: Connection Settings -->
-      <Transition name="serial-drawer">
-      <div v-if="showLeftPanel" class="apple-sidebar absolute inset-y-0 left-0 z-30 w-80 max-w-[calc(100vw-1rem)] shrink-0 bg-white/95 dark:bg-slate-800/95 border-r border-slate-200 dark:border-slate-700 shadow-2xl backdrop-blur flex min-h-0 flex-col">
-        <!-- Tabs -->
-        <div class="flex h-12 border-b dark:border-slate-700 text-center">
-          <div 
-            class="flex-1 cursor-pointer flex justify-center items-center gap-2 border-b-2 transition-colors"
-            :class="activeTab === 'serial' ? 'border-blue-600 font-semibold text-blue-600' : 'border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:bg-slate-900'"
-            @click="activeTab = 'serial'"
-          >
-            <Usb class="w-4 h-4" /> {{ t('serial.serialTab') }}
-          </div>
-          <div 
-            class="flex-1 cursor-pointer flex justify-center items-center gap-2 text-slate-400 hover:bg-slate-50 dark:bg-slate-900 border-b-2 border-transparent"
-            @click="settingsStore.showToast(t('serial.bluetoothComingSoon'))"
-          >
-            <Bluetooth class="w-4 h-4" /> {{ t('serial.bluetoothTab') }}
-          </div>
-          <button
-            @click="showLeftPanel = false"
-            class="w-11 flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-            title="关闭连接抽屉"
-          >
-            <XCircle class="w-4 h-4" />
-          </button>
-        </div>
-
-        <!-- Settings Form -->
-        <div class="p-4 flex min-h-0 flex-col gap-4 overflow-y-auto">
-          <div>
-            <h2 class="font-bold text-base mb-1">{{ t('serial.serialSettings') }}</h2>
-            <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('serial.serialSettingsDesc') }}</p>
-          </div>
-
-          <div v-if="!isSupported" class="text-xs text-red-600 bg-red-50 p-2 rounded">
-            {{ t('serial.notSupported') }}
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('settings.baudRate') }}</label>
-            <div v-if="!isCustomBaudRate" class="flex gap-1">
-              <select 
-                :value="baudRate" 
-                :disabled="isConnected" 
-                @change="selectPresetBaudRate(($event.target as HTMLSelectElement).value as unknown as number)"
-                class="flex-1 border dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm"
-              >
-                <option v-for="rate in baudRatePresets" :key="rate" :value="rate">{{ rate }}</option>
-              </select>
-              <button 
-                @click="enableCustomBaudRate"
-                :disabled="isConnected"
-                class="px-3 py-2 border dark:border-slate-700 rounded bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs font-medium whitespace-nowrap transition-colors disabled:opacity-50"
-                :title="t('serial.customBaud')"
-              >
-                {{ t('serial.customBaud') }}
-              </button>
-            </div>
-            <div v-else class="flex gap-1">
-              <input 
-                type="number" 
-                :value="customBaudRateInput"
-                :disabled="isConnected"
-                @input="(e: Event) => { customBaudRateInput = (e.target as HTMLInputElement).value; applyCustomBaudRate() }"
-                min="1"
-                :placeholder="t('serial.customBaud')"
-                class="flex-1 border dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm"
-              />
-              <button 
-                @click="isCustomBaudRate = false"
-                :disabled="isConnected"
-                class="px-3 py-2 border dark:border-slate-700 rounded bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-xs transition-colors disabled:opacity-50"
-              >
-                {{ t('serial.apply') }}
-              </button>
-            </div>
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('settings.dataBits') }}</label>
-            <select v-model="dataBits" :disabled="isConnected" class="border dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800 outline-none focus:border dark:border-slate-700-blue-500">
-              <option :value="8">8</option>
-              <option :value="7">7</option>
-            </select>
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('settings.parity') }}</label>
-            <select v-model="parity" :disabled="isConnected" class="border dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800 outline-none focus:border dark:border-slate-700-blue-500">
-              <option value="none">{{ t('settings.none') }}</option>
-              <option value="even">{{ t('settings.even') }}</option>
-              <option value="odd">{{ t('settings.odd') }}</option>
-            </select>
-          </div>
-
-          <div class="flex flex-col gap-1">
-            <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('settings.stopBits') }}</label>
-            <select v-model="stopBits" :disabled="isConnected" class="border dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800 outline-none focus:border dark:border-slate-700-blue-500">
-              <option :value="1">1</option>
-              <option :value="2">2</option>
-            </select>
-          </div>
-
-          <button 
-            v-if="isConnected"
-            @click="disconnect" 
-            :disabled="!isSupported"
-            class="mt-4 py-3 rounded-md text-white font-medium transition-colors w-full bg-red-500 hover:bg-red-600"
-          >
-            {{ t('serial.disconnect') }}
-          </button>
-          <div v-else-if="canReconnect" class="mt-4 flex gap-2 w-full">
-            <button 
-              @click="reconnect" 
-              :disabled="!isSupported"
-              class="flex-1 py-3 rounded-md text-white font-medium transition-colors bg-green-500 hover:bg-green-600 disabled:opacity-50"
-            >
-              {{ t('serial.enablePort') }}
-            </button>
-            <button 
-              @click="connect" 
-              :disabled="!isSupported"
-              class="flex-1 py-3 rounded-md text-white font-medium transition-colors bg-slate-900 hover:bg-slate-800 disabled:opacity-50"
-            >
-              {{ t('serial.changePort') }}
-            </button>
-          </div>
-          <button 
-            v-else
-            @click="connect" 
-            :disabled="!isSupported"
-            class="mt-4 py-3 rounded-md text-white font-medium transition-colors w-full bg-slate-900 hover:bg-slate-800 disabled:opacity-50"
-          >
-            {{ t('serial.selectPort') }}
-          </button>
-          
-          <!-- 数据解析配置 -->
-          <div class="mt-6 pt-4 border-t dark:border-slate-700">
-            <div class="flex items-center justify-between mb-3">
-              <h3 class="font-bold text-sm flex items-center gap-2">
-                <FileCode class="w-4 h-4" />
-                {{ t('serial.dataParse') }}
-              </h3>
-              <label class="flex items-center gap-1 cursor-pointer">
-                <input 
-                  type="checkbox" 
-                  v-model="parseEnabled"
-                  class="w-4 h-4 rounded border-slate-300"
-                />
-                <span class="text-xs text-slate-600 dark:text-slate-400">{{ t('serial.enable') }}</span>
-              </label>
-            </div>
-            
-            <div class="flex flex-col gap-3">
-              <div class="flex flex-col gap-1">
-                <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('serial.parseMode') }}</label>
-                <select 
-                  v-model="parseMode"
-                  :disabled="!parseEnabled"
-                  class="border dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm disabled:opacity-50"
-                >
-                  <option value="none">{{ t('serial.noParse') }}</option>
-                  <optgroup :label="t('serial.modbusProtocol')">
-                    <option value="modbus-rtu">{{ t('serial.modbusRtu') }}</option>
-                    <option value="modbus-ascii">{{ t('serial.modbusAscii') }}</option>
-                  </optgroup>
-                  <optgroup :label="t('serial.displayModeGroup')">
-                    <option value="hex-display">{{ t('serial.hexDisplay') }}</option>
-                    <option value="ascii-display">{{ t('serial.asciiDisplay') }}</option>
-                  </optgroup>
-                  <optgroup :label="t('serial.customProtocol')">
-                    <option value="custom-frame">{{ t('serial.customFrame') }}</option>
-                  </optgroup>
-                </select>
-              </div>
-              
-              <!-- 自定义协议配置 -->
-              <div v-if="parseMode === 'custom-frame'" class="space-y-2 p-2 bg-slate-50 dark:bg-slate-900 rounded border dark:border-slate-700">
-                <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">{{ t('serial.frameHeader') }}</label>
-                  <input 
-                    v-model="customProtocolConfig.frameHeader"
-                    type="text"
-                    placeholder="如: AA 55"
-                    class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 font-mono w-full"
-                  />
-                </div>
-                
-                <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">{{ t('serial.frameTail') }}</label>
-                  <input 
-                    v-model="customProtocolConfig.frameTail"
-                    type="text"
-                    placeholder="如: 0D 0A"
-                    class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 font-mono w-full"
-                  />
-                </div>
-                
-                <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">{{ t('serial.dataOffset') }}</label>
-                  <input 
-                    v-model.number="customProtocolConfig.dataOffset"
-                    type="number"
-                    min="0"
-                    class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
-                  />
-                </div>
-                
-                <div class="flex flex-col gap-1">
-                  <label class="text-xs text-slate-500">{{ t('serial.checksumMethod') }}</label>
-                  <select 
-                    v-model="customProtocolConfig.checksum.type"
-                    class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
-                  >
-                    <option value="none">{{ t('serial.noChecksum') }}</option>
-                    <option value="sum">{{ t('serial.sumChecksum') }}</option>
-                    <option value="xor">{{ t('serial.xorChecksum') }}</option>
-                    <option value="crc16">{{ t('serial.crc16Checksum') }}</option>
-                    <option value="crc16-modbus">{{ t('serial.crc16ModbusChecksum') }}</option>
-                  </select>
-                </div>
-                
-                <div class="flex items-center gap-2">
-                  <input 
-                    type="checkbox"
-                    v-model="lengthFieldEnabled"
-                    class="w-3 h-3"
-                  />
-                  <label class="text-xs text-slate-500">{{ t('serial.enableLengthField') }}</label>
-                </div>
-                
-                <div v-show="lengthFieldEnabled" class="space-y-2">
-                  <div class="flex flex-col gap-1">
-                    <label class="text-xs text-slate-500">{{ t('serial.lengthOffset') }}</label>
-                    <input 
-                      v-model.number="customProtocolConfig.lengthField.offset"
-                      type="number"
-                      min="0"
-                      class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
-                    />
-                  </div>
-                  <div class="flex flex-col gap-1">
-                    <label class="text-xs text-slate-500">{{ t('serial.lengthBytes') }}</label>
-                    <select 
-                      v-model.number="customProtocolConfig.lengthField.size"
-                      class="border dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 w-full"
-                    >
-                      <option :value="1">{{ t('serial.oneByte') }}</option>
-                      <option :value="2">{{ t('serial.twoBytes') }}</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-              
-              <button 
-                @click="showParsePanel = !showParsePanel"
-                :disabled="!parseEnabled || parseMode === 'none'"
-                class="w-full py-2 rounded border dark:border-slate-700 text-sm transition-colors flex items-center justify-center gap-2 disabled:opacity-50 hover:bg-slate-50 dark:hover:bg-slate-700"
-              >
-                <FileCode class="w-4 h-4" />
-                {{ showParsePanel ? t('serial.hideParseResults') : t('serial.showParseResults') }}
-                <span v-if="dataParse.resultCount.value > 0" class="px-1.5 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">
-                  {{ dataParse.resultCount.value }}
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      </Transition>
+      <SerialConnectionDrawer
+        v-model:visible="showLeftPanel"
+        v-model:active-tab="activeTab"
+        v-model:baud-rate="baudRate"
+        v-model:data-bits="dataBits"
+        v-model:stop-bits="stopBits"
+        v-model:parity="parity"
+        v-model:is-custom-baud-rate="isCustomBaudRate"
+        v-model:custom-baud-rate-input="customBaudRateInput"
+        v-model:parse-enabled="parseEnabled"
+        v-model:parse-mode="parseMode"
+        v-model:length-field-enabled="lengthFieldEnabled"
+        v-model:show-parse-panel="showParsePanel"
+        :is-supported="isSupported"
+        :is-connected="isConnected"
+        :can-reconnect="canReconnect"
+        :baud-rate-presets="baudRatePresets"
+        :custom-protocol-config="customProtocolConfig"
+        :parse-result-count="dataParse.resultCount.value"
+        :t="t"
+        @connect="connect"
+        @disconnect="disconnect"
+        @reconnect="reconnect"
+        @bluetooth-coming-soon="settingsStore.showToast(t('serial.bluetoothComingSoon'))"
+      />
 
       <!-- Middle Panel: Data View & Send -->
       <div class="apple-content flex-1 flex flex-col bg-white dark:bg-slate-800 min-w-0">
