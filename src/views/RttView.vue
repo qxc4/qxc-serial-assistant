@@ -22,6 +22,7 @@ import RttDebugControls from '../components/rtt/RttDebugControls.vue'
 import RttFlashProgrammerPanel from '../components/rtt/RttFlashProgrammerPanel.vue'
 import RttJLinkDiagnosticPanel from '../components/rtt/RttJLinkDiagnosticPanel.vue'
 import RttWorkbenchHeader from '../components/rtt/RttWorkbenchHeader.vue'
+import RttSidePanelShell from '../components/rtt/RttSidePanelShell.vue'
 import type { RttLogLevel, RttBackend, RttFilter } from '../types/rtt'
 import {
   Send,
@@ -1523,23 +1524,11 @@ watch(
     </div>
 
     <!-- 右侧工具栏 -->
-    <div
-      v-if="showRightPanel"
-      class="apple-inspector w-72 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 flex min-h-0 flex-col overflow-hidden overscroll-contain"
+    <RttSidePanelShell
+      v-model:active-tab="activeRightPanelTab"
+      :visible="showRightPanel"
+      :tabs="RTT_SIDE_PANEL_TABS"
     >
-      <div class="grid grid-cols-4 gap-1 border-b border-slate-200 dark:border-slate-800 p-2">
-        <button
-          v-for="tab in RTT_SIDE_PANEL_TABS"
-          :key="tab.key"
-          @click="activeRightPanelTab = tab.key"
-          class="rounded-lg px-1 py-1.5 text-[10px] font-medium transition-colors"
-          :class="activeRightPanelTab === tab.key
-            ? 'bg-blue-500 text-white shadow-sm'
-            : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800'"
-        >
-          {{ tab.label }}
-        </button>
-      </div>
 
       <input
         ref="variableElfInputRef"
@@ -1556,7 +1545,6 @@ watch(
         @change="handleFirmwareSelected"
       />
 
-      <div class="min-h-0 flex-1 overflow-y-auto">
       <!-- 搜索 -->
       <div v-show="activeRightPanelTab === 'diagnostics'" class="p-3 border-b border-slate-200 dark:border-slate-800">
         <div class="relative">
@@ -2076,8 +2064,7 @@ watch(
           </div>
         </div>
       </div>
-      </div>
-    </div>
+    </RttSidePanelShell>
   </div>
 
 </template>
