@@ -19,11 +19,11 @@ import {
   useQuickCommands,
   useSerialParsePanel,
 } from '../features/serial'
-import VirtualList from '../components/VirtualList.vue'
 import SerialSessionReplayPanel from '../components/serial/SerialSessionReplayPanel.vue'
 import SerialSessionStrip from '../components/serial/SerialSessionStrip.vue'
 import SerialParseResultsPanel from '../components/serial/SerialParseResultsPanel.vue'
 import SerialSendPanel from '../components/serial/SerialSendPanel.vue'
+import SerialLogPanel from '../components/serial/SerialLogPanel.vue'
 import { 
   matchesShortcutFast, 
   preparseShortcuts,
@@ -77,7 +77,7 @@ const {
 // Layout & View states - 从 store 获取持久化状态
 const activeTab = ref<'serial'|'bluetooth'>('serial')
 const activeRightTab = ref<'quick'|'group'>('quick')
-const virtualListRef = ref<InstanceType<typeof VirtualList> | null>(null)
+const virtualListRef = ref<InstanceType<typeof SerialLogPanel> | null>(null)
 
 /** 搜索关键词 */
 const searchQuery = ref('')
@@ -1060,29 +1060,13 @@ onUnmounted(cleanupButtonOptimizations)
           </div>
         </div>
 
-        <!-- Receive Data Area with Virtual Scroll -->
-        <div class="flex-1 font-mono text-sm relative min-h-0">
-          <VirtualList
-            ref="virtualListRef"
-            :items="filteredReceivedData"
-            :item-height="24"
-            :buffer="5"
-            key-field="id"
-            class="h-full p-4"
-            @scroll="handleVirtualScroll"
-          >
-            <template #default="{ item }">
-              <div class="mb-1 whitespace-pre-wrap break-all" style="line-height: 24px;">
-                <span v-if="showTimestamp" class="text-slate-500 dark:text-slate-400 mr-2 select-none">
-                  [{{ formatTimestamp(item.timestamp) }}] {{ item.direction === 'rx' ? 'RX' : 'TX' }}:
-                </span>
-                <span :class="item.direction === 'rx' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'">
-                  {{ item.data }}
-                </span>
-              </div>
-            </template>
-          </VirtualList>
-        </div>
+        <SerialLogPanel
+          ref="virtualListRef"
+          :items="filteredReceivedData"
+          :show-timestamp="showTimestamp"
+          :format-timestamp="formatTimestamp"
+          @scroll="handleVirtualScroll"
+        />
 
         <SerialParseResultsPanel
           v-model:visible="showParsePanel"
