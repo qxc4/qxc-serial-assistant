@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, type Component } from 'vue'
-import { RouterView, useRoute } from 'vue-router'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Component } from 'vue'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import {
   Activity,
+  ArrowRight,
   Binary,
+  Command,
   Cpu,
   FileDigit,
   Heart,
@@ -13,10 +15,12 @@ import {
   Moon,
   Settings,
   SquareTerminal,
+  Search,
   Sun,
   Terminal,
   User,
   Usb,
+  X,
   Zap,
 } from 'lucide-vue-next'
 import { useSettingsStore } from './stores/settings'
@@ -42,11 +46,25 @@ type CapabilityChip = {
   icon: Component
 }
 
+type CommandPaletteItem = {
+  id: string
+  title: string
+  description: string
+  icon: Component
+  keywords: string
+  action: () => void
+}
+
 const route = useRoute()
+const router = useRouter()
 const settingsStore = useSettingsStore()
 const { t, setLocale } = useI18n()
 
 const showDonateModal = ref(false)
+const showCommandPalette = ref(false)
+const commandQuery = ref('')
+const selectedCommandIndex = ref(0)
+const commandSearchInputRef = ref<HTMLInputElement | null>(null)
 
 const navGroups: NavGroup[] = [
   {
@@ -102,6 +120,61 @@ const themeIcon = computed(() => {
   return Monitor
 })
 
+const commandItems = computed<CommandPaletteItem[]>(() => [
+  ...flatNavItems.value.map(item => ({
+    id: `nav:${item.path}`,
+    title: t(item.titleKey),
+    description: t(item.descKey),
+    icon: item.icon,
+    keywords: `${t(item.titleKey)} ${t(item.descKey)} ${item.path}`,
+    action: () => {
+      router.push(item.path)
+      closeCommandPalette()
+    },
+  })),
+  {
+    id: 'theme',
+    title: t('shell.toggleTheme'),
+    description: settingsStore.config.theme,
+    icon: themeIcon.value,
+    keywords: `${t('shell.toggleTheme')} theme dark light system`,
+    action: () => {
+      cycleTheme()
+      closeCommandPalette()
+    },
+  },
+  {
+    id: 'language',
+    title: t('shell.switchLanguage'),
+    description: settingsStore.config.language,
+    icon: Languages,
+    keywords: `${t('shell.switchLanguage')} language zh en`,
+    action: () => {
+      toggleLanguage()
+      closeCommandPalette()
+    },
+  },
+  {
+    id: 'donate',
+    title: t('shell.donateTitle'),
+    description: t('nav.donate'),
+    icon: Heart,
+    keywords: `${t('shell.donateTitle')} ${t('nav.donate')} support`,
+    action: () => {
+      showDonateModal.value = true
+      closeCommandPalette()
+    },
+  },
+])
+
+const filteredCommandItems = computed(() => {
+  const query = commandQuery.value.trim().toLowerCase()
+  if (!query) return commandItems.value
+  return commandItems.value.filter(item =>
+    `${item.title} ${item.description} ${item.keywords}`.toLowerCase().includes(query)
+  )
+})
+
 function isActive(path: string): boolean {
   return route.path === path
 }
@@ -120,8 +193,83 @@ function toggleLanguage(): void {
   setLocale(settingsStore.config.language === 'zh-CN' ? 'en-US' : 'zh-CN')
 }
 
+function openCommandPalette(): void {
+  showCommandPalette.value = true
+  selectedCommandIndex.value = 0
+  nextTick(() => {
+    commandSearchInputRef.value?.focus()
+  })
+}
+
+function closeCommandPalette(): void {
+  showCommandPalette.value = false
+  commandQuery.value = ''
+  selectedCommandIndex.value = 0
+}
+
+function runSelectedCommand(): void {
+  const item = filteredCommandItems.value[selectedCommandIndex.value]
+  if (!item) return
+  item.action()
+}
+
+function handleGlobalKeydown(event: KeyboardEvent): void {
+  const isCommandShortcut = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k'
+  if (isCommandShortcut) {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    showCommandPalette.value ? closeCommandPalette() : openCommandPalette()
+    return
+  }
+
+  if (!showCommandPalette.value) return
+
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    closeCommandPalette()
+    return
+  }
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    if (filteredCommandItems.value.length === 0) return
+    selectedCommandIndex.value = Math.min(selectedCommandIndex.value + 1, filteredCommandItems.value.length - 1)
+    return
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    selectedCommandIndex.value = Math.max(selectedCommandIndex.value - 1, 0)
+    return
+  }
+
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    runSelectedCommand()
+  }
+}
+
+watch(filteredCommandItems, items => {
+  if (selectedCommandIndex.value >= items.length) {
+    selectedCommandIndex.value = Math.max(items.length - 1, 0)
+  }
+})
+
+watch(commandQuery, () => {
+  selectedCommandIndex.value = 0
+})
+
 onMounted(() => {
   settingsStore.applyTheme()
+  window.addEventListener('keydown', handleGlobalKeydown, true)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleGlobalKeydown, true)
 })
 </script>
 
@@ -195,6 +343,20 @@ onMounted(() => {
         </div>
 
         <div class="ml-3 flex shrink-0 items-center gap-2 lg:ml-4 lg:gap-3">
+          <button
+            type="button"
+            @click="openCommandPalette"
+            class="hidden h-9 min-w-48 items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs text-slate-500 transition-colors hover:bg-white hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100 md:flex"
+            :title="t('shell.openCommandPalette')"
+            :aria-label="t('shell.openCommandPalette')"
+          >
+            <span class="flex items-center gap-2">
+              <Search class="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{{ t('shell.commandSearch') }}</span>
+            </span>
+            <kbd class="rounded bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-400 shadow-sm dark:bg-slate-900">Ctrl K</kbd>
+          </button>
+
           <div class="hidden items-center gap-1.5 xl:flex" :aria-label="t('shell.capabilities')">
             <span
               v-for="chip in capabilityChips"
@@ -247,6 +409,74 @@ onMounted(() => {
     </div>
 
     <DonateModal v-model="showDonateModal" />
+
+    <Teleport to="body">
+      <Transition name="command-palette">
+        <div
+          v-if="showCommandPalette"
+          class="fixed inset-0 z-[80] flex items-start justify-center bg-slate-950/25 px-3 pt-[12vh] backdrop-blur-sm dark:bg-black/40"
+          @click.self="closeCommandPalette"
+        >
+          <div class="w-full max-w-xl overflow-hidden rounded-2xl border border-white/70 bg-white/95 shadow-2xl dark:border-slate-700/70 dark:bg-slate-900/95">
+            <div class="flex items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+              <Command class="h-5 w-5 shrink-0 text-blue-500" aria-hidden="true" />
+              <input
+                ref="commandSearchInputRef"
+                v-model="commandQuery"
+                type="text"
+                class="min-w-0 flex-1 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100"
+                :placeholder="t('shell.commandPlaceholder')"
+              />
+              <button
+                type="button"
+                @click="closeCommandPalette"
+                class="rounded-lg p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                :aria-label="t('shell.openCommandPalette')"
+              >
+                <X class="h-4 w-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            <div class="max-h-[52vh] overflow-y-auto p-2">
+              <button
+                v-for="(item, index) in filteredCommandItems"
+                :key="item.id"
+                type="button"
+                @click="item.action"
+                @mouseenter="selectedCommandIndex = index"
+                class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors"
+                :class="selectedCommandIndex === index
+                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-200'
+                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'"
+              >
+                <span
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                  :class="selectedCommandIndex === index
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
+                >
+                  <component :is="item.icon" class="h-4 w-4" aria-hidden="true" />
+                </span>
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-medium">{{ item.title }}</span>
+                  <span class="block truncate text-[11px] opacity-70">{{ item.description }}</span>
+                </span>
+                <ArrowRight class="h-4 w-4 shrink-0 opacity-45" aria-hidden="true" />
+              </button>
+
+              <div v-if="filteredCommandItems.length === 0" class="px-4 py-10 text-center text-sm text-slate-400">
+                {{ t('shell.commandNoResults') }}
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between border-t border-slate-200 px-4 py-2 text-[10px] text-slate-400 dark:border-slate-800">
+              <span>{{ t('shell.commandChooseHint') }}</span>
+              <span>{{ t('shell.commandRunHint') }}</span>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -258,4 +488,21 @@ onMounted(() => {
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 .dark ::-webkit-scrollbar-thumb { background: #475569; }
 .dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+.command-palette-enter-active,
+.command-palette-leave-active {
+  transition: opacity 0.16s ease;
+}
+.command-palette-enter-active > div,
+.command-palette-leave-active > div {
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), opacity 0.16s ease;
+}
+.command-palette-enter-from,
+.command-palette-leave-to {
+  opacity: 0;
+}
+.command-palette-enter-from > div,
+.command-palette-leave-to > div {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.98);
+}
 </style>
