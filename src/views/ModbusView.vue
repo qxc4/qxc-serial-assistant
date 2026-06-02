@@ -23,11 +23,13 @@ import { functionCodeNames } from '../types/modbus'
 import type { ModbusParseResult, ModbusMode } from '../types/modbus'
 import {
   bytesToHexInput,
+  estimateModbusResponseGap,
   formatModbusPollingProgress,
   normalizeModbusPollingSettings,
   parseCompleteModbusFrame,
   parseRegisterData,
   shouldContinueModbusPolling,
+  summarizeModbusPipeline,
   type ByteOrder,
   type DataType,
   type RegisterValue,
@@ -103,6 +105,8 @@ const successfulResultCount = computed(() => parseResults.value.filter(item => i
 const failedResultCount = computed(() => parseResults.value.filter(item => !item.result?.success).length)
 const normalizedPollingSettings = computed(() => normalizeModbusPollingSettings(pollingSettings.value))
 const pollingProgressLabel = computed(() => formatModbusPollingProgress(sentPollingCycles.value, normalizedPollingSettings.value.maxCycles))
+const pipelineDiagnostics = computed(() => summarizeModbusPipeline(parseResults.value))
+const pollingResponseGap = computed(() => estimateModbusResponseGap(sentPollingCycles.value, pipelineDiagnostics.value.total))
 const activeParseResult = computed(() => {
   return parseResults.value.find(item => item.id === expandedResult.value) || parseResults.value[0] || null
 })
@@ -906,6 +910,40 @@ function formatTimestamp(timestamp: number): string {
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-3">
+          <div class="mb-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+            <div class="mb-2 flex items-center justify-between">
+              <span class="text-xs font-medium text-slate-600 dark:text-slate-300">流水线诊断</span>
+              <span
+                class="rounded-full px-2 py-0.5 text-[10px]"
+                :class="pipelineDiagnostics.failed === 0 ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300'"
+              >
+                {{ pipelineDiagnostics.successRate }}% 成功
+              </span>
+            </div>
+            <div class="grid grid-cols-4 gap-1 text-center text-[10px]">
+              <div class="rounded bg-slate-50 px-1 py-1.5 dark:bg-slate-950/60">
+                <div class="font-mono text-xs text-slate-700 dark:text-slate-200">{{ pipelineDiagnostics.total }}</div>
+                <div class="text-slate-400">响应</div>
+              </div>
+              <div class="rounded bg-emerald-50 px-1 py-1.5 dark:bg-emerald-950/30">
+                <div class="font-mono text-xs text-emerald-600 dark:text-emerald-300">{{ pipelineDiagnostics.success }}</div>
+                <div class="text-slate-400">成功</div>
+              </div>
+              <div class="rounded bg-red-50 px-1 py-1.5 dark:bg-red-950/30">
+                <div class="font-mono text-xs text-red-600 dark:text-red-300">{{ pipelineDiagnostics.failed }}</div>
+                <div class="text-slate-400">失败</div>
+              </div>
+              <div class="rounded bg-amber-50 px-1 py-1.5 dark:bg-amber-950/30">
+                <div class="font-mono text-xs text-amber-600 dark:text-amber-300">{{ pipelineDiagnostics.exceptionFrames }}</div>
+                <div class="text-slate-400">异常</div>
+              </div>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-2 text-[10px] text-slate-400">
+              <span v-if="sentPollingCycles > 0">轮询差值 {{ pollingResponseGap }}</span>
+              <span v-if="pipelineDiagnostics.lastError" class="text-red-500 dark:text-red-300">最近错误：{{ pipelineDiagnostics.lastError }}</span>
+            </div>
+          </div>
+
           <div v-if="parseResults.length === 0" class="flex h-full items-center justify-center text-center text-slate-400">
             <div>
               <FileCode class="mx-auto mb-3 h-10 w-10 opacity-30" />
