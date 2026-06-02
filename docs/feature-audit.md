@@ -108,3 +108,4 @@
 - 当前轮次：RTT 变量查看增强，覆盖 ELF 函数/对象符号摘要、PC 所在函数定位和复合变量 best-effort 标注。
 - 当前轮次：Flash 芯片族扩展，覆盖 STM32G0/G4/H7 profile、识别关键字、默认范围、dry-run 规划和未支持擦除算法诊断。
 - 当前轮次：J-Link 研究诊断，覆盖纯 Web 协议、SEGGER GDB Server、本地 relay、SDK 授权集成四条路线说明。
+- 当前轮次：页面组件化，拆出 Serial 会话录制/回放面板和 RTT J-Link 诊断面板，页面继续保留业务状态组合。
