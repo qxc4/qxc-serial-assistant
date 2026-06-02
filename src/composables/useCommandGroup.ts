@@ -15,6 +15,14 @@ import {
   GroupExecutionState as GrpState,
   FailurePolicy as FailPolicy
 } from '../types/command-group'
+import {
+  calculateCommandGroupProgress,
+  calculateCommandGroupStats,
+  createCommandGroupId,
+  createEmptyCommandGroup,
+  createEmptyCommandItem,
+  normalizeCommandGroup,
+} from '../features/serial/commandGroupModel'
 
 /** localStorage 存储键名 */
 const STORAGE_KEY = 'qxc-serial-command-groups'
@@ -136,33 +144,14 @@ export function useCommandGroup() {
    * 创建一个空白的指令组模板
    */
   function createEmptyGroup(): CommandGroup {
-    return {
-      id: generateId(),
-      name: '未命名指令组',
-      description: '',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      commands: [],
-      onFailure: FailPolicy.SkipAndContinue,
-      globalTimeout: 5000,
-      version: 1
-    }
+    return createEmptyCommandGroup()
   }
 
   /**
    * 创建一条空白指令项
    */
   function createEmptyCommand(): CommandItem {
-    return {
-      id: Date.now() + Math.random(),
-      content: '',
-      description: '',
-      isHex: false,
-      delay: 500,
-      timeout: 0,
-      enabled: true,
-      dependencies: []
-    }
+    return createEmptyCommandItem()
   }
 
   /**
@@ -181,17 +170,7 @@ export function useCommandGroup() {
       counter++
     }
 
-    const newGroup: CommandGroup = {
-      id: generateId(),
-      name: finalName,
-      description: '',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      commands: [],
-      onFailure: FailPolicy.SkipAndContinue,
-      globalTimeout: 5000,
-      version: 1
-    }
+    const newGroup = createEmptyCommandGroup({ name: finalName })
 
     activeGroup.value = newGroup
     hasUnsavedChanges.value = false
@@ -1104,26 +1083,12 @@ export function useCommandGroup() {
 
   /** 统计各状态的指令数量 */
   const stats = computed(() => {
-    let pending = 0, running = 0, success = 0, failed = 0, skipped = 0, timeout = 0
-    for (const status of Object.values(commandStatusMap.value)) {
-      switch (status) {
-        case CmdStatus.Pending: pending++; break
-        case CmdStatus.Running: running++; break
-        case CmdStatus.Success: success++; break
-        case CmdStatus.Failed: failed++; break
-        case CmdStatus.Skipped: skipped++; break
-        case CmdStatus.Timeout: timeout++; break
-      }
-    }
-    return { total: activeGroup.value.commands.length, pending, running, success, failed, skipped, timeout }
+    return calculateCommandGroupStats(activeGroup.value.commands, commandStatusMap.value)
   })
 
   /** 总进度百分比 */
   const progressPercent = computed(() => {
-    const s = stats.value
-    if (s.total === 0) return 0
-    const finished = s.success + s.failed + s.skipped + s.timeout
-    return Math.round((finished / s.total) * 100)
+    return calculateCommandGroupProgress(stats.value)
   })
 
   // ==================== 工具函数 ====================
@@ -1139,7 +1104,7 @@ export function useCommandGroup() {
   }
 
   function generateId(): string {
-    return `grp_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+    return createCommandGroupId()
   }
 
   function loadGroupsFromStorage(): CommandGroup[] {
@@ -1147,10 +1112,7 @@ export function useCommandGroup() {
       const raw = localStorage.getItem(STORAGE_KEY)
       const groups = raw ? JSON.parse(raw) : []
       /** 兼容旧版本数据，添加version字段 */
-      return groups.map((g: CommandGroup) => ({
-        ...g,
-        version: g.version || 1
-      }))
+      return groups.map(normalizeCommandGroup)
     } catch {
       return []
     }
