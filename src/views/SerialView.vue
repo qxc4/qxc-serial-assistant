@@ -7,6 +7,14 @@ import type { CustomProtocolConfig } from '../stores/settings'
 import { useI18n } from '../composables/useI18n'
 import { useDataParse } from '../composables/useDataParse'
 import type { CommandStatus } from '../types/command-group'
+import {
+  baudRatePresets,
+  createDefaultQuickCommands,
+  createLineEndingOptions,
+  previewLineEndingValue,
+  resolveLineEndingValue,
+  type QuickCommand,
+} from '../features/serial'
 import VirtualList from '../components/VirtualList.vue'
 import { 
   matchesShortcutFast, 
@@ -412,37 +420,14 @@ const lineEndingConfig = computed({
 })
 
 /** 行尾类型选项 */
-const lineEndingOptions = computed(() => [
-  { value: 'none' as const, label: t('serial.lineEndingNone'), preview: '' },
-  { value: 'rn' as const, label: '\\r\\n (CRLF)', preview: '\\r\\n' },
-  { value: 'r' as const, label: '\\r (CR)', preview: '\\r' },
-  { value: 'n' as const, label: '\\n (LF)', preview: '\\n' },
-  { value: 'custom' as const, label: t('serial.lineEndingCustom'), preview: '' },
-])
+const lineEndingOptions = computed(() => createLineEndingOptions(t))
 
 /**
  * 获取当前行尾字符的实际值
  * @returns 行尾字符字符串
  */
 function getLineEndingValue(): string {
-  const config = lineEndingConfig.value
-  if (!config.enabled) return ''
-  switch (config.type) {
-    case 'rn': return '\r\n'
-    case 'r': return '\r'
-    case 'n': return '\n'
-    case 'custom': {
-      if (!config.customValue.trim()) return ''
-      const hexStr = config.customValue.replace(/\s/g, '')
-      let result = ''
-      for (let i = 0; i < hexStr.length; i += 2) {
-        const byte = parseInt(hexStr.substring(i, i + 2), 16)
-        if (!isNaN(byte)) result += String.fromCharCode(byte)
-      }
-      return result
-    }
-    default: return ''
-  }
+  return resolveLineEndingValue(lineEndingConfig.value)
 }
 
 /**
@@ -455,8 +440,7 @@ function getLineEndingPreview(): string {
   if (config.type === 'custom' && config.customValue.trim()) {
     return config.customValue.trim()
   }
-  const opt = lineEndingOptions.value.find(o => o.value === config.type)
-  return opt?.preview ?? ''
+  return previewLineEndingValue(getLineEndingValue())
 }
 
 /** 发送数据预览（含行尾字符） */
@@ -468,21 +452,7 @@ const sendPreview = computed(() => {
 })
 
 // Quick Commands Panel
-interface QuickCommand {
-  id: number
-  enabled: boolean
-  content: string
-  description: string
-  isHex: boolean
-  delay: number
-}
-
-const quickCommands = ref<QuickCommand[]>([
-  { id: 1, enabled: true, content: 'AT+RST', description: '重启模块', isHex: false, delay: 1000 },
-  { id: 2, enabled: true, content: 'AT+GMR', description: '查询版本信息', isHex: false, delay: 1000 },
-  { id: 3, enabled: true, content: 'AT+CWLAP', description: '扫描WIFI热点', isHex: false, delay: 1000 },
-  { id: 4, enabled: false, content: '01 02 03 04', description: 'HEX测试数据', isHex: true, delay: 1000 },
-])
+const quickCommands = ref<QuickCommand[]>(createDefaultQuickCommands())
 
 const loopInterval = ref(5000)
 const isLooping = ref(false)
@@ -506,11 +476,6 @@ function waitForQuickCommandDelay(ms: number, signal: AbortSignal): Promise<void
     }, { once: true })
   })
 }
-
-/**
- * 波特率预设选项列表（常用标准波特率 + 高速波特率）
- */
-const baudRatePresets = [300, 1200, 2400, 4800, 9600, 14400, 19200, 28800, 38400, 57600, 76800, 115200, 230400, 256000, 460800, 500000, 576000, 921600, 1000000, 1152000, 1500000, 2000000, 2500000, 3000000]
 
 /**
  * 是否使用自定义波特率输入模式
