@@ -9,6 +9,14 @@ import type { ProgramImage } from '../debug-core'
 import { RTT_SOURCE_FILES, RTT_SOURCE_REPOSITORY_URL, downloadRttSourceFile, type RttSourceFile } from '../debug-core/rttSourceDownloads'
 import { createProbeCapabilityMatrix } from '../debug-core/probeCapabilityMatrix'
 import { RTT_SIDE_PANEL_TABS, type RttSidePanelTabKey } from '../debug-core/rttSidePanelTabs'
+import {
+  RTT_LEVEL_BG_MAP,
+  RTT_LEVEL_COLOR_MAP,
+  RTT_STATE_COLOR_MAP,
+  rttBackendOptions,
+  rttFrequencyOptions,
+  rttLevelOptions,
+} from '../features/rtt'
 import VirtualList from '../components/VirtualList.vue'
 import RttDebugControls from '../components/rtt/RttDebugControls.vue'
 import RttFlashProgrammerPanel from '../components/rtt/RttFlashProgrammerPanel.vue'
@@ -17,34 +25,8 @@ import {
   Usb, Unplug, Play, Pause, Send,
   RefreshCw, Download, Trash2, Search,
   AlertCircle, Radio, Terminal, X, HelpCircle,
-  PanelRight, BookOpen, Cpu, Zap, Check, Info, ChevronUp, ChevronDown
+  PanelRight, BookOpen, Cpu, Check, Info, ChevronUp, ChevronDown
 } from 'lucide-vue-next'
-
-/** 连接状态颜色映射（静态常量，提取到模块级别避免每次实例重建） */
-const STATE_COLOR_MAP: Record<string, string> = {
-  disconnected: 'bg-slate-400',
-  connecting: 'bg-yellow-500 animate-pulse',
-  connected: 'bg-green-500',
-  error: 'bg-red-500',
-}
-
-/** 日志级别颜色映射 */
-const LEVEL_COLOR_MAP: Record<string, string> = {
-  trace: 'text-slate-500 dark:text-slate-400',
-  debug: 'text-blue-600 dark:text-blue-400',
-  info: 'text-green-600 dark:text-green-400',
-  warn: 'text-yellow-600 dark:text-yellow-400',
-  error: 'text-red-600 dark:text-red-400',
-}
-
-/** 日志级别背景色映射 */
-const LEVEL_BG_MAP: Record<string, string> = {
-  trace: 'bg-slate-100 dark:bg-slate-800/50',
-  debug: 'bg-blue-50 dark:bg-blue-900/20',
-  info: 'bg-green-50 dark:bg-green-900/20',
-  warn: 'bg-yellow-50 dark:bg-yellow-900/20',
-  error: 'bg-red-50 dark:bg-red-900/20',
-}
 
 const { t } = useI18n()
 
@@ -144,15 +126,6 @@ watch(channels, channelList => {
 })
 
 // ==================== WebUSB 配置 ====================
-
-/** WebUSB SWD 频率选项 */
-const frequencyOptions = [
-  { value: 1000000, label: '1 MHz' },
-  { value: 2000000, label: '2 MHz' },
-  { value: 4000000, label: '4 MHz' },
-  { value: 8000000, label: '8 MHz' },
-  { value: 16000000, label: '16 MHz' },
-]
 
 /** WebUSB 配置 */
 const webUsbFrequency = ref(4000000)
@@ -456,23 +429,8 @@ const flashPrecheckItems = computed(() => {
 /** 是否展开顶部高级配置区 */
 const showTopConfigDetails = ref(false)
 
-/** 后端选项 */
-const backendOptions: Array<{ value: RttBackend; label: string; icon?: any }> = [
-  { value: 'webusb', label: 'WebUSB 调试工作台', icon: Zap },
-]
-
-/** 日志级别选项 */
-const levelOptions: Array<{ value: RttLogLevel; label: string; color: string }> = [
-  { value: 'trace', label: 'TRACE', color: 'text-slate-500' },
-  { value: 'debug', label: 'DEBUG', color: 'text-blue-500' },
-  { value: 'info', label: 'INFO', color: 'text-green-500' },
-  { value: 'warn', label: 'WARN', color: 'text-yellow-500' },
-  { value: 'error', label: 'ERROR', color: 'text-red-500' },
-]
-
-
 /** 当前连接状态指示灯颜色 */
-const stateIndicator = computed(() => STATE_COLOR_MAP[connectionState.value] ?? 'bg-slate-400')
+const stateIndicator = computed(() => RTT_STATE_COLOR_MAP[connectionState.value] ?? 'bg-slate-400')
 
 /** 连接按钮文本 */
 const connectBtnText = computed(() => {
@@ -1108,7 +1066,7 @@ watch(
               :disabled="isConnected"
               class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              <option v-for="opt in backendOptions" :key="opt.value" :value="opt.value">
+              <option v-for="opt in rttBackendOptions" :key="opt.value" :value="opt.value">
                 {{ opt.label }}
               </option>
             </select>
@@ -1239,7 +1197,7 @@ watch(
                 :disabled="isConnected"
                 class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               >
-                <option v-for="opt in frequencyOptions" :key="opt.value" :value="opt.value">
+                <option v-for="opt in rttFrequencyOptions" :key="opt.value" :value="opt.value">
                   {{ opt.label }}
                 </option>
               </select>
@@ -1352,7 +1310,7 @@ watch(
               <template #default="{ item }">
                 <div
                   class="flex items-center px-3 text-xs hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors"
-                  :class="LEVEL_BG_MAP[(item as any).level]"
+                  :class="RTT_LEVEL_BG_MAP[(item as any).level]"
                 >
                   <!-- 时间戳 -->
                   <span class="text-slate-400 dark:text-slate-500 w-20 shrink-0 select-none">
@@ -1362,7 +1320,7 @@ watch(
                   <!-- 级别标签 -->
                   <span
                     class="w-12 shrink-0 font-semibold select-none"
-                    :class="LEVEL_COLOR_MAP[(item as any).level]"
+                    :class="RTT_LEVEL_COLOR_MAP[(item as any).level]"
                   >
                     {{ (item as any).level.toUpperCase() }}
                   </span>
@@ -1373,7 +1331,7 @@ watch(
                   </span>
 
                   <!-- 日志内容 -->
-                  <span class="flex-1 min-w-0 truncate" :class="LEVEL_COLOR_MAP[(item as any).level]">
+                  <span class="flex-1 min-w-0 truncate" :class="RTT_LEVEL_COLOR_MAP[(item as any).level]">
                     {{ (item as any).text }}
                   </span>
                 </div>
@@ -1698,12 +1656,12 @@ watch(
         <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-2">{{ t('rtt.levelFilter') }}</h3>
         <div class="flex flex-wrap gap-1.5">
           <button
-            v-for="opt in levelOptions"
+            v-for="opt in rttLevelOptions"
             :key="opt.value"
             @click="toggleLevelFilter(opt.value)"
             class="px-2 py-1 rounded text-[10px] font-semibold border transition-all"
             :class="filter.levels.includes(opt.value)
-              ? `${opt.color} ${LEVEL_BG_MAP[opt.value]} border-current/30`
+              ? `${opt.color} ${RTT_LEVEL_BG_MAP[opt.value]} border-current/30`
               : 'text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:text-slate-600 dark:hover:text-slate-300'"
           >
             {{ opt.label }}
@@ -2116,3 +2074,4 @@ watch(
   opacity: 0;
 }
 </style>
+
