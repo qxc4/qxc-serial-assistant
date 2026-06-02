@@ -48,7 +48,7 @@
 | WebUSB 探针授权 | experimental | Chrome/Edge 桌面端目标。 |
 | ST-Link 识别/基础访问 | experimental | 需要硬件回归确认。 |
 | CMSIS-DAP / DAPLink / PicoProbe | experimental | 已引入 dapjs 路线，仍需硬件矩阵验收。 |
-| J-Link 能力矩阵与实验诊断 | done | 明确提示完整 J-Link 协议未启用，避免误判设备故障。 |
+| J-Link 能力矩阵与实验诊断 | done | 明确提示完整 J-Link 协议未启用，新增资源页路线说明和 `docs/jlink-research.md`，避免误判设备故障。 |
 | RTT Control Block 扫描 | experimental | 纯 Web 内存扫描链路已有实现。 |
 | RTT Up/Down 通道 | experimental | 需要目标固件和探针实测。 |
 | RTT 硬件验收向导 | done | 支持真实自检和 Mock 预演，覆盖浏览器、探针、目标识别、RAM 读写、RTT 通道和报告导出；真实结果仍需硬件。 |
@@ -107,3 +107,4 @@
 - 当前轮次：Serial 会话录制与回放，覆盖 `.qxc-session.json` 导入导出、TX 原始字节回放和模拟日志时间线。
 - 当前轮次：RTT 变量查看增强，覆盖 ELF 函数/对象符号摘要、PC 所在函数定位和复合变量 best-effort 标注。
 - 当前轮次：Flash 芯片族扩展，覆盖 STM32G0/G4/H7 profile、识别关键字、默认范围、dry-run 规划和未支持擦除算法诊断。
+- 当前轮次：J-Link 研究诊断，覆盖纯 Web 协议、SEGGER GDB Server、本地 relay、SDK 授权集成四条路线说明。
