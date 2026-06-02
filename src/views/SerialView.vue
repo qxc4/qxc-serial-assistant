@@ -13,12 +13,22 @@ import {
   createLineEndingOptions,
   formatSerialDuration,
   applyProtocolTemplate,
+  createSerialReplayEvent,
+  createSerialSessionRecording,
+  createSerialSessionSnapshot,
   getProtocolTemplate,
+  filterReplayEvents,
+  getReplayDelay,
+  parseSerialSessionRecording,
   previewLineEndingValue,
   PROTOCOL_TEMPLATES,
   resolveLineEndingValue,
+  serializeSerialSessionRecording,
   summarizeSerialSession,
   type QuickCommand,
+  type SerialReplayEvent,
+  type SerialReplayMode,
+  type SerialSessionRecording,
 } from '../features/serial'
 import VirtualList from '../components/VirtualList.vue'
 import { 
@@ -467,6 +477,18 @@ const sendPreview = computed(() => {
 const quickCommands = ref<QuickCommand[]>(createDefaultQuickCommands())
 const selectedProtocolTemplateId = ref(PROTOCOL_TEMPLATES[0]?.id ?? '')
 const protocolTemplateHint = ref('')
+const isRecordingSession = ref(false)
+const sessionRecordingStartedAt = ref(0)
+const sessionRecordingName = ref('serial-session')
+const recordedReplayEvents = ref<SerialReplayEvent[]>([])
+const loadedSessionRecording = ref<SerialSessionRecording | null>(null)
+const sessionReplayFileInputRef = ref<HTMLInputElement | null>(null)
+const replayMode = ref<SerialReplayMode>('tx-only')
+const replaySpeed = ref(1)
+const isReplayingSession = ref(false)
+const replayCursor = ref(0)
+const simulatedReplayEvents = ref<SerialReplayEvent[]>([])
+let replayAbortController: AbortController | null = null
 
 const loopInterval = ref(5000)
 const isLooping = ref(false)
@@ -479,6 +501,12 @@ const enabledQuickCommands = computed(() =>
 
 const hasRunnableQuickCommands = computed(() => enabledQuickCommands.value.length > 0)
 const selectedProtocolTemplate = computed(() => getProtocolTemplate(selectedProtocolTemplateId.value))
+const replayEventsForMode = computed(() =>
+  loadedSessionRecording.value ? filterReplayEvents(loadedSessionRecording.value.events, replayMode.value) : []
+)
+const canStartSessionReplay = computed(() =>
+  Boolean(loadedSessionRecording.value && replayEventsForMode.value.length > 0 && !isReplayingSession.value)
+)
 
 function waitForQuickCommandDelay(ms: number, signal: AbortSignal): Promise<void> {
   if (ms <= 0 || signal.aborted) return Promise.resolve()
@@ -685,6 +713,7 @@ onMounted(() => {
     if (parseEnabled.value && parseMode.value !== 'none' && direction === 'rx') {
       dataParse.parseData(data)
     }
+    recordSerialSessionEvent(data, direction)
   })
 })
 
@@ -819,6 +848,137 @@ function applySelectedProtocolTemplate() {
   settingsStore.showToast(`已应用模板：${template.name}`)
 }
 
+function recordSerialSessionEvent(data: Uint8Array, direction: 'rx' | 'tx') {
+  if (!isRecordingSession.value || sessionRecordingStartedAt.value <= 0) return
+  const event = createSerialReplayEvent(data, direction, sessionRecordingStartedAt.value)
+  recordedReplayEvents.value.push({
+    ...event,
+    isHex: direction === 'tx',
+  })
+}
+
+function createCurrentSessionSnapshot() {
+  return createSerialSessionSnapshot({
+    baudRate: baudRate.value,
+    dataBits: dataBits.value,
+    stopBits: stopBits.value,
+    parity: parity.value,
+    receiveEncoding: receiveEncoding.value,
+    sendEncoding: sendEncoding.value,
+    lineEnding: lineEndingConfig.value.enabled ? lineEndingConfig.value.type : 'none',
+  })
+}
+
+function startSessionRecording() {
+  recordedReplayEvents.value = []
+  simulatedReplayEvents.value = []
+  sessionRecordingStartedAt.value = Date.now()
+  sessionRecordingName.value = `serial-session-${sessionRecordingStartedAt.value}`
+  isRecordingSession.value = true
+  settingsStore.showToast('已开始录制串口会话')
+}
+
+function stopSessionRecording() {
+  isRecordingSession.value = false
+  settingsStore.showToast(`已停止录制：${recordedReplayEvents.value.length} 条事件`)
+}
+
+function exportSessionRecording() {
+  if (recordedReplayEvents.value.length === 0) {
+    settingsStore.showToast('没有可导出的录制事件')
+    return
+  }
+  const recording = createSerialSessionRecording({
+    name: sessionRecordingName.value,
+    snapshot: createCurrentSessionSnapshot(),
+    events: recordedReplayEvents.value,
+  })
+  downloadTextFile(
+    serializeSerialSessionRecording(recording),
+    `${recording.name}.qxc-session.json`,
+    'application/json;charset=utf-8',
+  )
+}
+
+function openSessionReplayFile() {
+  sessionReplayFileInputRef.value?.click()
+}
+
+async function handleSessionReplayFileSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  try {
+    loadedSessionRecording.value = parseSerialSessionRecording(await file.text())
+    replayCursor.value = 0
+    simulatedReplayEvents.value = []
+    settingsStore.showToast(`已导入会话：${loadedSessionRecording.value.events.length} 条事件`)
+  } catch (error) {
+    settingsStore.showToast(error instanceof Error ? error.message : '会话文件解析失败')
+  }
+}
+
+async function startSessionReplay() {
+  if (!loadedSessionRecording.value) {
+    settingsStore.showToast('请先导入会话文件')
+    return
+  }
+  if (replayMode.value === 'tx-only' && !isConnected.value) {
+    settingsStore.showToast('TX 回放需要先连接串口')
+    return
+  }
+
+  replayAbortController?.abort()
+  replayAbortController = new AbortController()
+  const signal = replayAbortController.signal
+  const events = replayEventsForMode.value
+  isReplayingSession.value = true
+  replayCursor.value = 0
+  simulatedReplayEvents.value = []
+
+  try {
+    let previous: SerialReplayEvent | null = null
+    for (const event of events) {
+      if (signal.aborted) break
+      await waitForQuickCommandDelay(getReplayDelay(previous, event, replaySpeed.value), signal)
+      if (signal.aborted) break
+
+      if (replayMode.value === 'tx-only') {
+        await send(event.hex, true)
+      } else {
+        simulatedReplayEvents.value = [...simulatedReplayEvents.value.slice(-19), event]
+      }
+      replayCursor.value += 1
+      previous = event
+    }
+  } catch (error) {
+    settingsStore.showToast(error instanceof Error ? error.message : '会话回放失败')
+  } finally {
+    isReplayingSession.value = false
+    replayAbortController = null
+  }
+}
+
+function stopSessionReplay() {
+  replayAbortController?.abort()
+  replayAbortController = null
+  isReplayingSession.value = false
+}
+
+function downloadTextFile(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
 /**
  * 优化的循环发送切换函数
  * 带状态保护和清理
@@ -882,6 +1042,11 @@ function cleanupButtonOptimizations() {
   if (sendSelectedAbortController) {
     sendSelectedAbortController.abort()
     sendSelectedAbortController = null
+  }
+
+  if (replayAbortController) {
+    replayAbortController.abort()
+    replayAbortController = null
   }
 }
 
@@ -1633,6 +1798,98 @@ onUnmounted(cleanupButtonOptimizations)
             <p v-if="protocolTemplateHint" class="mt-1 line-clamp-2 text-[10px] text-blue-600 dark:text-blue-300">
               {{ protocolTemplateHint }}
             </p>
+          </div>
+
+          <div class="border-b border-slate-200 bg-white/80 px-3 py-2 dark:border-slate-700 dark:bg-slate-800/80">
+            <input
+              ref="sessionReplayFileInputRef"
+              type="file"
+              accept=".json,.qxc-session.json,application/json"
+              class="hidden"
+              @change="handleSessionReplayFileSelected"
+            />
+            <div class="mb-1.5 flex items-center justify-between gap-2">
+              <div class="min-w-0">
+                <h3 class="truncate text-xs font-medium text-slate-600 dark:text-slate-300">会话录制与回放</h3>
+                <p class="truncate text-[10px] text-slate-400">
+                  {{ recordedReplayEvents.length }} 条录制 / {{ loadedSessionRecording?.events.length ?? 0 }} 条已导入
+                </p>
+              </div>
+              <div class="flex shrink-0 items-center gap-1">
+                <button
+                  v-if="!isRecordingSession"
+                  @click="startSessionRecording"
+                  class="rounded border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-medium text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+                >
+                  录制
+                </button>
+                <button
+                  v-else
+                  @click="stopSessionRecording"
+                  class="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                >
+                  停止
+                </button>
+                <button
+                  @click="exportSessionRecording"
+                  :disabled="recordedReplayEvents.length === 0"
+                  class="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                >
+                  导出
+                </button>
+                <button
+                  @click="openSessionReplayFile"
+                  class="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300"
+                >
+                  导入
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-[1fr_72px] gap-1.5">
+              <select
+                v-model="replayMode"
+                class="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] text-slate-700 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <option value="tx-only">只回放 TX 到串口</option>
+                <option value="simulate-rx">模拟 RX/TX 日志</option>
+              </select>
+              <select
+                v-model.number="replaySpeed"
+                class="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] text-slate-700 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <option :value="0.5">0.5x</option>
+                <option :value="1">1x</option>
+                <option :value="2">2x</option>
+                <option :value="4">4x</option>
+              </select>
+            </div>
+            <div class="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+              <span class="truncate">
+                {{ loadedSessionRecording?.name ?? '未导入会话' }}
+                <template v-if="isReplayingSession"> · {{ replayCursor }} / {{ replayEventsForMode.length }}</template>
+              </span>
+              <button
+                v-if="!isReplayingSession"
+                @click="startSessionReplay"
+                :disabled="!canStartSessionReplay"
+                class="shrink-0 rounded border border-green-200 bg-green-50 px-2 py-1 font-medium text-green-700 hover:bg-green-100 disabled:opacity-50 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-300"
+              >
+                回放
+              </button>
+              <button
+                v-else
+                @click="stopSessionReplay"
+                class="shrink-0 rounded border border-slate-300 bg-white px-2 py-1 font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+              >
+                停止回放
+              </button>
+            </div>
+            <div v-if="simulatedReplayEvents.length" class="mt-1.5 max-h-14 overflow-y-auto rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[10px] dark:border-slate-700 dark:bg-slate-900">
+              <div v-for="event in simulatedReplayEvents" :key="event.id" class="flex items-center gap-1 font-mono">
+                <span :class="event.direction === 'rx' ? 'text-green-600 dark:text-green-300' : 'text-blue-600 dark:text-blue-300'">{{ event.direction.toUpperCase() }}</span>
+                <span class="truncate text-slate-500 dark:text-slate-400">{{ event.hex || event.data }}</span>
+              </div>
+            </div>
           </div>
 
           <div class="flex-1 min-h-0 overflow-y-auto p-2">
