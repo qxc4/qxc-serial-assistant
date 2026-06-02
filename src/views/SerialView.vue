@@ -11,8 +11,10 @@ import {
   baudRatePresets,
   createDefaultQuickCommands,
   createLineEndingOptions,
+  formatSerialDuration,
   previewLineEndingValue,
   resolveLineEndingValue,
+  summarizeSerialSession,
   type QuickCommand,
 } from '../features/serial'
 import VirtualList from '../components/VirtualList.vue'
@@ -145,6 +147,13 @@ const connectionSummary = computed(() => {
     return t('serial.enablePort')
   }
   return t('serial.waitingConnect')
+})
+const serialDiagnosticNow = ref(Date.now())
+let serialDiagnosticTimer: ReturnType<typeof setInterval> | null = null
+const serialSessionDiagnostics = computed(() => summarizeSerialSession(receivedData.value, serialDiagnosticNow.value))
+const serialResponseState = computed(() => {
+  if (serialSessionDiagnostics.value.txEntries === 0) return '等待发送'
+  return serialSessionDiagnostics.value.receiveAfterLastTx ? '最近有响应' : '等待响应'
 })
 const toolbarExpanded = computed({
   get: () => settingsStore.config.uiSettings.toolbarExpanded,
@@ -658,6 +667,9 @@ let unregisterDataCallback: (() => void) | null = null
 
 onMounted(() => {
   window.addEventListener('keydown', handleKeyboardShortcuts)
+  serialDiagnosticTimer = setInterval(() => {
+    serialDiagnosticNow.value = Date.now()
+  }, 1000)
   
   // 初始化自定义协议配置
   initCustomProtocolConfig()
@@ -672,6 +684,10 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyboardShortcuts)
+  if (serialDiagnosticTimer) {
+    clearInterval(serialDiagnosticTimer)
+    serialDiagnosticTimer = null
+  }
   
   // 取消注册数据接收回调
   if (unregisterDataCallback) {
@@ -1185,6 +1201,21 @@ onUnmounted(cleanupButtonOptimizations)
               <span>{{ filteredReceivedData.length }}</span>
               <span>/</span>
               <span>{{ dataCount.toLocaleString() }}</span>
+            </div>
+
+            <div class="hidden xl:flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+              <span
+                class="rounded-full px-2 py-0.5"
+                :class="serialSessionDiagnostics.receiveAfterLastTx ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-300'"
+              >
+                {{ serialResponseState }}
+              </span>
+              <span>TX {{ serialSessionDiagnostics.txEntries }}</span>
+              <span>RX {{ serialSessionDiagnostics.rxEntries }}</span>
+              <span>静默 {{ formatSerialDuration(serialSessionDiagnostics.silenceMs) }}</span>
+              <span v-if="serialSessionDiagnostics.averageTxIntervalMs !== null">
+                均隔 {{ formatSerialDuration(serialSessionDiagnostics.averageTxIntervalMs) }}
+              </span>
             </div>
 
             <div class="flex items-center gap-1 text-slate-600 dark:text-slate-400">
