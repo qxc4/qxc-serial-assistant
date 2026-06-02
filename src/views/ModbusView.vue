@@ -84,6 +84,12 @@ const expandedResult = ref<string | null>(null)
 /** Modbus 解析器实例 */
 let parser: ModbusParser | null = null
 
+const successfulResultCount = computed(() => parseResults.value.filter(item => item.result?.success).length)
+const failedResultCount = computed(() => parseResults.value.filter(item => !item.result?.success).length)
+const activeParseResult = computed(() => {
+  return parseResults.value.find(item => item.id === expandedResult.value) || parseResults.value[0] || null
+})
+
 /** 数据类型选项 */
 const dataTypeOptions = computed<{ value: DataType; label: string; bytes: number }[]>(() => [
   { value: 'uint16', label: t('modbus.uint16'), bytes: 2 },
@@ -266,6 +272,7 @@ function handleParse() {
     }
     
     parseResults.value.unshift(item)
+    expandedResult.value = item.id
     
     if (parseResults.value.length > 100) {
       parseResults.value = parseResults.value.slice(0, 100)
@@ -364,6 +371,11 @@ function handleBuild() {
   } catch (e) {
     settingsStore.showToast(t('modbus.buildFailed') + '：' + (e instanceof Error ? e.message : String(e)))
   }
+}
+
+function useBuildResultAsResponseInput() {
+  if (!buildResult.value) return
+  inputHex.value = buildResult.value
 }
 
 /**
@@ -507,335 +519,283 @@ function formatTimestamp(timestamp: number): string {
 </script>
 
 <template>
-  <div class="flex flex-col h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
-    <div class="flex flex-1 min-h-0 overflow-hidden">
-      <!-- 左侧面板 -->
-      <div class="w-80 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex min-h-0 flex-col">
-        <div class="p-4 border-b dark:border-slate-700">
-          <h2 class="font-bold text-base mb-1 flex items-center gap-2">
-            <Cpu class="w-5 h-5" />
+  <div class="flex h-full min-h-0 w-full flex-col overflow-hidden bg-slate-50 text-sm text-slate-800 transition-colors dark:bg-slate-900 dark:text-slate-200">
+    <div class="h-14 shrink-0 border-b border-slate-200 bg-white/90 px-4 dark:border-slate-800 dark:bg-slate-900/90">
+      <div class="flex h-full items-center justify-between gap-3">
+        <div class="min-w-0">
+          <h2 class="flex items-center gap-2 truncate text-sm font-semibold">
+            <Cpu class="h-4 w-4 text-blue-500" />
             {{ t('modbus.title') }}
           </h2>
-          <p class="text-xs text-slate-500 dark:text-slate-400">
-            {{ t('modbus.desc') }}
-          </p>
+          <p class="truncate text-[11px] text-slate-500 dark:text-slate-400">{{ t('modbus.desc') }}</p>
         </div>
+        <div class="flex shrink-0 items-center gap-2">
+          <button 
+            @click="parseMode = 'rtu'"
+            class="rounded-lg border px-3 py-1.5 text-xs transition-colors"
+            :class="parseMode === 'rtu' ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'"
+          >
+            {{ t('modbus.rtuMode') }}
+          </button>
+          <button 
+            @click="parseMode = 'ascii'"
+            class="rounded-lg border px-3 py-1.5 text-xs transition-colors"
+            :class="parseMode === 'ascii' ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-300' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'"
+          >
+            {{ t('modbus.asciiMode') }}
+          </button>
+        </div>
+      </div>
+    </div>
 
-        <!-- 解析模式选择 -->
-        <div class="p-4 border-b dark:border-slate-700">
-          <h3 class="font-semibold text-sm mb-3">{{ t('modbus.parseMode') }}</h3>
-          <div class="flex gap-2">
-            <button 
-              @click="parseMode = 'rtu'"
-              class="flex-1 py-2 rounded border dark:border-slate-700 text-sm transition-colors"
-              :class="parseMode === 'rtu' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-300' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700'"
-            >
-              {{ t('modbus.rtuMode') }}
-            </button>
-            <button 
-              @click="parseMode = 'ascii'"
-              class="flex-1 py-2 rounded border dark:border-slate-700 text-sm transition-colors"
-              :class="parseMode === 'ascii' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-300' : 'bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700'"
-            >
-              {{ t('modbus.asciiMode') }}
-            </button>
+    <div class="grid flex-1 min-h-0 grid-cols-[320px_minmax(0,1fr)_340px] overflow-hidden">
+      <!-- 请求构建 -->
+      <section class="flex min-h-0 flex-col border-r border-slate-200 bg-white/95 dark:border-slate-800 dark:bg-slate-900/95">
+        <div class="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-semibold">{{ t('modbus.frameBuild') }}</h3>
+            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">Request</span>
           </div>
         </div>
 
-        <!-- 数据类型设置 -->
-        <div class="p-4 border-b dark:border-slate-700">
-          <h3 class="font-semibold text-sm mb-3">{{ t('modbus.dataParseSettings') }}</h3>
-          <div class="flex flex-col gap-2">
+        <div class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          <div class="grid grid-cols-2 gap-2">
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.dataType') }}</label>
-              <select 
-                v-model="dataTypeSettings.type"
-                class="border dark:border-slate-700 rounded px-2 py-1.5 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm"
-              >
-                <option v-for="dt in dataTypeOptions" :key="dt.value" :value="dt.value">
-                  {{ dt.label }}
-                </option>
+              <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.slaveAddress') }}</label>
+              <input v-model.number="buildSettings.address" type="number" min="1" max="247" class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800" />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.functionCode') }}</label>
+              <select v-model.number="buildSettings.functionCode" class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800">
+                <option v-for="fc in functionCodeOptions" :key="fc.value" :value="fc.value">{{ fc.label }}</option>
               </select>
             </div>
-            
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
             <div class="flex flex-col gap-1">
-              <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.byteOrder') }}</label>
-              <select 
-                v-model="dataTypeSettings.byteOrder"
-                class="border dark:border-slate-700 rounded px-2 py-1.5 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm"
-              >
-                <option v-for="bo in byteOrderOptions" :key="bo.value" :value="bo.value">
-                  {{ bo.label }}
-                </option>
+              <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.startAddress') }}</label>
+              <input v-model.number="buildSettings.startAddress" type="number" min="0" max="65535" class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800" />
+            </div>
+            <div class="flex flex-col gap-1">
+              <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.quantityValue') }}</label>
+              <input v-model.number="buildSettings.quantity" type="number" min="1" max="125" class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800" />
+            </div>
+          </div>
+
+          <div v-if="selectedFunctionCode?.needsValue" class="flex flex-col gap-1">
+            <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.writeValue') }}</label>
+            <input v-model="buildSettings.writeValue" type="text" :placeholder="t('modbus.writeValuePlaceholder')" class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800" />
+          </div>
+
+          <button @click="handleBuild" class="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 dark:bg-blue-600 dark:hover:bg-blue-500">
+            <Send class="h-4 w-4" />
+            {{ t('modbus.buildFrame') }}
+          </button>
+
+          <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+            <div class="mb-2 flex items-center justify-between gap-2">
+              <span class="text-xs font-medium text-slate-500">{{ t('modbus.buildResult') }}</span>
+              <div class="flex items-center gap-1">
+                <button @click="useBuildResultAsResponseInput" :disabled="!buildResult" class="rounded px-2 py-1 text-[10px] text-slate-500 hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-800">填入响应</button>
+                <button @click="copyToClipboard(buildResult)" :disabled="!buildResult" class="rounded p-1 hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-800">
+                  <Copy class="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+            <div class="min-h-16 break-all font-mono text-xs text-blue-600 dark:text-blue-400">
+              {{ buildResult || '—' }}
+            </div>
+          </div>
+
+          <div class="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+            <h4 class="mb-2 text-xs font-medium text-slate-500">{{ t('modbus.dataParseSettings') }}</h4>
+            <div class="grid grid-cols-2 gap-2">
+              <select v-model="dataTypeSettings.type" class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800">
+                <option v-for="dt in dataTypeOptions" :key="dt.value" :value="dt.value">{{ dt.label }}</option>
+              </select>
+              <select v-model="dataTypeSettings.byteOrder" class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800">
+                <option v-for="bo in byteOrderOptions" :key="bo.value" :value="bo.value">{{ bo.label }}</option>
               </select>
             </div>
           </div>
         </div>
+      </section>
 
-        <!-- 数据解析 -->
-        <div class="p-4 border-b dark:border-slate-700">
-          <h3 class="font-semibold text-sm mb-3">{{ t('modbus.dataParse') }}</h3>
-          <div class="flex flex-col gap-2">
-            <textarea 
-              v-model="inputHex"
-              :placeholder="t('modbus.inputPlaceholder')"
-              class="border dark:border-slate-700 rounded px-3 py-2 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm font-mono h-20 resize-none"
-            ></textarea>
-            <button 
-              @click="handleParse"
-              class="w-full py-2 rounded bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              <FileCode class="w-4 h-4" />
+      <!-- 响应解析 -->
+      <section class="flex min-h-0 flex-col bg-white dark:bg-slate-900">
+        <div class="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          <div class="flex items-center justify-between gap-3">
+            <h3 class="flex items-center gap-2 text-sm font-semibold">
+              <FileCode class="h-4 w-4 text-blue-500" />
+              {{ t('modbus.dataParse') }}
+            </h3>
+            <div class="flex items-center gap-2 text-[10px] text-slate-500">
+              <span class="rounded-full bg-green-50 px-2 py-0.5 text-green-600 dark:bg-green-950/40 dark:text-green-300">{{ successfulResultCount }} 成功</span>
+              <span class="rounded-full bg-red-50 px-2 py-0.5 text-red-600 dark:bg-red-950/40 dark:text-red-300">{{ failedResultCount }} 失败</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="border-b border-slate-200 p-4 dark:border-slate-800">
+          <textarea v-model="inputHex" :placeholder="t('modbus.inputPlaceholder')" class="h-24 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950/60"></textarea>
+          <div class="mt-2 flex items-center justify-end gap-2">
+            <button @click="inputHex = ''" class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">{{ t('serial.clear') }}</button>
+            <button @click="handleParse" class="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+              <FileCode class="h-3.5 w-3.5" />
               {{ t('modbus.parseData') }}
             </button>
           </div>
         </div>
 
-        <!-- 帧构建 -->
-        <div class="p-4 flex-1 min-h-0 overflow-y-auto">
-          <h3 class="font-semibold text-sm mb-3">{{ t('modbus.frameBuild') }}</h3>
-          <div class="flex flex-col gap-3">
-            <div class="flex gap-2">
-              <div class="flex-1 flex flex-col gap-1">
-                <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.slaveAddress') }}</label>
-                <input 
-                  v-model.number="buildSettings.address"
-                  type="number"
-                  min="1"
-                  max="247"
-                  class="border dark:border-slate-700 rounded px-2 py-1.5 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm"
-                />
-              </div>
-              <div class="flex-1 flex flex-col gap-1">
-                <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.functionCode') }}</label>
-                <select 
-                  v-model.number="buildSettings.functionCode"
-                  class="border dark:border-slate-700 rounded px-2 py-1.5 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm"
-                >
-                  <option v-for="fc in functionCodeOptions" :key="fc.value" :value="fc.value">
-                    {{ fc.label }}
-                  </option>
-                </select>
-              </div>
-            </div>
-
-            <div class="flex gap-2">
-              <div class="flex-1 flex flex-col gap-1">
-                <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.startAddress') }}</label>
-                <input 
-                  v-model.number="buildSettings.startAddress"
-                  type="number"
-                  min="0"
-                  max="65535"
-                  class="border dark:border-slate-700 rounded px-2 py-1.5 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm"
-                />
-              </div>
-              <div class="flex-1 flex flex-col gap-1">
-                <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.quantityValue') }}</label>
-                <input 
-                  v-model.number="buildSettings.quantity"
-                  type="number"
-                  min="1"
-                  max="125"
-                  class="border dark:border-slate-700 rounded px-2 py-1.5 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm"
-                />
-              </div>
-            </div>
-
-            <div v-if="selectedFunctionCode?.needsValue" class="flex flex-col gap-1">
-              <label class="text-xs text-slate-600 dark:text-slate-400">{{ t('modbus.writeValue') }}</label>
-              <input 
-                v-model="buildSettings.writeValue"
-                type="text"
-                :placeholder="t('modbus.writeValuePlaceholder')"
-                class="border dark:border-slate-700 rounded px-2 py-1.5 bg-white dark:bg-slate-800 outline-none focus:border-blue-500 text-sm"
-              />
-            </div>
-
-            <button 
-              @click="handleBuild"
-              class="w-full py-2 rounded bg-green-500 hover:bg-green-600 text-white font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              <Send class="w-4 h-4" />
-              {{ t('modbus.buildFrame') }}
-            </button>
-
-            <div v-if="buildResult" class="p-2 bg-slate-100 dark:bg-slate-900 rounded font-mono text-xs break-all">
-              <div class="flex items-center justify-between mb-1">
-                <span class="text-slate-500">{{ t('modbus.buildResult') }}:</span>
-                <button @click="copyToClipboard(buildResult)" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded">
-                  <Copy class="w-3 h-3" />
-                </button>
-              </div>
-              <span class="text-blue-600 dark:text-blue-400">{{ buildResult }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 右侧面板: 解析结果 -->
-      <div class="flex-1 flex min-h-0 flex-col bg-white dark:bg-slate-800 min-w-0">
-        <!-- 工具栏 -->
-        <div class="h-12 border-b dark:border-slate-700 flex items-center justify-between px-4 bg-slate-50 dark:bg-slate-900 shrink-0">
-          <h3 class="font-semibold text-sm flex items-center gap-2">
-            <Table class="w-4 h-4" />
-            {{ t('modbus.parseResults') }}
-            <span class="text-xs font-normal text-slate-500">({{ parseResults.length }} {{ t('modbus.records') }})</span>
-          </h3>
-          <div class="flex items-center gap-2">
-            <button 
-              @click="handleExportExcel"
-              :disabled="parseResults.length === 0"
-              class="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50 flex items-center gap-1"
-              :title="t('modbus.exportExcel')"
-            >
-              <FileSpreadsheet class="w-4 h-4" />
-              <span class="text-xs">Excel</span>
-            </button>
-            <button 
-              @click="handleExportTxt"
-              :disabled="parseResults.length === 0"
-              class="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
-              :title="t('modbus.exportTxt')"
-            >
-              <Download class="w-4 h-4" />
-            </button>
-            <button 
-              @click="handleClear"
-              :disabled="parseResults.length === 0"
-              class="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-50"
-              :title="t('modbus.clearResults')"
-            >
-              <Trash2 class="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-
-        <!-- 结果列表 -->
-        <div class="flex-1 min-h-0 overflow-y-auto p-4">
-          <div v-if="parseResults.length === 0" class="h-full flex items-center justify-center text-slate-400">
+        <div class="min-h-0 flex-1 overflow-y-auto p-4">
+          <div v-if="!activeParseResult" class="flex h-full items-center justify-center text-slate-400">
             <div class="text-center">
-              <FileCode class="w-16 h-16 mx-auto mb-4 opacity-30" />
-              <p class="text-base mb-2">{{ t('modbus.noResults') }}</p>
-              <p class="text-xs">{{ t('modbus.noResultsHint') }}</p>
+              <Table class="mx-auto mb-3 h-12 w-12 opacity-30" />
+              <p class="text-sm">{{ t('modbus.noResults') }}</p>
+              <p class="mt-1 text-xs">{{ t('modbus.noResultsHint') }}</p>
             </div>
           </div>
 
           <div v-else class="space-y-3">
-            <div 
-              v-for="item in parseResults" 
-              :key="item.id"
-              class="bg-slate-50 dark:bg-slate-900 rounded-lg border dark:border-slate-700 overflow-hidden"
-            >
-              <div 
-                class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
-                @click="toggleResultExpand(item.id)"
-              >
-                <component 
-                  :is="expandedResult === item.id ? ChevronDown : ChevronUp" 
-                  class="w-4 h-4 text-slate-400"
-                />
-                <component 
-                  :is="item.result?.success ? CheckCircle2 : XCircle"
-                  class="w-5 h-5"
-                  :class="item.result?.success ? 'text-green-500' : 'text-red-500'"
-                />
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <span class="text-xs text-slate-500">{{ formatTimestamp(item.timestamp) }}</span>
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700">
-                      {{ item.mode.toUpperCase() }}
-                    </span>
-                  </div>
-                  <div class="font-mono text-xs text-blue-600 dark:text-blue-400 truncate mt-1">
-                    {{ item.input }}
-                  </div>
+            <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+              <div class="mb-2 flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <component :is="activeParseResult.result?.success ? CheckCircle2 : XCircle" class="h-4 w-4" :class="activeParseResult.result?.success ? 'text-green-500' : 'text-red-500'" />
+                  <span class="text-xs text-slate-500">{{ formatTimestamp(activeParseResult.timestamp) }}</span>
+                  <span class="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{{ activeParseResult.mode.toUpperCase() }}</span>
                 </div>
-                <button 
-                  @click.stop="copyToClipboard(item.input)"
-                  class="p-1.5 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
-                  :title="t('modbus.copy')"
-                >
-                  <Copy class="w-3.5 h-3.5" />
+                <button @click="copyToClipboard(activeParseResult.input)" class="rounded p-1 hover:bg-slate-200 dark:hover:bg-slate-800">
+                  <Copy class="h-3.5 w-3.5" />
                 </button>
               </div>
+              <div class="break-all font-mono text-xs text-blue-600 dark:text-blue-400">{{ activeParseResult.input }}</div>
+            </div>
 
-              <div v-if="expandedResult === item.id" class="px-4 py-3 border-t dark:border-slate-700 space-y-3">
-                <!-- 解析成功 -->
-                <div v-if="item.result?.success && item.result.frame" class="space-y-2">
-                  <div class="grid grid-cols-2 gap-2 text-xs">
-                    <div class="bg-white dark:bg-slate-800 p-2 rounded">
-                      <span class="text-slate-500">{{ t('modbus.slaveAddress') }}:</span>
-                      <span class="ml-2 font-mono font-semibold">{{ item.result.frame.address }}</span>
-                    </div>
-                    <div class="bg-white dark:bg-slate-800 p-2 rounded">
-                      <span class="text-slate-500">{{ t('modbus.functionCode') }}:</span>
-                      <span class="ml-2 font-mono font-semibold">0x{{ item.result.frame.functionCode.toString(16).toUpperCase().padStart(2, '0') }}</span>
-                      <span class="ml-1 text-slate-400">({{ functionCodeNames[item.result.frame.functionCode] || t('modbus.unknown') }})</span>
-                    </div>
-                  </div>
-                  
-                  <div v-if="item.result.frame.data.length > 0" class="bg-white dark:bg-slate-800 p-2 rounded text-xs">
-                    <span class="text-slate-500">{{ t('modbus.rawData') }}:</span>
-                    <div class="font-mono text-green-600 dark:text-green-400 mt-1 break-all">
-                      {{ item.result.frame.data.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ') }}
-                    </div>
-                  </div>
-
-                  <!-- 寄存器解析结果 -->
-                  <div v-if="item.registers.length > 0" class="bg-white dark:bg-slate-800 p-2 rounded text-xs">
-                    <div class="flex items-center justify-between mb-2">
-                      <span class="text-slate-500">{{ t('modbus.registerParse') }}</span>
-                      <span class="text-xs text-slate-400">{{ dataTypeSettings.type }} / {{ dataTypeSettings.byteOrder }}</span>
-                    </div>
-                    <div class="overflow-x-auto">
-                      <table class="w-full text-xs">
-                        <thead>
-                          <tr class="border-b dark:border-slate-700">
-                            <th class="text-left py-1 px-2 text-slate-500 font-normal">{{ t('modbus.registerAddress') }}</th>
-                            <th class="text-left py-1 px-2 text-slate-500 font-normal">HEX</th>
-                            <th class="text-right py-1 px-2 text-slate-500 font-normal">{{ t('modbus.parsedValue') }}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr v-for="reg in item.registers" :key="reg.address" class="border-b dark:border-slate-700 last:border-0">
-                            <td class="py-1 px-2 font-mono">{{ reg.address }}</td>
-                            <td class="py-1 px-2 font-mono text-slate-500">{{ reg.raw }}</td>
-                            <td class="py-1 px-2 text-right font-mono text-blue-600 dark:text-blue-400 font-semibold">{{ reg.parsed }}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  <div class="bg-white dark:bg-slate-800 p-2 rounded text-xs">
-                    <span class="text-slate-500">校验码:</span>
-                    <span class="ml-2 font-mono text-purple-600 dark:text-purple-400">
-                      {{ item.result.frame.checksum.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ') }}
-                    </span>
-                    <span class="ml-1 text-slate-400">({{ item.mode === 'rtu' ? 'CRC16' : 'LRC' }})</span>
-                  </div>
+            <div v-if="activeParseResult.result?.success && activeParseResult.result.frame" class="space-y-3">
+              <div class="grid grid-cols-2 gap-3 text-xs">
+                <div class="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                  <div class="text-slate-500">{{ t('modbus.slaveAddress') }}</div>
+                  <div class="mt-1 font-mono text-lg font-semibold">{{ activeParseResult.result.frame.address }}</div>
                 </div>
-
-                <!-- 解析失败 -->
-                <div v-else class="bg-red-50 dark:bg-red-900/20 p-2 rounded text-xs text-red-600 dark:text-red-400">
-                  {{ item.error || '解析失败' }}
+                <div class="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+                  <div class="text-slate-500">{{ t('modbus.functionCode') }}</div>
+                  <div class="mt-1 font-mono text-lg font-semibold">0x{{ activeParseResult.result.frame.functionCode.toString(16).toUpperCase().padStart(2, '0') }}</div>
+                  <div class="truncate text-[10px] text-slate-400">{{ functionCodeNames[activeParseResult.result.frame.functionCode] || t('modbus.unknown') }}</div>
                 </div>
+              </div>
 
-                <!-- 所有校验码 -->
-                <div class="bg-white dark:bg-slate-800 p-2 rounded text-xs">
-                  <span class="text-slate-500">所有校验:</span>
-                  <div class="flex flex-wrap gap-2 mt-1">
-                    <span v-for="cs in item.checksums" :key="cs.type" class="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded">
-                      {{ cs.type }}: <span class="font-mono text-purple-600 dark:text-purple-400">{{ cs.value }}</span>
-                    </span>
-                  </div>
+              <div v-if="activeParseResult.result.frame.data.length > 0" class="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-900">
+                <span class="text-slate-500">{{ t('modbus.rawData') }}</span>
+                <div class="mt-1 break-all font-mono text-green-600 dark:text-green-400">
+                  {{ activeParseResult.result.frame.data.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ') }}
                 </div>
+              </div>
+
+              <div v-if="activeParseResult.registers.length > 0" class="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-900">
+                <div class="mb-2 flex items-center justify-between">
+                  <span class="text-slate-500">{{ t('modbus.registerParse') }}</span>
+                  <span class="text-[10px] text-slate-400">{{ dataTypeSettings.type }} / {{ dataTypeSettings.byteOrder }}</span>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-xs">
+                    <thead>
+                      <tr class="border-b border-slate-200 dark:border-slate-800">
+                        <th class="px-2 py-1 text-left font-normal text-slate-500">{{ t('modbus.registerAddress') }}</th>
+                        <th class="px-2 py-1 text-left font-normal text-slate-500">HEX</th>
+                        <th class="px-2 py-1 text-right font-normal text-slate-500">{{ t('modbus.parsedValue') }}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="reg in activeParseResult.registers" :key="reg.address" class="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                        <td class="px-2 py-1 font-mono">{{ reg.address }}</td>
+                        <td class="px-2 py-1 font-mono text-slate-500">{{ reg.raw }}</td>
+                        <td class="px-2 py-1 text-right font-mono font-semibold text-blue-600 dark:text-blue-400">{{ reg.parsed }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-900">
+                <span class="text-slate-500">校验码</span>
+                <span class="ml-2 font-mono text-purple-600 dark:text-purple-400">{{ activeParseResult.result.frame.checksum.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ') }}</span>
+                <span class="ml-1 text-slate-400">({{ activeParseResult.mode === 'rtu' ? 'CRC16' : 'LRC' }})</span>
+              </div>
+            </div>
+
+            <div v-else class="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-600 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+              {{ activeParseResult.error || '解析失败' }}
+            </div>
+
+            <div class="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-900">
+              <span class="text-slate-500">所有校验</span>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <span v-for="cs in activeParseResult.checksums" :key="cs.type" class="rounded bg-slate-100 px-2 py-0.5 dark:bg-slate-800">
+                  {{ cs.type }}: <span class="font-mono text-purple-600 dark:text-purple-400">{{ cs.value }}</span>
+                </span>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      <!-- 流水线历史 -->
+      <section class="flex min-h-0 flex-col border-l border-slate-200 bg-slate-50/95 dark:border-slate-800 dark:bg-slate-950/80">
+        <div class="border-b border-slate-200 px-3 py-3 dark:border-slate-800">
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="flex items-center gap-2 text-sm font-semibold">
+              <Table class="h-4 w-4" />
+              {{ t('modbus.parseResults') }}
+              <span class="text-xs font-normal text-slate-500">({{ parseResults.length }})</span>
+            </h3>
+            <div class="flex items-center gap-1">
+              <button @click="handleExportExcel" :disabled="parseResults.length === 0" class="rounded p-1.5 hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-800" :title="t('modbus.exportExcel')">
+                <FileSpreadsheet class="h-4 w-4" />
+              </button>
+              <button @click="handleExportTxt" :disabled="parseResults.length === 0" class="rounded p-1.5 hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-800" :title="t('modbus.exportTxt')">
+                <Download class="h-4 w-4" />
+              </button>
+              <button @click="handleClear" :disabled="parseResults.length === 0" class="rounded p-1.5 hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-800" :title="t('modbus.clearResults')">
+                <Trash2 class="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto p-3">
+          <div v-if="parseResults.length === 0" class="flex h-full items-center justify-center text-center text-slate-400">
+            <div>
+              <FileCode class="mx-auto mb-3 h-10 w-10 opacity-30" />
+              <p class="text-sm">{{ t('modbus.noResults') }}</p>
+            </div>
+          </div>
+
+          <div v-else class="space-y-2">
+            <button
+              v-for="item in parseResults"
+              :key="item.id"
+              @click="toggleResultExpand(item.id)"
+              class="w-full rounded-lg border p-3 text-left transition-colors"
+              :class="expandedResult === item.id
+                ? 'border-blue-300 bg-white shadow-sm dark:border-blue-900/60 dark:bg-slate-900'
+                : 'border-slate-200 bg-white/70 hover:bg-white dark:border-slate-800 dark:bg-slate-900/60 dark:hover:bg-slate-900'"
+            >
+              <div class="flex items-center gap-2">
+                <component :is="item.result?.success ? CheckCircle2 : XCircle" class="h-4 w-4 shrink-0" :class="item.result?.success ? 'text-green-500' : 'text-red-500'" />
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-slate-500">{{ formatTimestamp(item.timestamp) }}</span>
+                    <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] dark:bg-slate-800">{{ item.mode.toUpperCase() }}</span>
+                  </div>
+                  <div class="mt-1 truncate font-mono text-xs text-blue-600 dark:text-blue-400">{{ item.input }}</div>
+                </div>
+                <component :is="expandedResult === item.id ? ChevronDown : ChevronUp" class="h-3.5 w-3.5 text-slate-400" />
+              </div>
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
