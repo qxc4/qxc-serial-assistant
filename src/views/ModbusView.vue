@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 import { 
   FileCode, 
   Send, 
@@ -16,14 +16,28 @@ import {
 } from 'lucide-vue-next'
 import { useSettingsStore } from '../stores/settings'
 import { useI18n } from '../composables/useI18n'
-import { ModbusParser, buildModbusFrame } from '../utils/modbus'
+import { useSerial } from '../composables/useSerial'
+import { buildModbusFrame } from '../utils/modbus'
 import { calculateAllChecksums } from '../utils/checksum'
 import { functionCodeNames } from '../types/modbus'
 import type { ModbusParseResult, ModbusMode } from '../types/modbus'
-import { parseRegisterData, type ByteOrder, type DataType, type RegisterValue } from '../features/modbus'
+import {
+  bytesToHexInput,
+  parseCompleteModbusFrame,
+  parseRegisterData,
+  type ByteOrder,
+  type DataType,
+  type RegisterValue,
+} from '../features/modbus'
 
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
+const {
+  isConnected: isSerialConnected,
+  baudRate,
+  send: sendSerial,
+  onDataReceive,
+} = useSerial()
 
 /** 当前解析模式 */
 const parseMode = ref<ModbusMode>('rtu')
@@ -65,11 +79,12 @@ const buildSettings = ref({
 /** 构建结果 */
 const buildResult = ref('')
 
+const autoParseSerialResponse = ref(true)
+const isSendingModbusRequest = ref(false)
+const lastSerialResponseAt = ref<number | null>(null)
+
 /** 展开的解析结果 */
 const expandedResult = ref<string | null>(null)
-
-/** Modbus 解析器实例 */
-let parser: ModbusParser | null = null
 
 const successfulResultCount = computed(() => parseResults.value.filter(item => item.result?.success).length)
 const failedResultCount = computed(() => parseResults.value.filter(item => !item.result?.success).length)
@@ -111,6 +126,44 @@ const selectedFunctionCode = computed(() => {
   return functionCodeOptions.value.find(fc => fc.value === buildSettings.value.functionCode)
 })
 
+function appendParseResult(input: string, bytes: number[], result: ModbusParseResult | null, error?: string): void {
+  const item: ParseResultItem = {
+    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: Date.now(),
+    input,
+    mode: parseMode.value,
+    result,
+    checksums: calculateAllChecksums(bytes),
+    registers: [],
+    error,
+  }
+
+  if (result && !result.success) {
+    item.error = result.error
+  }
+
+  if (result?.success && result.frame) {
+    const fc = result.frame.functionCode
+    if ([0x03, 0x04].includes(fc) && result.frame.data.length > 1) {
+      const byteCount = result.frame.data[0]
+      const registerData = result.frame.data.slice(1, 1 + byteCount)
+      item.registers = parseRegisterData(
+        registerData,
+        0,
+        dataTypeSettings.value.type,
+        dataTypeSettings.value.byteOrder,
+      )
+    }
+  }
+
+  parseResults.value.unshift(item)
+  expandedResult.value = item.id
+
+  if (parseResults.value.length > 100) {
+    parseResults.value = parseResults.value.slice(0, 100)
+  }
+}
+
 /**
  * 解析输入数据
  */
@@ -140,46 +193,8 @@ function handleParse() {
   }
   
   try {
-    parser = new ModbusParser(parseMode.value)
-    
-    const result = parser.parse(bytes)
-    const checksums = calculateAllChecksums(bytes)
-    
-    const item: ParseResultItem = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now(),
-      input: inputHex.value.trim(),
-      mode: parseMode.value,
-      result,
-      checksums,
-      registers: []
-    }
-    
-    if (result && !result.success) {
-      item.error = result.error
-    }
-    
-    if (result?.success && result.frame) {
-      const fc = result.frame.functionCode
-      if ([0x03, 0x04].includes(fc) && result.frame.data.length > 1) {
-        const byteCount = result.frame.data[0]
-        const registerData = result.frame.data.slice(1, 1 + byteCount)
-        const startAddr = 0
-        item.registers = parseRegisterData(
-          registerData, 
-          startAddr, 
-          dataTypeSettings.value.type, 
-          dataTypeSettings.value.byteOrder
-        )
-      }
-    }
-    
-    parseResults.value.unshift(item)
-    expandedResult.value = item.id
-    
-    if (parseResults.value.length > 100) {
-      parseResults.value = parseResults.value.slice(0, 100)
-    }
+    const result = parseCompleteModbusFrame(bytes, parseMode.value, baudRate.value)
+    appendParseResult(inputHex.value.trim(), bytes, result, result ? undefined : '帧未完整或无法解析')
   } catch (e) {
     settingsStore.showToast(t('modbus.buildFailed'))
     console.error('解析失败:', e)
@@ -280,6 +295,45 @@ function useBuildResultAsResponseInput() {
   if (!buildResult.value) return
   inputHex.value = buildResult.value
 }
+
+async function handleSendBuiltFrame() {
+  if (!buildResult.value) {
+    handleBuild()
+  }
+  if (!buildResult.value) return
+  if (!isSerialConnected.value) {
+    settingsStore.showToast('请先在串口页连接设备')
+    return
+  }
+
+  try {
+    isSendingModbusRequest.value = true
+    await sendSerial(buildResult.value, true)
+    settingsStore.showToast('Modbus 请求已发送')
+  } catch (error) {
+    settingsStore.showToast(`发送失败：${error instanceof Error ? error.message : String(error)}`)
+  } finally {
+    isSendingModbusRequest.value = false
+  }
+}
+
+const stopSerialDataListener = onDataReceive((data, direction) => {
+  if (direction !== 'rx' || !autoParseSerialResponse.value || data.length === 0) return
+
+  try {
+    const bytes = Array.from(data)
+    const result = parseCompleteModbusFrame(bytes, parseMode.value, baudRate.value)
+    if (!result) return
+    lastSerialResponseAt.value = Date.now()
+    appendParseResult(bytesToHexInput(bytes), bytes, result)
+  } catch (error) {
+    console.error('Modbus 串口响应自动解析失败:', error)
+  }
+})
+
+onUnmounted(() => {
+  stopSerialDataListener()
+})
 
 /**
  * 复制到剪贴板
@@ -499,8 +553,13 @@ function formatTimestamp(timestamp: number): string {
           <div class="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950/60">
             <div class="mb-2 flex items-center justify-between gap-2">
               <span class="text-xs font-medium text-slate-500">{{ t('modbus.buildResult') }}</span>
-              <div class="flex items-center gap-1">
-                <button @click="useBuildResultAsResponseInput" :disabled="!buildResult" class="rounded px-2 py-1 text-[10px] text-slate-500 hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-800">填入响应</button>
+              <div class="flex items-center gap-1 text-[10px]">
+                <span
+                  class="rounded-full px-2 py-0.5"
+                  :class="isSerialConnected ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
+                >
+                  {{ isSerialConnected ? '串口已连接' : '串口未连接' }}
+                </span>
                 <button @click="copyToClipboard(buildResult)" :disabled="!buildResult" class="rounded p-1 hover:bg-slate-200 disabled:opacity-40 dark:hover:bg-slate-800">
                   <Copy class="h-3.5 w-3.5" />
                 </button>
@@ -508,6 +567,23 @@ function formatTimestamp(timestamp: number): string {
             </div>
             <div class="min-h-16 break-all font-mono text-xs text-blue-600 dark:text-blue-400">
               {{ buildResult || '—' }}
+            </div>
+            <div class="mt-3 grid grid-cols-2 gap-2">
+              <button
+                @click="handleSendBuiltFrame"
+                :disabled="!buildResult || !isSerialConnected || isSendingModbusRequest"
+                class="flex items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-45 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-950/60"
+              >
+                <Send class="h-3.5 w-3.5" />
+                {{ isSendingModbusRequest ? '发送中' : '串口发送' }}
+              </button>
+              <button
+                @click="useBuildResultAsResponseInput"
+                :disabled="!buildResult"
+                class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-white disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900"
+              >
+                填入解析
+              </button>
             </div>
           </div>
 
@@ -541,6 +617,21 @@ function formatTimestamp(timestamp: number): string {
         </div>
 
         <div class="border-b border-slate-200 p-4 dark:border-slate-800">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/50">
+            <label class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <input v-model="autoParseSerialResponse" type="checkbox" class="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
+              自动解析串口响应
+            </label>
+            <div class="flex items-center gap-2 text-[10px] text-slate-500">
+              <span
+                class="rounded-full px-2 py-0.5"
+                :class="isSerialConnected ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-400'"
+              >
+                {{ isSerialConnected ? `监听 ${baudRate}bps` : '未连接' }}
+              </span>
+              <span v-if="lastSerialResponseAt" class="text-slate-400">最近 {{ formatTimestamp(lastSerialResponseAt) }}</span>
+            </div>
+          </div>
           <textarea v-model="inputHex" :placeholder="t('modbus.inputPlaceholder')" class="h-24 w-full resize-none rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-sm outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-950/60"></textarea>
           <div class="mt-2 flex items-center justify-end gap-2">
             <button @click="inputHex = ''" class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:hover:bg-slate-800">{{ t('serial.clear') }}</button>
