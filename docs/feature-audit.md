@@ -49,6 +49,7 @@
 | J-Link 能力矩阵与实验诊断 | done | 明确提示完整 J-Link 协议未启用，避免误判设备故障。 |
 | RTT Control Block 扫描 | experimental | 纯 Web 内存扫描链路已有实现。 |
 | RTT Up/Down 通道 | experimental | 需要目标固件和探针实测。 |
+| RTT 硬件验收向导 | done | 支持真实自检和 Mock 预演，覆盖浏览器、探针、目标识别、RAM 读写、RTT 通道和报告导出；真实结果仍需硬件。 |
 | 多通道过滤/导出/暂停 | done | UI 和日志存储已支持。 |
 | SEGGER RTT 源码下载 | done | 支持常用 `SEGGER_RTT.c/h` 等文件下载。 |
 | halt/resume/reset/step | experimental | UI 和内核链路已有，依赖探针适配。 |
@@ -97,3 +98,4 @@
 - `280a406`：RTT 调试控件增加寄存器刷新状态和断点槽位诊断。
 - `18b7e18`：Serial 顶部会话诊断，覆盖 TX/RX、静默时间、最近响应和平均发送间隔。
 - 当前轮次：Modbus 多请求轮询任务，覆盖任务列表、串行调度、响应匹配、超时重试和任务导出。
+- 当前轮次：RTT 硬件验收向导，覆盖固定步骤、Mock 预演、真实自检入口和 JSON 报告导出。

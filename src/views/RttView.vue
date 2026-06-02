@@ -3,8 +3,8 @@ import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
-import { parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, summarizeFlashOperationProgress } from '../debug-core'
-import type { FlashDryRunReport, FlashVerifyReport, VariableSpec, VariableValue } from '../debug-core'
+import { createIdleRttHardwareCheckSteps, createMockRttHardwareCheckDefinitions, parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, runRttHardwareChecks, serializeRttHardwareCheckReport, summarizeFlashOperationProgress } from '../debug-core'
+import type { FlashDryRunReport, FlashVerifyReport, RttHardwareCheckDefinition, RttHardwareCheckReport, RttHardwareCheckStep, VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import { RTT_SOURCE_FILES, RTT_SOURCE_REPOSITORY_URL, downloadRttSourceFile, type RttSourceFile } from '../debug-core/rttSourceDownloads'
 import { createProbeCapabilityMatrix } from '../debug-core/probeCapabilityMatrix'
@@ -184,6 +184,10 @@ const webDebugSelfChecks = computed(() => {
   ]
 })
 const showDebugSelfCheckDetails = ref(false)
+const hardwareCheckSteps = ref<RttHardwareCheckStep[]>(createIdleRttHardwareCheckSteps())
+const hardwareCheckReport = ref<RttHardwareCheckReport | null>(null)
+const hardwareCheckRunning = ref(false)
+const hardwareCheckError = ref('')
 const debugSelfCheckSummary = computed(() => {
   const items = webDebugSelfChecks.value
   const warnCount = items.filter(item => item.state === 'warn').length
@@ -468,6 +472,124 @@ function parseHexAddress(value: string): number | null {
   if (!/^[0-9a-fA-F]+$/.test(normalized)) return null
   const parsed = Number.parseInt(normalized, 16)
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null
+}
+
+function updateHardwareCheckStep(step: RttHardwareCheckStep): void {
+  hardwareCheckSteps.value = hardwareCheckSteps.value.map(item => item.key === step.key ? step : item)
+}
+
+function createRealHardwareCheckDefinitions(): RttHardwareCheckDefinition[] {
+  const ramAddress = webUsbRtt.scanRange.value.start
+
+  return [
+    {
+      key: 'browser',
+      label: '浏览器能力',
+      suggestion: '请使用 Chrome/Edge 桌面端，并通过 HTTPS 或 localhost 访问。',
+      async run() {
+        if (!webUsbRtt.isSupported.value) throw new Error('WebUSB 不可用')
+        return 'WebUSB 可用'
+      },
+    },
+    {
+      key: 'probe',
+      label: '探针识别',
+      suggestion: '重新插拔探针，确认浏览器 USB 授权窗口选择了正确设备。',
+      async run() {
+        if (!webUsbRtt.probe.value) throw new Error('尚未授权 USB 探针')
+        return `${webUsbRtt.probe.value.displayName} (${webUsbRtt.probe.value.identifier})`
+      },
+    },
+    {
+      key: 'target-id',
+      label: 'DPIDR / CPUID',
+      suggestion: '降低 SWD 频率，检查 SWDIO/SWCLK/NRST/GND 和目标供电。',
+      async run() {
+        const info = webUsbRtt.chipInfo.value || await webUsbRtt.readChipInfo()
+        return `${info.name} / ${info.core}`
+      },
+    },
+    {
+      key: 'ram-read',
+      label: 'RAM 读取',
+      suggestion: '检查芯片是否读保护、目标是否复位保持或地址范围是否正确。',
+      async run() {
+        const bytes = await webUsbRtt.readMemory(ramAddress, 16)
+        return `${formatHexAddress(ramAddress)} 读取 ${bytes.length} bytes`
+      },
+    },
+    {
+      key: 'ram-write',
+      label: 'RAM 写回读',
+      suggestion: '确认测试地址位于可写 SRAM，避免覆盖应用关键数据。',
+      async run() {
+        const before = await webUsbRtt.readMemory(ramAddress, 16)
+        await webUsbRtt.writeMemory(ramAddress, before)
+        const after = await webUsbRtt.readMemory(ramAddress, 16)
+        if (before.some((byte, index) => byte !== after[index])) {
+          throw new Error(`${formatHexAddress(ramAddress)} 写回读校验不一致`)
+        }
+        return `${formatHexAddress(ramAddress)} 写回读校验成功`
+      },
+    },
+    {
+      key: 'rtt-scan',
+      label: 'RTT CB 扫描',
+      suggestion: '确认固件已链接 SEGGER_RTT.c，扫描范围覆盖 RTT Control Block 所在 RAM。',
+      async run() {
+        if (channels.value.length === 0) throw new Error('未发现 RTT 通道')
+        return `发现 ${channels.value.length} 个 RTT 通道`
+      },
+    },
+    {
+      key: 'up-channel',
+      label: 'Up 通道读取',
+      suggestion: '确认目标程序正在运行并持续写入 RTT 日志。',
+      async run() {
+        if (webUsbRtt.logs.value.length === 0) throw new Error('尚未读取到 RTT Up 日志')
+        return `已读取 ${webUsbRtt.logs.value.length} 条 RTT 日志`
+      },
+    },
+    {
+      key: 'down-channel',
+      label: 'Down 通道写入',
+      suggestion: '确认目标固件启用了 Down buffer，并处理主机写入数据。',
+      async run() {
+        if (channels.value.length === 0) throw new Error('未发现 Down 通道')
+        await webUsbRtt.send('qxc-self-check\n', channels.value[0]?.number ?? 0)
+        return `已向 Ch${channels.value[0]?.number ?? 0} 写入自检文本`
+      },
+    },
+  ]
+}
+
+async function runHardwareCheck(mode: 'real' | 'mock'): Promise<void> {
+  hardwareCheckRunning.value = true
+  hardwareCheckError.value = ''
+  hardwareCheckSteps.value = createIdleRttHardwareCheckSteps()
+  try {
+    const definitions = mode === 'mock'
+      ? createMockRttHardwareCheckDefinitions()
+      : createRealHardwareCheckDefinitions()
+    hardwareCheckReport.value = await runRttHardwareChecks(definitions, mode, updateHardwareCheckStep)
+  } catch (error) {
+    hardwareCheckError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    hardwareCheckRunning.value = false
+  }
+}
+
+function exportHardwareCheckReport(): void {
+  if (!hardwareCheckReport.value) return
+  const blob = new Blob([serializeRttHardwareCheckReport(hardwareCheckReport.value)], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `rtt_hardware_check_${hardwareCheckReport.value.mode}_${Date.now()}.json`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
 }
 
 function applyWebUsbScanRange(): boolean {
@@ -2039,6 +2161,78 @@ watch(
             >
               {{ item.detail }}
             </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 硬件验收向导 -->
+      <div v-show="activeRightPanelTab === 'diagnostics'" class="p-3 border-b border-slate-200 dark:border-slate-800">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <div class="min-w-0">
+            <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">硬件验收向导</h3>
+            <p class="text-[10px] text-slate-400 dark:text-slate-500">浏览器 → 探针 → 目标 → RAM → RTT 通道</p>
+          </div>
+          <span
+            v-if="hardwareCheckReport"
+            class="shrink-0 rounded px-1.5 py-0.5 text-[10px]"
+            :class="hardwareCheckReport.summary.failed === 0
+              ? 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400'
+              : 'bg-yellow-50 text-yellow-600 dark:bg-yellow-900/20 dark:text-yellow-400'"
+          >
+            {{ hardwareCheckReport.summary.passed }}/{{ hardwareCheckReport.steps.length }}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-1.5 mb-2">
+          <button
+            @click="runHardwareCheck('real')"
+            :disabled="hardwareCheckRunning"
+            class="rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-40 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300"
+          >
+            真实自检
+          </button>
+          <button
+            @click="runHardwareCheck('mock')"
+            :disabled="hardwareCheckRunning"
+            class="rounded border border-slate-300 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Mock 预演
+          </button>
+          <button
+            @click="exportHardwareCheckReport"
+            :disabled="!hardwareCheckReport"
+            class="rounded border border-slate-300 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            导出报告
+          </button>
+        </div>
+
+        <div v-if="hardwareCheckError" class="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-600 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+          {{ hardwareCheckError }}
+        </div>
+
+        <div class="space-y-1.5">
+          <div
+            v-for="step in hardwareCheckSteps"
+            :key="step.key"
+            class="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] dark:border-slate-800 dark:bg-slate-950/50"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-medium text-slate-600 dark:text-slate-300">{{ step.label }}</span>
+              <span
+                class="rounded px-1.5 py-0.5"
+                :class="{
+                  'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400': step.status === 'idle' || step.status === 'skip',
+                  'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300': step.status === 'running',
+                  'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400': step.status === 'pass',
+                  'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400': step.status === 'fail',
+                }"
+              >
+                {{ step.status }}
+              </span>
+            </div>
+            <div class="mt-1 truncate text-slate-500 dark:text-slate-400" :title="step.detail">{{ step.detail }}</div>
+            <div v-if="step.status === 'fail'" class="mt-1 text-yellow-600 dark:text-yellow-400">{{ step.suggestion }}</div>
           </div>
         </div>
       </div>
