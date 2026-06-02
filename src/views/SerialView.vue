@@ -9,19 +9,15 @@ import { useDataParse } from '../composables/useDataParse'
 import type { CommandStatus } from '../types/command-group'
 import {
   baudRatePresets,
-  createDefaultQuickCommands,
   createLineEndingOptions,
   formatSerialDuration,
-  applyProtocolTemplate,
   createSerialSessionSnapshot,
-  getProtocolTemplate,
   previewLineEndingValue,
-  PROTOCOL_TEMPLATES,
   resolveLineEndingValue,
   summarizeSerialSession,
-  type QuickCommand,
   useSerialSessions,
   useSerialReplay,
+  useQuickCommands,
 } from '../features/serial'
 import VirtualList from '../components/VirtualList.vue'
 import SerialSessionReplayPanel from '../components/serial/SerialSessionReplayPanel.vue'
@@ -483,10 +479,6 @@ const sendPreview = computed(() => {
   return sendInput.value + ' ' + ending
 })
 
-// Quick Commands Panel
-const quickCommands = ref<QuickCommand[]>(createDefaultQuickCommands())
-const selectedProtocolTemplateId = ref(PROTOCOL_TEMPLATES[0]?.id ?? '')
-const protocolTemplateHint = ref('')
 const {
   isRecordingSession,
   recordedReplayEvents,
@@ -521,33 +513,33 @@ const {
   }),
   showToast: message => settingsStore.showToast(message),
 })
+const {
+  protocolTemplates,
+  quickCommands,
+  selectedProtocolTemplateId,
+  protocolTemplateHint,
+  loopInterval,
+  isLooping,
+  isSendingQuickCommands,
+  enabledQuickCommands,
+  hasRunnableQuickCommands,
+  selectedProtocolTemplate,
+  addCommand,
+  deleteCommand,
+  sendCommand,
+  sendSelected,
+  applySelectedProtocolTemplate,
+  toggleLoopSend,
+  cleanupQuickCommands,
+} = useQuickCommands({
+  send,
+  isConnected,
+  showToast: message => settingsStore.showToast(message),
+  measureSync,
+})
 
 function bindSessionReplayFileInput(el: Element | ComponentPublicInstance | null) {
   sessionReplayFileInputRef.value = el instanceof HTMLInputElement ? el : null
-}
-
-const loopInterval = ref(5000)
-const isLooping = ref(false)
-const isSendingQuickCommands = ref(false)
-let loopTimer: number | null = null
-
-const enabledQuickCommands = computed(() =>
-  quickCommands.value.filter(cmd => cmd.enabled && cmd.content.trim().length > 0)
-)
-
-const hasRunnableQuickCommands = computed(() => enabledQuickCommands.value.length > 0)
-const selectedProtocolTemplate = computed(() => getProtocolTemplate(selectedProtocolTemplateId.value))
-
-function waitForQuickCommandDelay(ms: number, signal: AbortSignal): Promise<void> {
-  if (ms <= 0 || signal.aborted) return Promise.resolve()
-
-  return new Promise(resolve => {
-    const timeoutId = window.setTimeout(resolve, ms)
-    signal.addEventListener('abort', () => {
-      clearTimeout(timeoutId)
-      resolve()
-    }, { once: true })
-  })
 }
 
 /**
@@ -793,156 +785,10 @@ const optimizedHandleSend = () => {
   })
 }
 
-/**
- * 优化的添加指令函数
- * 使用批量 DOM 更新
- */
-const addCommand = () => {
-  measureSync('addCommand', () => {
-    quickCommands.value.push({
-      id: Date.now(),
-      enabled: true,
-      content: '',
-      description: '',
-      isHex: false,
-      delay: 1000
-    })
-  })
-}
-
-/**
- * 优化的删除指令函数
- * 避免创建新数组，使用原地修改
- */
-const deleteCommand = (id: number) => {
-  measureSync('deleteCommand', () => {
-    const index = quickCommands.value.findIndex(cmd => cmd.id === id)
-    if (index > -1) {
-      quickCommands.value.splice(index, 1)
-    }
-  })
-}
-
-/**
- * 优化的发送单个指令函数
- * 带防抖保护
- */
-const sendCommand = async (cmd: QuickCommand) => {
-  if (!isConnected.value || !cmd.content) return
-  
-  try {
-    await send(cmd.content, cmd.isHex)
-  } catch (error) {
-    console.error('[Serial] Send command error:', error)
-  }
-}
-
-/**
- * 优化的发送选中指令函数
- * 支持取消机制
- */
-let sendSelectedAbortController: AbortController | null = null
-
-const sendSelected = async () => {
-  if (!isConnected.value || !hasRunnableQuickCommands.value) return
-  
-  // 取消之前的操作
-  if (sendSelectedAbortController) {
-    sendSelectedAbortController.abort()
-  }
-  
-  sendSelectedAbortController = new AbortController()
-  const { signal } = sendSelectedAbortController
-  isSendingQuickCommands.value = true
-  
-  try {
-    for (const cmd of enabledQuickCommands.value) {
-      if (signal.aborted) break
-
-      await send(cmd.content, cmd.isHex)
-      await waitForQuickCommandDelay(cmd.delay, signal)
-    }
-  } finally {
-    isSendingQuickCommands.value = false
-    sendSelectedAbortController = null
-  }
-}
-
-function applySelectedProtocolTemplate() {
-  const template = selectedProtocolTemplate.value
-  if (!template) return
-  let nextId = Date.now()
-  const result = applyProtocolTemplate(template, () => nextId++)
-  quickCommands.value.push(...result.addedCommands)
-  protocolTemplateHint.value = result.parseHint
-  settingsStore.showToast(`已应用模板：${template.name}`)
-}
-
-/**
- * 优化的循环发送切换函数
- * 带状态保护和清理
- */
-const toggleLoopSend = () => {
-  measureSync('toggleLoopSend', () => {
-    if (isLooping.value) {
-      isLooping.value = false
-      if (loopTimer) {
-        clearTimeout(loopTimer)
-        loopTimer = null
-      }
-      // 取消正在进行的发送
-      if (sendSelectedAbortController) {
-        sendSelectedAbortController.abort()
-        sendSelectedAbortController = null
-      }
-    } else {
-      if (!isConnected.value) return
-      isLooping.value = true
-      runLoop()
-    }
-  })
-}
-
-/**
- * 循环发送执行函数
- * 带自动清理和错误恢复
- */
-const runLoop = async () => {
-  if (!isLooping.value) return
-  
-  try {
-    await sendSelected()
-    
-    if (isLooping.value) {
-      loopTimer = window.setTimeout(runLoop, loopInterval.value)
-    }
-  } catch (error) {
-    console.error('[Serial] Loop send error:', error)
-    // 出错时停止循环
-    isLooping.value = false
-    if (loopTimer) {
-      clearTimeout(loopTimer)
-      loopTimer = null
-    }
-  }
-}
-
 /** 清理函数 - 在组件卸载时调用 */
 function cleanupButtonOptimizations() {
   domUpdater.dispose()
-  
-  // 清理循环定时器
-  if (loopTimer) {
-    clearTimeout(loopTimer)
-    loopTimer = null
-  }
-  
-  // 取消正在进行的操作
-  if (sendSelectedAbortController) {
-    sendSelectedAbortController.abort()
-    sendSelectedAbortController = null
-  }
-
+  cleanupQuickCommands()
   stopSessionReplay()
 }
 
@@ -1702,7 +1548,7 @@ onUnmounted(cleanupButtonOptimizations)
               v-model="selectedProtocolTemplateId"
               class="mb-1.5 w-full rounded border border-slate-300 bg-white px-2 py-1 text-[10px] text-slate-700 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
             >
-              <option v-for="template in PROTOCOL_TEMPLATES" :key="template.id" :value="template.id">
+              <option v-for="template in protocolTemplates" :key="template.id" :value="template.id">
                 {{ template.name }}
               </option>
             </select>
