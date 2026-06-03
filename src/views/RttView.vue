@@ -26,10 +26,10 @@ import RttWorkbenchHeader from '../components/rtt/RttWorkbenchHeader.vue'
 import RttSidePanelShell from '../components/rtt/RttSidePanelShell.vue'
 import RttLogFilterPanel from '../components/rtt/RttLogFilterPanel.vue'
 import RttResourcesPanel from '../components/rtt/RttResourcesPanel.vue'
+import RttVariablePanel from '../components/rtt/RttVariablePanel.vue'
 import type { RttLogLevel, RttBackend, RttFilter } from '../types/rtt'
 import {
   Send,
-  RefreshCw,
   AlertCircle, Terminal,
   BookOpen, Check, Info, ChevronUp, ChevronDown
 } from 'lucide-vue-next'
@@ -1627,99 +1627,23 @@ watch(
         @write-core-register-value="writeCoreRegisterValue"
       />
 
-      <!-- 变量查看 -->
-      <div v-show="activeRightPanelTab === 'variables'" class="p-3 border-b border-slate-200 dark:border-slate-800">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="text-xs font-medium text-slate-500 dark:text-slate-400">变量</h3>
-          <div class="flex items-center gap-1">
-            <button
-              @click="openVariableElfPicker"
-              class="px-2 py-1 rounded text-[10px] border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            >
-              导入 ELF
-            </button>
-            <button
-              @click="refreshVariableValues"
-              :disabled="variableLoading || !isConnected || variableSpecs.length === 0"
-              class="p-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 transition-colors"
-              title="刷新变量"
-            >
-              <RefreshCw class="w-3 h-3" :class="variableLoading ? 'animate-spin' : ''" />
-            </button>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-1.5 mb-2">
-          <input
-            v-model="variableFilterText"
-            type="text"
-            placeholder="筛选变量"
-            class="flex-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-[10px] text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <label class="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
-            <input v-model="variableAutoRefresh" type="checkbox" class="w-3 h-3" />
-            自动
-          </label>
-          <select
-            v-model.number="variableRefreshMs"
-            :disabled="!variableAutoRefresh"
-            class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-1.5 py-1 text-[10px] text-slate-700 dark:text-slate-200 disabled:opacity-50"
-          >
-            <option :value="200">200ms</option>
-            <option :value="500">500ms</option>
-            <option :value="1000">1s</option>
-          </select>
-        </div>
-
-        <p class="text-[10px] text-slate-500 dark:text-slate-400 truncate mb-1" :title="variableElfName || '未导入 ELF'">
-          {{ variableElfName || '未导入 ELF' }}
-        </p>
-        <p class="text-[10px] text-slate-400 dark:text-slate-500 mb-1">
-          {{ variableSpecs.length }} 个变量 / {{ filteredVariableValues.length }} 条显示
-          <template v-if="variableImageSummary">
-            · 函数 {{ variableImageSummary.functionSymbols }} · 对象 {{ variableImageSummary.objectSymbols }}
-          </template>
-        </p>
-        <div v-if="variableImageSummary" class="mb-2 grid grid-cols-2 gap-1 text-[10px] text-slate-500 dark:text-slate-400">
-          <div class="rounded border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
-            PC 函数：
-            <span class="font-mono text-slate-700 dark:text-slate-200">
-              {{ variableImageSummary.currentFunction?.name ?? '-' }}
-            </span>
-          </div>
-          <div class="rounded border border-slate-200 bg-slate-50 px-2 py-1 dark:border-slate-700 dark:bg-slate-900">
-            primitive {{ variableImageSummary.readableVariables }} / best-effort {{ variableImageSummary.bestEffortVariables }}
-          </div>
-        </div>
-
-        <div v-if="variableError" class="text-[10px] text-red-600 dark:text-red-400 mb-2">
-          {{ variableError }}
-        </div>
-
-        <div class="grid grid-cols-[1.2fr_1fr_1.6fr] gap-1 text-[10px] text-slate-400 dark:text-slate-500 mb-1">
-          <span>名称(类型)</span>
-          <span>地址</span>
-          <span class="text-right">值</span>
-        </div>
-
-        <div v-if="filteredVariableValues.length > 0" class="space-y-1 max-h-40 overflow-auto pr-1">
-          <div
-            v-for="item in filteredVariableValues"
-            :key="`${item.name}-${item.address}`"
-            class="grid grid-cols-[1.2fr_1fr_1.6fr] gap-1 items-center text-[10px]"
-          >
-            <span class="truncate text-slate-600 dark:text-slate-300" :title="item.note ? `${item.name}: ${item.note}` : item.name">
-              {{ item.name }}({{ item.type }})
-              <span v-if="item.displayKind && item.displayKind !== 'primitive'" class="text-[9px] text-amber-600 dark:text-amber-300">
-                {{ item.displayKind }}
-              </span>
-            </span>
-            <span class="text-slate-500 dark:text-slate-400">{{ formatVariableAddress(item.address) }}</span>
-            <span v-if="item.error" class="text-red-500 dark:text-red-400 truncate text-right" :title="item.error">ERR</span>
-            <span v-else class="text-slate-500 dark:text-slate-400 text-right" :title="formatVariableValue(item)">{{ formatVariableValue(item) }}</span>
-          </div>
-        </div>
-      </div>
+      <RttVariablePanel
+        v-show="activeRightPanelTab === 'variables'"
+        v-model:variable-filter-text="variableFilterText"
+        v-model:variable-auto-refresh="variableAutoRefresh"
+        v-model:variable-refresh-ms="variableRefreshMs"
+        :is-connected="isConnected"
+        :variable-elf-name="variableElfName"
+        :variable-specs="variableSpecs"
+        :filtered-variable-values="filteredVariableValues"
+        :variable-image-summary="variableImageSummary"
+        :variable-error="variableError"
+        :variable-loading="variableLoading"
+        :format-variable-address="formatVariableAddress"
+        :format-variable-value="formatVariableValue"
+        @import-elf="openVariableElfPicker"
+        @refresh-variables="refreshVariableValues"
+      />
 
       <RttFlashProgrammerPanel
         v-show="activeRightPanelTab === 'flash'"
