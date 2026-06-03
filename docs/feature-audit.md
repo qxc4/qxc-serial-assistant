@@ -75,7 +75,7 @@
 | Shell 危险命令确认 | done | 设置项可控。 |
 | Shell 环境变量 | done | 支持命令引用。 |
 | Chart 实时数据采集 | done | ECharts 按需导入。 |
-| Chart 通道配置/回放 | done | 功能较完整，后续可拆 feature 模块。 |
+| Chart 通道配置/回放 | done | 支持通道配置、回放、数据导出，以及图表工作区配置 JSON 导入/导出；配置归一化逻辑已抽到 feature 模块。 |
 | ASCII 表 | done | 工具页可用。 |
 | 数制转换 | done | 工具页可用。 |
 
@@ -122,4 +122,5 @@
 - 当前轮次：RTT 顶部工作台拆为 `RttWorkbenchHeader`，保留纯 WebUSB 路线、J-Link 诊断、SEGGER RTT 下载、硬件自检和 Flash dry-run/verify 能力。
 - 当前轮次：RTT 硬件验收报告增强，支持失败原因分组和一键复制诊断摘要，方便远程定位 WebUSB/探针/RTT 扫描问题。
 - 当前轮次：Serial 多串口预研推进到运行时层，新增独立会话 runtime、mock transport、Web Serial transport 和最多 4 会话 manager 测试。
+- 当前轮次：Chart 工作区配置闭环，支持导出/导入图表类型、采样配置和通道解析规则，并对导入 JSON 做字段归一化。
 - 当前轮次：项目清理移除重复 agent 指南 `CLAUDE.md`、本地工具目录 `.claude/`，并清理本地产物 `dist/`、`coverage/`、`.superpowers/`。

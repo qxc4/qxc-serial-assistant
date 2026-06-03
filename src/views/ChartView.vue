@@ -23,6 +23,7 @@ import type { ChartType, ExportFormat } from '../types/chart'
 import { samplingFrequencyOptions, playbackSpeedOptions } from '../types/chart'
 import type { ChartChannelConfig } from '../stores/settings'
 import { measureSync, measureAsync } from '../composables/usePerformanceMonitor'
+import { exportChartWorkspaceConfig, parseChartWorkspaceConfigImport } from '../features/chart'
 
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
@@ -31,6 +32,9 @@ const { onDataReceive } = useSerial()
 
 /** 图表容器引用 */
 const chartContainer = ref<HTMLElement | null>(null)
+
+/** 图表配置导入文件 */
+const chartConfigInputRef = ref<HTMLInputElement | null>(null)
 
 /** 左侧面板显示 */
 const showLeftPanel = ref(true)
@@ -260,6 +264,55 @@ const handleExport = async (format: ExportFormat) => {
   })
 }
 
+function downloadChartConfig(): void {
+  const blob = new Blob([exportChartWorkspaceConfig({
+    chartConfig: chart.chartConfig.value,
+    samplingConfig: chart.samplingConfig.value,
+    channels: chartChannels.value,
+  })], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `qxc-chart-config-${new Date().toISOString().slice(0, 10)}.json`
+  document.body.appendChild(link)
+  try {
+    link.click()
+  } finally {
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+  settingsStore.showToast('图表配置已导出')
+}
+
+function openChartConfigImport(): void {
+  chartConfigInputRef.value?.click()
+}
+
+async function handleChartConfigImportSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  try {
+    const raw = await file.text()
+    const result = parseChartWorkspaceConfigImport(raw)
+    if (!result.success || !result.config) {
+      settingsStore.showToast(result.error || '图表配置导入失败')
+      return
+    }
+
+    chart.chartConfig.value = result.config.chartConfig
+    chart.samplingConfig.value = result.config.samplingConfig
+    selectedFrequency.value = result.config.samplingConfig.frequency
+    chartChannels.value = result.config.channels
+    chart.updateChart()
+    settingsStore.showToast(`已导入 ${result.config.channels.length} 个图表通道`)
+  } catch (error) {
+    settingsStore.showToast(error instanceof Error ? error.message : '图表配置导入失败')
+  }
+}
+
 /**
  * 查询历史数据（优化版）
  */
@@ -281,10 +334,38 @@ const handleQueryHistory = () => {
 
 <template>
   <div class="flex flex-col h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
+    <input
+      ref="chartConfigInputRef"
+      type="file"
+      accept="application/json,.json"
+      class="hidden"
+      @change="handleChartConfigImportSelected"
+    />
     <!-- 主内容区 -->
     <div class="flex flex-1 min-h-0 overflow-hidden">
       <!-- 左侧面板: 配置 -->
       <div v-show="showLeftPanel" class="w-64 shrink-0 bg-white dark:bg-slate-800 border-r dark:border-slate-700 flex min-h-0 flex-col">
+        <div class="p-4 border-b dark:border-slate-700">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <h2 class="font-bold text-base">配置文件</h2>
+            <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-slate-700 dark:text-slate-300">JSON</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <button
+              @click="downloadChartConfig"
+              class="rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              导出配置
+            </button>
+            <button
+              @click="openChartConfigImport"
+              class="rounded-lg border border-slate-200 px-2 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+            >
+              导入配置
+            </button>
+          </div>
+        </div>
+
         <!-- 图表类型选择 -->
         <div class="p-4 border-b dark:border-slate-700">
           <h2 class="font-bold text-base mb-3">{{ t('chart.chartType') }}</h2>
