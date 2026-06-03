@@ -3,7 +3,8 @@ import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
-import { createIdleRttHardwareCheckSteps, createMockRttHardwareCheckDefinitions, parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, runRttHardwareChecks, serializeRttHardwareCheckReport, summarizeFlashOperationProgress, createVariableSpecsFromSymbols, summarizeVariableImage, getFlashFamilyProfile, detectFlashFamilyFromText, createUnsupportedFlashFamilyMessage, createJLinkDiagnosticReport } from '../debug-core'
+import { useSettingsStore } from '../stores/settings'
+import { createIdleRttHardwareCheckSteps, createMockRttHardwareCheckDefinitions, parseElfImage, parseIntelHex, parseBinaryImage, inspectGlobalVariables, createFlashDryRunReport, createFlashProgrammer, runRttHardwareChecks, serializeRttHardwareCheckReport, summarizeFlashOperationProgress, createVariableSpecsFromSymbols, summarizeVariableImage, getFlashFamilyProfile, detectFlashFamilyFromText, createUnsupportedFlashFamilyMessage, createJLinkDiagnosticReport, createRttHardwareCheckFailureGroups, createRttHardwareCheckSummaryText } from '../debug-core'
 import type { FlashChipFamily, FlashDryRunReport, FlashVerifyReport, RttHardwareCheckDefinition, RttHardwareCheckReport, RttHardwareCheckStep, VariableSpec, VariableValue } from '../debug-core'
 import type { ProgramImage } from '../debug-core'
 import { RTT_SOURCE_FILES, RTT_SOURCE_REPOSITORY_URL, downloadRttSourceFile, type RttSourceFile } from '../debug-core/rttSourceDownloads'
@@ -34,6 +35,7 @@ import {
 } from 'lucide-vue-next'
 
 const { t } = useI18n()
+const settingsStore = useSettingsStore()
 
 // WebUSB RTT (直接连接)
 const webUsbRtt = useWebUsbRtt()
@@ -194,6 +196,7 @@ const hardwareCheckSteps = ref<RttHardwareCheckStep[]>(createIdleRttHardwareChec
 const hardwareCheckReport = ref<RttHardwareCheckReport | null>(null)
 const hardwareCheckRunning = ref(false)
 const hardwareCheckError = ref('')
+const hardwareCheckFailureGroups = computed(() => createRttHardwareCheckFailureGroups(hardwareCheckReport.value?.steps ?? []))
 const debugSelfCheckSummary = computed(() => {
   const items = webDebugSelfChecks.value
   const warnCount = items.filter(item => item.state === 'warn').length
@@ -609,6 +612,21 @@ function exportHardwareCheckReport(): void {
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(url)
+}
+
+async function copyHardwareCheckSummary(): Promise<void> {
+  if (!hardwareCheckReport.value) return
+  if (!navigator.clipboard?.writeText) {
+    settingsStore.showToast('当前浏览器不支持剪贴板写入')
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(createRttHardwareCheckSummaryText(hardwareCheckReport.value))
+    settingsStore.showToast('诊断摘要已复制')
+  } catch (error) {
+    settingsStore.showToast(error instanceof Error ? error.message : '诊断摘要复制失败')
+  }
 }
 
 function applyWebUsbScanRange(): boolean {
@@ -1896,7 +1914,7 @@ watch(
           </span>
         </div>
 
-        <div class="grid grid-cols-3 gap-1.5 mb-2">
+        <div class="grid grid-cols-4 gap-1.5 mb-2">
           <button
             @click="runHardwareCheck('real')"
             :disabled="hardwareCheckRunning"
@@ -1918,10 +1936,29 @@ watch(
           >
             导出报告
           </button>
+          <button
+            @click="copyHardwareCheckSummary"
+            :disabled="!hardwareCheckReport"
+            class="rounded border border-slate-300 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            复制摘要
+          </button>
         </div>
 
         <div v-if="hardwareCheckError" class="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-600 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
           {{ hardwareCheckError }}
+        </div>
+
+        <div v-if="hardwareCheckFailureGroups.length > 0" class="mb-2 space-y-1 rounded border border-yellow-200 bg-yellow-50 px-2 py-1.5 text-[10px] text-yellow-700 dark:border-yellow-900/60 dark:bg-yellow-950/30 dark:text-yellow-300">
+          <div class="font-medium">失败原因分组</div>
+          <div v-for="group in hardwareCheckFailureGroups" :key="group.reason" class="space-y-0.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="min-w-0 truncate" :title="group.reason">{{ group.reason }}</span>
+              <span class="shrink-0">x{{ group.count }}</span>
+            </div>
+            <div class="truncate text-yellow-600/80 dark:text-yellow-300/80" :title="group.steps.join(', ')">{{ group.steps.join(', ') }}</div>
+            <div v-if="group.suggestion" class="truncate text-yellow-700 dark:text-yellow-200" :title="group.suggestion">建议：{{ group.suggestion }}</div>
+          </div>
         </div>
 
         <div class="space-y-1.5">

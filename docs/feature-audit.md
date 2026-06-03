@@ -120,4 +120,5 @@
 - 当前轮次：Modbus 多请求轮询补齐任务导入，支持读取导出的 JSON、字段归一化、重置运行统计和非法文件诊断。
 - 当前轮次：Modbus 高级调度体验增强，支持覆盖/追加导入策略、复制任务、单任务统计清零和轮询历史状态/关键字筛选。
 - 当前轮次：RTT 顶部工作台拆为 `RttWorkbenchHeader`，保留纯 WebUSB 路线、J-Link 诊断、SEGGER RTT 下载、硬件自检和 Flash dry-run/verify 能力。
+- 当前轮次：RTT 硬件验收报告增强，支持失败原因分组和一键复制诊断摘要，方便远程定位 WebUSB/探针/RTT 扫描问题。
 - 当前轮次：项目清理移除重复 agent 指南 `CLAUDE.md`、本地工具目录 `.claude/`，并清理本地产物 `dist/`、`coverage/`、`.superpowers/`。

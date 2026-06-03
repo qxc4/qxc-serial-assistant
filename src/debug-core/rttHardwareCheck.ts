@@ -33,6 +33,13 @@ export interface RttHardwareCheckReport {
   }
 }
 
+export interface RttHardwareCheckFailureGroup {
+  reason: string
+  count: number
+  steps: string[]
+  suggestion: string
+}
+
 export interface RttHardwareCheckDefinition {
   key: RttHardwareCheckStepKey
   label: string
@@ -145,6 +152,69 @@ export function summarizeRttHardwareCheckSteps(steps: RttHardwareCheckStep[], du
     skipped: steps.filter(step => step.status === 'skip').length,
     durationMs,
   }
+}
+
+export function createRttHardwareCheckFailureGroups(steps: RttHardwareCheckStep[]): RttHardwareCheckFailureGroup[] {
+  const groups = new Map<string, RttHardwareCheckFailureGroup>()
+
+  for (const step of steps) {
+    if (step.status !== 'fail') continue
+    const reason = step.detail.trim() || '未提供失败原因'
+    const existing = groups.get(reason)
+    if (existing) {
+      existing.count += 1
+      existing.steps.push(step.label)
+      if (!existing.suggestion && step.suggestion) {
+        existing.suggestion = step.suggestion
+      }
+      continue
+    }
+
+    groups.set(reason, {
+      reason,
+      count: 1,
+      steps: [step.label],
+      suggestion: step.suggestion,
+    })
+  }
+
+  return Array.from(groups.values())
+}
+
+export function createRttHardwareCheckSummaryText(report: RttHardwareCheckReport): string {
+  const lines = [
+    'RTT 硬件验收诊断',
+    `报告: ${report.id}`,
+    `模式: ${report.mode}`,
+    `开始: ${new Date(report.startedAt).toISOString()}`,
+    `结束: ${new Date(report.finishedAt).toISOString()}`,
+    `通过: ${report.summary.passed}`,
+    `失败: ${report.summary.failed}`,
+    `跳过: ${report.summary.skipped}`,
+    `耗时: ${report.summary.durationMs}ms`,
+    '',
+    '步骤:',
+  ]
+
+  for (const step of report.steps) {
+    lines.push(`- ${step.label}: ${step.status} - ${step.detail || '无详情'} (${step.durationMs}ms)`)
+    if (step.status === 'fail' && step.suggestion) {
+      lines.push(`  建议: ${step.suggestion}`)
+    }
+  }
+
+  const failureGroups = createRttHardwareCheckFailureGroups(report.steps)
+  if (failureGroups.length > 0) {
+    lines.push('', '失败原因分组:')
+    for (const group of failureGroups) {
+      lines.push(`- ${group.reason} x${group.count}: ${group.steps.join(', ')}`)
+      if (group.suggestion) {
+        lines.push(`  建议: ${group.suggestion}`)
+      }
+    }
+  }
+
+  return lines.join('\n')
 }
 
 export function createMockRttHardwareCheckDefinitions(): RttHardwareCheckDefinition[] {
