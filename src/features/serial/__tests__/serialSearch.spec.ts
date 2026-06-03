@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   createSerialSearchSegments,
+  updateSerialSearchHistory,
   filterSerialLogEntries,
   parseSerialSearchQuery,
   type SerialSearchSourceEntry,
@@ -35,5 +36,11 @@ describe('serialSearch', () => {
       { text: '_not_', matched: false },
       { text: 'Pressed', matched: true },
     ])
+  })
+
+  it('updates search history with trimmed unique newest-first entries', () => {
+    expect(updateSerialSearchHistory(['old', 'key'], ' key ', 3)).toEqual(['key', 'old'])
+    expect(updateSerialSearchHistory(['a', 'b', 'c'], 'd', 3)).toEqual(['d', 'a', 'b'])
+    expect(updateSerialSearchHistory(['a'], '   ', 3)).toEqual(['a'])
   })
 })

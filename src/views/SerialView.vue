@@ -15,6 +15,7 @@ import {
   resolveLineEndingValue,
   summarizeSerialSession,
   filterSerialLogEntries,
+  updateSerialSearchHistory,
   useSerialMultiSession,
   useSerialReplay,
   useQuickCommands,
@@ -80,9 +81,12 @@ const {
 const activeTab = ref<'serial'|'bluetooth'>('serial')
 const activeRightTab = ref<'quick'|'group'>('quick')
 const virtualListRef = ref<InstanceType<typeof SerialLogPanel> | null>(null)
+const serialSearchHistoryStorageKey = 'qxc-serial-search-history'
 
 /** 搜索关键词 */
 const searchQuery = ref('')
+const searchHistory = ref<string[]>(loadSerialSearchHistory())
+const activeSearchResultIndex = ref(0)
 
 /** 防抖后的搜索关键词 */
 const debouncedSearchQuery = ref('')
@@ -95,12 +99,56 @@ const debouncedSearch = debounce((value: string) => {
 /** 监听搜索关键词变化 */
 watch(searchQuery, (value) => {
   debouncedSearch(value)
+  activeSearchResultIndex.value = 0
 })
 
 /** 根据显示模式和搜索关键词过滤接收数据（优化版） */
 const filteredReceivedData = computed(() => {
   return filterSerialLogEntries(activeSessionLogs.value, debouncedSearchQuery.value, displayMode.value)
 })
+const searchResultIds = computed(() => {
+  if (!debouncedSearchQuery.value.trim()) return []
+  return filteredReceivedData.value.map(item => item.id)
+})
+watch(searchResultIds, ids => {
+  if (activeSearchResultIndex.value >= ids.length) {
+    activeSearchResultIndex.value = 0
+  }
+})
+
+function loadSerialSearchHistory(): string[] {
+  try {
+    const raw = localStorage.getItem(serialSearchHistoryStorageKey)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed.filter(item => typeof item === 'string').slice(0, 10) : []
+  } catch {
+    return []
+  }
+}
+
+function persistSerialSearchHistory(): void {
+  localStorage.setItem(serialSearchHistoryStorageKey, JSON.stringify(searchHistory.value))
+}
+
+function commitSerialSearch(): void {
+  searchHistory.value = updateSerialSearchHistory(searchHistory.value, searchQuery.value, 10)
+  persistSerialSearchHistory()
+}
+
+function applySerialSearchHistory(value: string): void {
+  searchQuery.value = value
+  commitSerialSearch()
+}
+
+function jumpToSearchResult(offset: 1 | -1): void {
+  const ids = searchResultIds.value
+  if (ids.length === 0) return
+  const nextIndex = (activeSearchResultIndex.value + offset + ids.length) % ids.length
+  activeSearchResultIndex.value = nextIndex
+  nextTick(() => {
+    virtualListRef.value?.scrollToLogEntry(ids[nextIndex] ?? ids[0])
+  })
+}
 
 /** 处理虚拟滚动事件（使用 raf 节流） */
 const handleVirtualScroll = rafThrottle((_scrollTop: number) => {
@@ -784,6 +832,9 @@ onUnmounted(cleanupButtonOptimizations)
           v-model:show-left-panel="showLeftPanel"
           v-model:show-bottom-panel="showBottomPanel"
           v-model:show-right-panel="showRightPanel"
+          :search-result-index="activeSearchResultIndex"
+          :search-result-count="searchResultIds.length"
+          :search-history="searchHistory"
           :is-connected="isActiveSessionConnected"
           :connection-summary="activeConnectionSummary"
           :filtered-count="filteredReceivedData.length"
@@ -797,6 +848,10 @@ onUnmounted(cleanupButtonOptimizations)
           :t="t"
           :format-serial-duration="formatSerialDuration"
           @add-session="addSerialSessionSlot"
+          @apply-search-history="applySerialSearchHistory"
+          @commit-search="commitSerialSearch"
+          @next-search-result="jumpToSearchResult(1)"
+          @previous-search-result="jumpToSearchResult(-1)"
           @remove-session="removeSerialSessionSlot"
           @set-active-session="setActiveSerialSession"
           @toggle-active-connection="toggleActiveSessionConnection"

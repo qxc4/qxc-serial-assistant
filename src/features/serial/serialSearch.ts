@@ -165,3 +165,12 @@ export function createSerialSearchSegments(text: string, query: string): SerialS
   }
   return segments
 }
+
+export function updateSerialSearchHistory(history: string[], query: string, maxItems = 10): string[] {
+  const normalized = query.trim()
+  if (!normalized) return history
+  return [
+    normalized,
+    ...history.filter(item => item.toLowerCase() !== normalized.toLowerCase()),
+  ].slice(0, maxItems)
+}

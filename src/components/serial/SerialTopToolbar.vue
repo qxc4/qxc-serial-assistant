@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Maximize, PanelBottom, PanelLeft, PanelRight, Power, Search, Usb, XCircle } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, Maximize, PanelBottom, PanelLeft, PanelRight, Power, Search, Usb, XCircle } from 'lucide-vue-next'
 import SerialSessionStrip from './SerialSessionStrip.vue'
 import type { SerialSessionDescriptor, SerialSessionDiagnostics } from '../../features/serial'
 
@@ -8,6 +8,9 @@ const props = defineProps<{
   isConnected: boolean
   connectionSummary: string
   searchQuery: string
+  searchResultIndex: number
+  searchResultCount: number
+  searchHistory: string[]
   filteredCount: number
   dataCount: number
   serialResponseState: string
@@ -29,6 +32,10 @@ const emit = defineEmits<{
   'update:showBottomPanel': [value: boolean]
   'update:showRightPanel': [value: boolean]
   addSession: []
+  applySearchHistory: [value: string]
+  commitSearch: []
+  nextSearchResult: []
+  previousSearchResult: []
   removeSession: [id: string]
   setActiveSession: [id: string]
   toggleActiveConnection: []
@@ -73,8 +80,34 @@ function maximizeView() {
           type="text"
           :placeholder="t('serial.searchPlaceholder')"
           title="支持多关键词 AND、dir:rx、dir:tx、hex:AA55"
-          class="w-full pl-9 pr-7 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-shadow"
+          list="serial-search-history"
+          class="w-full pl-9 pr-[5.5rem] py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-shadow"
+          @keydown.enter.prevent="emit('commitSearch')"
         />
+        <datalist id="serial-search-history">
+          <option v-for="item in searchHistory" :key="item" :value="item" @click="emit('applySearchHistory', item)" />
+        </datalist>
+        <div v-if="searchQuery" class="absolute right-7 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+          <span class="mr-0.5 min-w-7 text-right text-[10px] text-slate-400">
+            {{ searchResultCount > 0 ? `${searchResultIndex + 1}/${searchResultCount}` : '0' }}
+          </span>
+          <button
+            @click="emit('previousSearchResult')"
+            :disabled="searchResultCount === 0"
+            class="rounded p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200"
+            title="上一条"
+          >
+            <ChevronLeft class="h-3.5 w-3.5" />
+          </button>
+          <button
+            @click="emit('nextSearchResult')"
+            :disabled="searchResultCount === 0"
+            class="rounded p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200"
+            title="下一条"
+          >
+            <ChevronRight class="h-3.5 w-3.5" />
+          </button>
+        </div>
         <button
           v-if="searchQuery"
           @click="localSearchQuery = ''"

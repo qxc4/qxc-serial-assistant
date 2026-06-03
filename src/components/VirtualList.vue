@@ -121,9 +121,16 @@ function scrollToTop() {
   }
 }
 
+function scrollToIndex(index: number) {
+  if (containerRef.value) {
+    containerRef.value.scrollTop = Math.max(0, Math.floor(index) * props.itemHeight)
+  }
+}
+
 defineExpose({
   scrollToBottom,
   scrollToTop,
+  scrollToIndex,
   containerRef,
 })
 </script>

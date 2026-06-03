@@ -30,7 +30,14 @@ function scrollToBottom() {
   virtualListRef.value?.scrollToBottom()
 }
 
-defineExpose({ scrollToBottom })
+function scrollToLogEntry(sourceId: number | string) {
+  const rowIndex = displayRows.value.findIndex(row => row.sourceId === sourceId)
+  if (rowIndex >= 0) {
+    virtualListRef.value?.scrollToIndex(rowIndex)
+  }
+}
+
+defineExpose({ scrollToBottom, scrollToLogEntry })
 </script>
 
 <template>
