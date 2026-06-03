@@ -201,6 +201,8 @@ const activeConnectionSummary = computed(() => {
   if (activeRuntime.value.state.isConnected) return activeRuntime.value.state.connectionLabel
   return t('serial.waitingConnect')
 })
+const activeTxBytes = computed(() => activeRuntime.value ? (activeSerialSession.value?.stats.txBytes ?? 0) : txBytes.value)
+const activeRxBytes = computed(() => activeRuntime.value ? (activeSerialSession.value?.stats.rxBytes ?? 0) : rxBytes.value)
 
 function clearActiveSerialData(): void {
   if (activeRuntime.value) {
@@ -776,15 +778,17 @@ onUnmounted(cleanupButtonOptimizations)
         v-model:length-field-enabled="lengthFieldEnabled"
         v-model:show-parse-panel="showParsePanel"
         :is-supported="isSupported"
-        :is-connected="isConnected"
-        :can-reconnect="canReconnect"
+        :is-connected="isActiveSessionConnected"
+        :can-reconnect="!activeRuntime && canReconnect"
         :baud-rate-presets="baudRatePresets"
         :custom-protocol-config="customProtocolConfig"
         :parse-result-count="dataParse.resultCount.value"
         :t="t"
-        @connect="connect"
-        @disconnect="disconnect"
-        @reconnect="reconnect"
+        :active-session-name="activeSerialSession?.name"
+        :is-default-session="!activeRuntime"
+        @connect="toggleActiveSessionConnection"
+        @disconnect="toggleActiveSessionConnection"
+        @reconnect="toggleActiveSessionConnection"
         @bluetooth-coming-soon="settingsStore.showToast(t('serial.bluetoothComingSoon'))"
       />
 
@@ -895,7 +899,7 @@ onUnmounted(cleanupButtonOptimizations)
           :protocol-templates="protocolTemplates"
           :selected-protocol-template="selectedProtocolTemplate"
           :protocol-template-hint="protocolTemplateHint"
-          :is-connected="isConnected"
+          :is-connected="isActiveSessionConnected"
           :has-runnable-quick-commands="hasRunnableQuickCommands"
           :is-sending-quick-commands="isSendingQuickCommands"
           :is-looping="isLooping"
@@ -927,7 +931,7 @@ onUnmounted(cleanupButtonOptimizations)
           v-model:show-group-loader="showGroupLoader"
           v-model:show-exec-log="showExecLog"
           :cg="cg"
-          :is-connected="isConnected"
+          :is-connected="isActiveSessionConnected"
           :recent-execution-logs="recentExecutionLogs"
           :execution-log-preview-limit="executionLogPreviewLimit"
           :t="t"
@@ -949,15 +953,15 @@ onUnmounted(cleanupButtonOptimizations)
           {{ t('serial.reconnectingStatus') }} ({{ reconnectAttempts }}/5)...
         </span>
         <!-- Normal connection status -->
-        <span v-else class="flex items-center gap-1 font-medium" :class="isConnected ? 'text-green-600' : 'text-blue-600'">
-          <span class="w-2 h-2 rounded-full" :class="isConnected ? 'bg-green-500' : 'bg-blue-500'"></span>
-          {{ isConnected ? t('serial.connected') : t('serial.waitingConnect') }}
+        <span v-else class="flex items-center gap-1 font-medium" :class="isActiveSessionConnected ? 'text-green-600' : 'text-blue-600'">
+          <span class="w-2 h-2 rounded-full" :class="isActiveSessionConnected ? 'bg-green-500' : 'bg-blue-500'"></span>
+          {{ isActiveSessionConnected ? t('serial.connected') : t('serial.waitingConnect') }}
         </span>
-        <span v-if="isConnected && !isReconnecting">{{ t('serial.connectedDevice') }}: {{ baudRate }} bps, {{ dataBits }} {{ t('serial.dataBitsUnit') }}, {{ parity }} {{ t('serial.parityCheck') }}, {{ stopBits }} {{ t('serial.stopBitsUnit') }}</span>
+        <span v-if="isActiveSessionConnected && !isReconnecting">{{ t('serial.connectedDevice') }}: {{ activeConnectionSummary }}</span>
       </div>
       <div class="flex gap-4 font-mono">
-        <span>Tx: {{ txBytes }} Bytes</span>
-        <span>Rx: {{ rxBytes }} Bytes</span>
+        <span>Tx: {{ activeTxBytes }} Bytes</span>
+        <span>Rx: {{ activeRxBytes }} Bytes</span>
       </div>
     </div>
 

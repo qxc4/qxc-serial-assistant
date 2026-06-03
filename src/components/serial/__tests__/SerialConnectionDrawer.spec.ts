@@ -71,4 +71,14 @@ describe('SerialConnectionDrawer', () => {
 
     expect(onBluetoothComingSoon).toHaveBeenCalledTimes(1)
   })
+
+  it('shows the active serial session controlled by the drawer', () => {
+    const wrapper = mountDrawer({
+      activeSessionName: '串口 2',
+      isDefaultSession: false,
+    })
+
+    expect(wrapper.text()).toContain('当前会话：串口 2')
+    expect(wrapper.text()).toContain('独立多端口连接')
+  })
 })

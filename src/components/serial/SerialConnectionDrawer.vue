@@ -25,6 +25,8 @@ const props = defineProps<{
   lengthFieldEnabled: boolean
   parseResultCount: number
   showParsePanel: boolean
+  activeSessionName?: string
+  isDefaultSession?: boolean
   t: (key: string) => string
 }>()
 
@@ -121,6 +123,26 @@ function updateCustomBaudRate(value: string) {
         <div>
           <h2 class="font-bold text-base mb-1">{{ t('serial.serialSettings') }}</h2>
           <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('serial.serialSettingsDesc') }}</p>
+        </div>
+
+        <div
+          v-if="activeSessionName"
+          class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/70 dark:text-slate-300"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-medium text-slate-800 dark:text-slate-100">当前会话：{{ activeSessionName }}</span>
+            <span
+              class="rounded-full px-2 py-0.5 text-[10px]"
+              :class="isDefaultSession === false
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                : 'bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300'"
+            >
+              {{ isDefaultSession === false ? '独立多端口连接' : '默认串口' }}
+            </span>
+          </div>
+          <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            连接、断开和发送会作用于当前选中的会话。
+          </p>
         </div>
 
         <div v-if="!isSupported" class="text-xs text-red-600 bg-red-50 p-2 rounded">
