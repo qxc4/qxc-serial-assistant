@@ -3,6 +3,12 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useShell, type TerminalLine } from '../composables/useShell'
 import { useSerial } from '../composables/useSerial'
 import { useI18n } from '../composables/useI18n'
+import {
+  addShellFavoriteCommand,
+  parseShellFavoriteCommands,
+  removeShellFavoriteCommand,
+  serializeShellFavoriteCommands,
+} from '../features/shell'
 
 const {
   lines,
@@ -65,6 +71,15 @@ const showEnvPanel = ref(false)
 
 /** 是否显示历史面板 */
 const showHistoryPanel = ref(false)
+
+/** 是否显示收藏命令面板 */
+const showFavoritesPanel = ref(false)
+
+/** 收藏命令 */
+const favoriteCommands = ref<string[]>([])
+
+/** 收藏导入文件 */
+const favoriteImportInputRef = ref<HTMLInputElement | null>(null)
 
 /** 新环境变量 key */
 const newEnvKey = ref('')
@@ -341,6 +356,72 @@ function selectFromHistory(cmd: string): void {
   inputRef.value?.focus()
 }
 
+function persistFavoriteCommands(): void {
+  localStorage.setItem('qxc-serial-shell-favorites', serializeShellFavoriteCommands(favoriteCommands.value))
+}
+
+function loadFavoriteCommands(): void {
+  const raw = localStorage.getItem('qxc-serial-shell-favorites')
+  if (!raw) return
+  const result = parseShellFavoriteCommands(raw)
+  if (result.success) {
+    favoriteCommands.value = result.commands
+  }
+}
+
+function addCurrentCommandToFavorites(): void {
+  const next = addShellFavoriteCommand(favoriteCommands.value, commandInput.value)
+  if (next === favoriteCommands.value) return
+  favoriteCommands.value = next
+  persistFavoriteCommands()
+}
+
+function removeFavoriteCommand(command: string): void {
+  favoriteCommands.value = removeShellFavoriteCommand(favoriteCommands.value, command)
+  persistFavoriteCommands()
+}
+
+function selectFavoriteCommand(command: string): void {
+  commandInput.value = command
+  showFavoritesPanel.value = false
+  inputRef.value?.focus()
+}
+
+function exportFavoriteCommands(): void {
+  const blob = new Blob([serializeShellFavoriteCommands(favoriteCommands.value)], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `qxc-shell-favorites-${new Date().toISOString().slice(0, 10)}.json`
+  document.body.appendChild(link)
+  try {
+    link.click()
+  } finally {
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+}
+
+function openFavoriteImport(): void {
+  favoriteImportInputRef.value?.click()
+}
+
+async function handleFavoriteImportSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  const result = parseShellFavoriteCommands(await file.text())
+  if (!result.success) {
+    addErrorLine(result.error || '收藏命令导入失败')
+    return
+  }
+  favoriteCommands.value = result.commands
+  persistFavoriteCommands()
+  addSystemLine(`已导入 ${result.commands.length} 条收藏命令`)
+}
+
 /**
  * 从补全列表选择
  * @param cmd 命令
@@ -371,6 +452,7 @@ watch(lines, () => {
 let unregisterCallback: (() => void) | null = null
 
 onMounted(() => {
+  loadFavoriteCommands()
   addSystemLine(t('shell.welcome'))
   addSystemLine(t('shell.typeHelp'))
   addPromptLine(promptText.value)
@@ -398,6 +480,13 @@ onUnmounted(() => {
 
 <template>
   <div class="flex flex-col h-full min-h-0 overflow-hidden bg-slate-950 text-slate-200">
+    <input
+      ref="favoriteImportInputRef"
+      type="file"
+      accept="application/json,.json"
+      class="hidden"
+      @change="handleFavoriteImportSelected"
+    />
     <!-- 顶部工具栏 -->
     <div class="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
       <div class="flex items-center gap-3">
@@ -465,6 +554,15 @@ onUnmounted(() => {
           :title="t('shell.commandHistory')"
         >
           {{ t('shell.commandHistory') }}
+        </button>
+
+        <button
+          @click="showFavoritesPanel = !showFavoritesPanel"
+          class="text-xs px-2 py-1 rounded transition-colors"
+          :class="showFavoritesPanel ? 'bg-blue-600/20 text-blue-400' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'"
+          title="收藏命令"
+        >
+          收藏
         </button>
 
         <!-- 设置 -->
@@ -582,6 +680,14 @@ onUnmounted(() => {
             autocapitalize="off"
           />
           <button
+            @click="addCurrentCommandToFavorites"
+            :disabled="!commandInput.trim()"
+            class="text-xs px-2 py-1.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+            title="收藏当前命令"
+          >
+            收藏
+          </button>
+          <button
             @click="submitCommand"
             :disabled="!commandInput.trim() || !!pendingConfirmation"
             class="text-xs px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
@@ -651,6 +757,58 @@ onUnmounted(() => {
         <!-- 使用提示 -->
         <div class="px-3 py-2 border-t border-slate-800">
           <p class="text-[10px] text-slate-500">{{ t('shell.envUsage') }}</p>
+        </div>
+      </div>
+
+      <!-- 右侧面板 - 收藏命令 -->
+      <div
+        v-if="showFavoritesPanel"
+        class="w-72 shrink-0 bg-slate-900 border-l border-slate-800 flex min-h-0 flex-col overflow-hidden"
+      >
+        <div class="flex items-center justify-between px-3 py-2 border-b border-slate-800">
+          <span class="text-xs font-medium text-slate-300">收藏命令</span>
+          <div class="flex items-center gap-2">
+            <button
+              @click="openFavoriteImport"
+              class="text-xs text-slate-500 hover:text-blue-400"
+            >
+              导入
+            </button>
+            <button
+              @click="exportFavoriteCommands"
+              :disabled="favoriteCommands.length === 0"
+              class="text-xs text-slate-500 hover:text-blue-400 disabled:opacity-50"
+            >
+              导出
+            </button>
+            <button @click="showFavoritesPanel = false" class="text-xs text-slate-500 hover:text-slate-300">✕</button>
+          </div>
+        </div>
+
+        <div class="flex-1 min-h-0 overflow-y-auto">
+          <div
+            v-for="command in favoriteCommands"
+            :key="command"
+            class="group flex items-center justify-between gap-2 px-3 py-1.5 hover:bg-slate-800/50 transition-colors"
+          >
+            <button
+              @click="selectFavoriteCommand(command)"
+              class="min-w-0 flex-1 truncate text-left font-mono text-xs text-slate-300"
+              :title="command"
+            >
+              {{ command }}
+            </button>
+            <button
+              @click="removeFavoriteCommand(command)"
+              class="text-xs text-slate-600 opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100"
+              title="移除收藏"
+            >
+              ✕
+            </button>
+          </div>
+          <div v-if="favoriteCommands.length === 0" class="px-3 py-4 text-xs text-slate-500 text-center">
+            暂无收藏命令
+          </div>
         </div>
       </div>
 

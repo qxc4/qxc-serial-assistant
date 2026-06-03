@@ -72,6 +72,7 @@
 | 功能 | 状态 | 备注 |
 | --- | --- | --- |
 | Shell 命令输入/历史/补全 | done | 面向串口设备的交互终端。 |
+| Shell 命令收藏 | done | 支持收藏当前输入、点击填入、移除、JSON 导入/导出和本地持久化。 |
 | Shell 危险命令确认 | done | 设置项可控。 |
 | Shell 环境变量 | done | 支持命令引用。 |
 | Chart 实时数据采集 | done | ECharts 按需导入。 |
@@ -123,4 +124,5 @@
 - 当前轮次：RTT 硬件验收报告增强，支持失败原因分组和一键复制诊断摘要，方便远程定位 WebUSB/探针/RTT 扫描问题。
 - 当前轮次：Serial 多串口预研推进到运行时层，新增独立会话 runtime、mock transport、Web Serial transport 和最多 4 会话 manager 测试。
 - 当前轮次：Chart 工作区配置闭环，支持导出/导入图表类型、采样配置和通道解析规则，并对导入 JSON 做字段归一化。
+- 当前轮次：Shell 命令收藏闭环，支持常用命令收藏、点击填入、移除、JSON 导入/导出和 `qxc-serial-shell-favorites` 本地持久化。
 - 当前轮次：项目清理移除重复 agent 指南 `CLAUDE.md`、本地工具目录 `.claude/`，并清理本地产物 `dist/`、`coverage/`、`.superpowers/`。
