@@ -24,13 +24,16 @@ import {
   bytesToHexInput,
   createModbusPollingTask,
   doesModbusResponseMatchTask,
+  duplicateModbusPollingTask,
   estimateModbusResponseGap,
+  filterModbusPollingResults,
   formatModbusPollingProgress,
   getEnabledModbusPollingTasks,
   normalizeModbusPollingSettings,
   parseCompleteModbusFrame,
   parseModbusPollingTasksImport,
   parseRegisterData,
+  resetModbusPollingTaskStats,
   serializeModbusPollingTasks,
   shouldContinueModbusPolling,
   summarizeModbusPipeline,
@@ -39,6 +42,7 @@ import {
   type ByteOrder,
   type DataType,
   type ModbusPollingResult,
+  type ModbusPollingResultFilter,
   type ModbusPollingTask,
   type RegisterValue,
 } from '../features/modbus'
@@ -107,6 +111,12 @@ let pollingTimer: ReturnType<typeof setInterval> | null = null
 let isPollingTickInFlight = false
 const pollingTasks = ref<ModbusPollingTask[]>([])
 const pollingResults = ref<ModbusPollingResult[]>([])
+const pollingTaskImportMode = ref<'replace' | 'append'>('replace')
+const pollingResultFilter = ref<ModbusPollingResultFilter>({
+  status: 'all' as const,
+  taskName: '',
+  query: '',
+})
 const pollingTaskImportInputRef = ref<HTMLInputElement | null>(null)
 const isTaskPolling = ref(false)
 const activePollingTaskId = ref('')
@@ -132,6 +142,7 @@ const taskPollingSummary = computed(() => ({
   activeTaskId: activePollingTaskId.value,
   cycle: pollingTaskCycle.value,
 }))
+const filteredPollingResults = computed(() => filterModbusPollingResults(pollingResults.value, pollingResultFilter.value))
 const activeParseResult = computed(() => {
   return parseResults.value.find(item => item.id === expandedResult.value) || parseResults.value[0] || null
 })
@@ -467,6 +478,24 @@ function togglePollingTask(taskId: string): void {
   updatePollingTask(taskId, task => ({ ...task, enabled: !task.enabled }))
 }
 
+function duplicatePollingTask(taskId: string): void {
+  if (isTaskPolling.value) return
+  const task = pollingTasks.value.find(item => item.id === taskId)
+  if (!task) return
+  pollingTasks.value = [
+    ...pollingTasks.value,
+    duplicateModbusPollingTask(task, pollingTasks.value.length),
+  ]
+  settingsStore.showToast('已复制轮询任务')
+}
+
+function clearPollingTaskStats(taskId: string): void {
+  if (isTaskPolling.value) return
+  updatePollingTask(taskId, resetModbusPollingTaskStats)
+  pollingResults.value = pollingResults.value.filter(result => result.taskId !== taskId)
+  settingsStore.showToast('已清空该任务统计')
+}
+
 function buildFrameHexFromTask(task: ModbusPollingTask): string {
   return buildFrameHexFromRequest(task.address, task.functionCode, task.startAddress, task.quantity, task.writeValue)
 }
@@ -654,9 +683,15 @@ async function handlePollingTaskImportSelected(event: Event): Promise<void> {
       return
     }
 
+    if (pollingTaskImportMode.value === 'append') {
+      pollingTasks.value = [...pollingTasks.value, ...result.tasks]
+      settingsStore.showToast(`已追加 ${result.tasks.length} 个轮询任务`)
+      return
+    }
+
     pollingTasks.value = result.tasks
     pollingResults.value = []
-    settingsStore.showToast(`已导入 ${result.tasks.length} 个轮询任务`)
+    settingsStore.showToast(`已覆盖导入 ${result.tasks.length} 个轮询任务`)
   } catch (error) {
     settingsStore.showToast(error instanceof Error ? error.message : '轮询任务导入失败')
   }
@@ -870,6 +905,8 @@ function formatTimestamp(timestamp: number): string {
         v-model:build-settings="buildSettings"
         v-model:polling-settings="pollingSettings"
         v-model:data-type-settings="dataTypeSettings"
+        v-model:polling-task-import-mode="pollingTaskImportMode"
+        v-model:polling-result-filter="pollingResultFilter"
         :function-code-options="functionCodeOptions"
         :selected-function-code="selectedFunctionCode"
         :build-result="buildResult"
@@ -880,7 +917,7 @@ function formatTimestamp(timestamp: number): string {
         :last-polling-sent-at="lastPollingSentAt"
         :last-polling-error="lastPollingError"
         :polling-tasks="pollingTasks"
-        :polling-results="pollingResults"
+        :polling-results="filteredPollingResults"
         :is-task-polling="isTaskPolling"
         :active-polling-task-id="activePollingTaskId"
         :polling-task-cycle="pollingTaskCycle"
@@ -901,6 +938,8 @@ function formatTimestamp(timestamp: number): string {
         @import-polling-tasks="openPollingTaskImport"
         @export-polling-tasks="exportPollingTasks"
         @toggle-polling-task="togglePollingTask"
+        @duplicate-polling-task="duplicatePollingTask"
+        @clear-polling-task-stats="clearPollingTaskStats"
         @remove-polling-task="removePollingTask"
       />
       <!-- 响应解析 -->

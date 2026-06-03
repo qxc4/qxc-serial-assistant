@@ -73,6 +73,12 @@ export interface ModbusPollingTaskImportResult {
   error?: string
 }
 
+export interface ModbusPollingResultFilter {
+  taskName?: string
+  status?: ModbusPollingResult['status'] | 'all'
+  query?: string
+}
+
 const MIN_INTERVAL_MS = 100
 const MAX_INTERVAL_MS = 60_000
 const MAX_CYCLES = 999_999
@@ -164,6 +170,56 @@ export function updateModbusPollingTaskAfterResult(
     lastError: error,
     lastRunAt: timestamp,
   }
+}
+
+export function resetModbusPollingTaskStats(task: ModbusPollingTask): ModbusPollingTask {
+  return {
+    ...task,
+    sent: 0,
+    success: 0,
+    failed: 0,
+    status: 'idle',
+    lastError: '',
+    lastRunAt: null,
+  }
+}
+
+export function duplicateModbusPollingTask(task: ModbusPollingTask, index: number, now = Date.now()): ModbusPollingTask {
+  return createModbusPollingTask({
+    name: `${task.name} 副本`,
+    address: task.address,
+    functionCode: task.functionCode,
+    startAddress: task.startAddress,
+    quantity: task.quantity,
+    writeValue: task.writeValue,
+    intervalMs: task.intervalMs,
+    timeoutMs: task.timeoutMs,
+    retries: task.retries,
+    failurePolicy: task.failurePolicy,
+  }, index, now)
+}
+
+export function filterModbusPollingResults(
+  results: ModbusPollingResult[],
+  filter: ModbusPollingResultFilter,
+): ModbusPollingResult[] {
+  const taskName = filter.taskName?.trim().toLowerCase() ?? ''
+  const query = filter.query?.trim().toLowerCase() ?? ''
+  const status = filter.status ?? 'all'
+
+  return results.filter(result => {
+    if (status !== 'all' && result.status !== status) return false
+    if (taskName && !result.taskName.toLowerCase().includes(taskName)) return false
+    if (!query) return true
+
+    return [
+      result.taskName,
+      result.requestHex,
+      result.responseHex,
+      result.error,
+      result.status,
+    ].some(value => value.toLowerCase().includes(query))
+  })
 }
 
 export function summarizeModbusPollingTasks(tasks: ModbusPollingTask[]): ModbusPollingSchedulerState {

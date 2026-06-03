@@ -2,8 +2,11 @@ import { describe, expect, test } from 'vitest'
 import {
   createModbusPollingTask,
   doesModbusResponseMatchTask,
+  duplicateModbusPollingTask,
+  filterModbusPollingResults,
   formatModbusPollingProgress,
   parseModbusPollingTasksImport,
+  resetModbusPollingTaskStats,
   serializeModbusPollingTasks,
   summarizeModbusPollingTasks,
   normalizeModbusPollingSettings,
@@ -168,5 +171,116 @@ describe('modbus polling helpers', () => {
     expect(parseModbusPollingTasksImport('not json').success).toBe(false)
     expect(parseModbusPollingTasksImport(JSON.stringify({ version: 1, tasks: [] })).success).toBe(false)
     expect(parseModbusPollingTasksImport(JSON.stringify({ version: 1, tasks: 'bad' })).success).toBe(false)
+  })
+
+  test('duplicates a polling task with a fresh id and reset runtime state', () => {
+    const source = {
+      ...createModbusPollingTask({
+        name: '压力读取',
+        address: 2,
+        functionCode: 4,
+        startAddress: 16,
+        quantity: 2,
+        writeValue: '',
+        intervalMs: 500,
+        timeoutMs: 1500,
+        retries: 2,
+        failurePolicy: 'stop',
+      }, 0, 1000),
+      sent: 8,
+      success: 7,
+      failed: 1,
+      status: 'failed' as const,
+      lastError: 'old error',
+      lastRunAt: 2000,
+    }
+
+    const duplicated = duplicateModbusPollingTask(source, 3, 3000)
+
+    expect(duplicated).toMatchObject({
+      id: 'poll-3000-3',
+      name: '压力读取 副本',
+      address: 2,
+      functionCode: 4,
+      startAddress: 16,
+      quantity: 2,
+      intervalMs: 500,
+      timeoutMs: 1500,
+      retries: 2,
+      failurePolicy: 'stop',
+      sent: 0,
+      success: 0,
+      failed: 0,
+      status: 'idle',
+      lastError: '',
+      lastRunAt: null,
+    })
+  })
+
+  test('resets task statistics without changing scheduling fields', () => {
+    const task = {
+      ...createModbusPollingTask({
+        name: '温度读取',
+        address: 1,
+        functionCode: 3,
+        startAddress: 0,
+        quantity: 2,
+        writeValue: '',
+        intervalMs: 700,
+        timeoutMs: 1200,
+      }, 0, 1000),
+      sent: 3,
+      success: 2,
+      failed: 1,
+      status: 'timeout' as const,
+      lastError: '响应超时',
+      lastRunAt: 1500,
+    }
+
+    expect(resetModbusPollingTaskStats(task)).toMatchObject({
+      id: task.id,
+      name: '温度读取',
+      intervalMs: 700,
+      timeoutMs: 1200,
+      sent: 0,
+      success: 0,
+      failed: 0,
+      status: 'idle',
+      lastError: '',
+      lastRunAt: null,
+    })
+  })
+
+  test('filters polling results by task name status and query', () => {
+    const results = [
+      {
+        id: 'a',
+        taskId: 'task-a',
+        taskName: '温度读取',
+        timestamp: 1000,
+        attempt: 1,
+        status: 'success' as const,
+        durationMs: 20,
+        requestHex: '01 03 00 00',
+        responseHex: '01 03 02 00 2A',
+        error: '',
+      },
+      {
+        id: 'b',
+        taskId: 'task-b',
+        taskName: '压力读取',
+        timestamp: 1100,
+        attempt: 2,
+        status: 'timeout' as const,
+        durationMs: 1000,
+        requestHex: '02 04 00 10',
+        responseHex: '',
+        error: '响应超时',
+      },
+    ]
+
+    expect(filterModbusPollingResults(results, { taskName: '温度', status: 'all', query: '' })).toHaveLength(1)
+    expect(filterModbusPollingResults(results, { status: 'timeout', query: '超时' })).toEqual([results[1]])
+    expect(filterModbusPollingResults(results, { status: 'success', query: '00 2a' })).toEqual([results[0]])
   })
 })

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Copy, Send } from 'lucide-vue-next'
-import type { ByteOrder, DataType, ModbusPollingResult, ModbusPollingTask } from '../../features/modbus'
+import type { ByteOrder, DataType, ModbusPollingResult, ModbusPollingResultFilter, ModbusPollingTask } from '../../features/modbus'
 
 interface BuildSettings {
   address: number
@@ -23,6 +23,15 @@ interface DataTypeSettings {
 const buildSettings = defineModel<BuildSettings>('buildSettings', { required: true })
 const pollingSettings = defineModel<PollingSettings>('pollingSettings', { required: true })
 const dataTypeSettings = defineModel<DataTypeSettings>('dataTypeSettings', { required: true })
+const pollingTaskImportMode = defineModel<'replace' | 'append'>('pollingTaskImportMode', { required: true })
+const pollingResultFilter = defineModel<ModbusPollingResultFilter>('pollingResultFilter', { required: true })
+
+function updatePollingResultFilter(patch: Partial<ModbusPollingResultFilter>): void {
+  pollingResultFilter.value = {
+    ...pollingResultFilter.value,
+    ...patch,
+  }
+}
 
 defineProps<{
   functionCodeOptions: Array<{ value: number; label: string }>
@@ -63,6 +72,8 @@ defineEmits<{
   importPollingTasks: []
   exportPollingTasks: []
   togglePollingTask: [taskId: string]
+  duplicatePollingTask: [taskId: string]
+  clearPollingTaskStats: [taskId: string]
   removePollingTask: [taskId: string]
 }>()
 </script>
@@ -269,6 +280,21 @@ defineEmits<{
           </button>
         </div>
 
+        <div class="mt-2 grid grid-cols-2 gap-1.5">
+          <select
+            v-model="pollingTaskImportMode"
+            data-testid="modbus-import-mode"
+            :disabled="isTaskPolling"
+            class="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] text-slate-600 outline-none focus:border-blue-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+          >
+            <option value="replace">覆盖导入</option>
+            <option value="append">追加导入</option>
+          </select>
+          <div class="rounded-lg bg-slate-50 px-2 py-1.5 text-[10px] text-slate-400 dark:bg-slate-950/60">
+            默认覆盖，追加会保留现有任务
+          </div>
+        </div>
+
         <div class="mt-2 grid grid-cols-3 gap-1 text-center text-[10px]">
           <div class="rounded bg-slate-50 py-1 dark:bg-slate-950/60">
             <div class="font-mono text-slate-700 dark:text-slate-200">{{ taskPollingSummary.sent }}</div>
@@ -305,13 +331,31 @@ defineEmits<{
               >
                 {{ task.name }}
               </button>
-              <button
-                @click="$emit('removePollingTask', task.id)"
-                :disabled="isTaskPolling"
-                class="text-red-500 disabled:opacity-40"
-              >
-                删除
-              </button>
+              <div class="flex shrink-0 items-center gap-1">
+                <button
+                  :data-testid="`modbus-duplicate-task-${task.id}`"
+                  @click="$emit('duplicatePollingTask', task.id)"
+                  :disabled="isTaskPolling"
+                  class="text-slate-500 hover:text-blue-600 disabled:opacity-40 dark:text-slate-400 dark:hover:text-blue-300"
+                >
+                  复制
+                </button>
+                <button
+                  :data-testid="`modbus-clear-task-stats-${task.id}`"
+                  @click="$emit('clearPollingTaskStats', task.id)"
+                  :disabled="isTaskPolling || task.sent === 0"
+                  class="text-slate-500 hover:text-amber-600 disabled:opacity-40 dark:text-slate-400 dark:hover:text-amber-300"
+                >
+                  清统计
+                </button>
+                <button
+                  @click="$emit('removePollingTask', task.id)"
+                  :disabled="isTaskPolling"
+                  class="text-red-500 disabled:opacity-40"
+                >
+                  删除
+                </button>
+              </div>
             </div>
             <div class="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-slate-400">
               <span>FC {{ task.functionCode }}</span>
@@ -330,8 +374,37 @@ defineEmits<{
 
         <div v-if="pollingResults.length > 0" class="mt-2 border-t border-slate-200 pt-2 text-[10px] dark:border-slate-800">
           <div class="mb-1 flex items-center justify-between text-slate-500">
-            <span>最近轮询结果</span>
+            <span>轮询结果</span>
             <span>{{ pollingResults.length }}</span>
+          </div>
+          <div class="mb-2 grid grid-cols-2 gap-1">
+            <select
+              :value="pollingResultFilter.status ?? 'all'"
+              data-testid="modbus-result-filter-status"
+              class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800"
+              @change="updatePollingResultFilter({ status: ($event.target as HTMLSelectElement).value as ModbusPollingResultFilter['status'] })"
+            >
+              <option value="all">全部状态</option>
+              <option value="success">成功</option>
+              <option value="timeout">超时</option>
+              <option value="failed">失败</option>
+            </select>
+            <input
+              :value="pollingResultFilter.taskName ?? ''"
+              data-testid="modbus-result-filter-task"
+              type="search"
+              placeholder="任务名"
+              class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800"
+              @input="updatePollingResultFilter({ taskName: ($event.target as HTMLInputElement).value })"
+            />
+            <input
+              :value="pollingResultFilter.query ?? ''"
+              data-testid="modbus-result-filter-query"
+              type="search"
+              placeholder="筛选任务/HEX/错误"
+              class="rounded border border-slate-200 bg-white px-1.5 py-1 text-[10px] outline-none focus:border-blue-500 dark:border-slate-700 dark:bg-slate-800"
+              @input="updatePollingResultFilter({ query: ($event.target as HTMLInputElement).value })"
+            />
           </div>
           <div class="max-h-20 space-y-1 overflow-y-auto pr-1">
             <div v-for="result in pollingResults.slice(0, 5)" :key="result.id" class="flex items-center justify-between gap-2 text-slate-400">
