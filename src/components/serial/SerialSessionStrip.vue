@@ -2,7 +2,7 @@
 import type { SerialSessionDescriptor } from '../../features/serial'
 import { Plus, X } from 'lucide-vue-next'
 
-defineProps<{
+const props = defineProps<{
   sessions: SerialSessionDescriptor[]
   activeSessionId: string
   maxSessions: number
@@ -14,6 +14,14 @@ const emit = defineEmits<{
   removeSession: [id: string]
   setActiveSession: [id: string]
 }>()
+
+function isSessionConnected(session: SerialSessionDescriptor): boolean {
+  return (session.isDefault && props.isConnected) || (!session.isDefault && session.connectionLabel !== '未连接')
+}
+
+function sessionStateLabel(session: SerialSessionDescriptor): string {
+  return isSessionConnected(session) ? '已连接' : '未连接'
+}
 </script>
 
 <template>
@@ -21,23 +29,30 @@ const emit = defineEmits<{
     <button
       v-for="session in sessions"
       :key="session.id"
+      :data-testid="`serial-session-${session.id}`"
       @click="emit('setActiveSession', session.id)"
-      class="group flex min-w-[118px] max-w-[170px] items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[10px] transition-colors"
+      class="group flex min-w-[142px] max-w-[210px] items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[10px] transition-colors"
       :class="session.id === activeSessionId
         ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
         : 'text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700'"
-      :title="`${session.name} · ${session.connectionLabel}`"
+      :title="`${session.name} · ${session.connectionLabel} · TX ${session.stats.txBytes} / RX ${session.stats.rxBytes} / 日志 ${session.stats.events}`"
     >
       <span
         class="h-1.5 w-1.5 shrink-0 rounded-full"
-        :class="(session.isDefault && isConnected) || (!session.isDefault && session.connectionLabel !== '未连接') ? 'bg-green-400' : 'bg-slate-300 dark:bg-slate-600'"
+        :class="isSessionConnected(session) ? 'bg-green-400' : 'bg-slate-300 dark:bg-slate-600'"
       />
       <span class="min-w-0 flex-1">
-        <span class="block truncate font-medium">{{ session.name }}</span>
-        <span class="block truncate opacity-70">TX {{ session.stats.txBytes }} / RX {{ session.stats.rxBytes }}</span>
+        <span class="flex items-center gap-1">
+          <span class="min-w-0 truncate font-medium">{{ session.name }}</span>
+          <span class="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] opacity-80" :class="isSessionConnected(session) ? 'bg-emerald-500/15' : 'bg-slate-500/15'">
+            {{ sessionStateLabel(session) }}
+          </span>
+        </span>
+        <span class="block truncate opacity-70">TX {{ session.stats.txBytes }} / RX {{ session.stats.rxBytes }} / 日志 {{ session.stats.events }}</span>
       </span>
       <button
         v-if="!session.isDefault"
+        :data-testid="`serial-session-remove-${session.id}`"
         @click.stop="emit('removeSession', session.id)"
         class="shrink-0 rounded p-0.5 opacity-60 hover:bg-white/20 hover:opacity-100"
         title="移除会话"
@@ -46,10 +61,11 @@ const emit = defineEmits<{
       </button>
     </button>
     <button
+      data-testid="serial-session-add"
       @click="emit('addSession')"
       :disabled="sessions.length >= maxSessions"
       class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-      title="新增串口会话槽"
+      title="新增串口会话"
     >
       <Plus class="h-3.5 w-3.5" />
     </button>
