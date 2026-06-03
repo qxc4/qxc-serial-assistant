@@ -3,6 +3,14 @@ import { ref, computed, onMounted } from 'vue'
 import { getAsciiTable, type AsciiEntry } from '../data/ascii'
 import { useI18n } from '../composables/useI18n'
 import { Search, Copy, Check, ArrowUpDown, XCircle } from 'lucide-vue-next'
+import {
+  addAsciiHistoryEntry,
+  clearAsciiHistory,
+  parseAsciiHistory,
+  removeAsciiHistoryEntry,
+  serializeAsciiHistory,
+  type AsciiHistoryEntry,
+} from '../features/tools'
 
 const { t } = useI18n()
 
@@ -24,6 +32,7 @@ const searchCategory = ref<SearchCategory>('all')
 const sortKey = ref<'dec' | 'hex' | 'bin' | 'char'>('dec')
 const sortOrder = ref<'asc' | 'desc'>('asc')
 const copiedRow = ref<number | null>(null)
+const copyHistory = ref<AsciiHistoryEntry[]>([])
 
 /**
  * 判断字符是否为不可见/符号型字符（需要以标签形式展示）
@@ -39,6 +48,7 @@ const isSymbolicChar = (dec: number): boolean => {
 onMounted(() => {
   // 在首次加载后缓存并获取数据
   asciiData.value = getAsciiTable()
+  loadCopyHistory()
 })
 
 const handleSort = (key: 'dec' | 'hex' | 'bin' | 'char') => {
@@ -105,6 +115,7 @@ const copyRow = async (item: AsciiEntry) => {
   try {
     await navigator.clipboard.writeText(text)
     copiedRow.value = item.dec
+    recordCopyHistory(item)
     setTimeout(() => {
       if (copiedRow.value === item.dec) {
         copiedRow.value = null
@@ -113,6 +124,53 @@ const copyRow = async (item: AsciiEntry) => {
   } catch (err) {
     console.error('复制失败:', err)
   }
+}
+
+function persistCopyHistory(): void {
+  localStorage.setItem('qxc-serial-ascii-copy-history', serializeAsciiHistory(copyHistory.value))
+}
+
+function loadCopyHistory(): void {
+  const raw = localStorage.getItem('qxc-serial-ascii-copy-history')
+  if (!raw) return
+  const result = parseAsciiHistory(raw)
+  if (result.success) {
+    copyHistory.value = result.entries
+  }
+}
+
+function recordCopyHistory(item: AsciiEntry): void {
+  copyHistory.value = addAsciiHistoryEntry(copyHistory.value, {
+    id: `ascii-${item.dec}-${Date.now()}`,
+    dec: item.dec,
+    hex: item.hex,
+    bin: item.bin,
+    char: item.char,
+    desc: item.desc,
+    copiedAt: new Date().toISOString(),
+  })
+  persistCopyHistory()
+}
+
+function removeCopyHistoryEntry(id: string): void {
+  copyHistory.value = removeAsciiHistoryEntry(copyHistory.value, id)
+  persistCopyHistory()
+}
+
+function clearCopyHistory(): void {
+  copyHistory.value = clearAsciiHistory(copyHistory.value)
+  persistCopyHistory()
+}
+
+async function copyHistoryEntry(entry: AsciiHistoryEntry): Promise<void> {
+  await copyRow({
+    dec: entry.dec,
+    hex: entry.hex,
+    bin: entry.bin,
+    html: `&#${entry.dec};`,
+    char: entry.char,
+    desc: entry.desc,
+  })
 }
 </script>
 
@@ -163,7 +221,49 @@ const copyRow = async (item: AsciiEntry) => {
 
     <!-- Table Container -->
     <div class="flex-1 min-h-0 overflow-hidden p-4 md:p-8">
-      <div class="max-w-6xl mx-auto h-full min-h-0 flex flex-col bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+      <div class="max-w-6xl mx-auto h-full min-h-0 flex flex-col gap-4">
+        <div v-if="copyHistory.length" class="shrink-0 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm p-3">
+          <div class="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h2 class="text-sm font-semibold text-slate-800 dark:text-slate-100">{{ t('ascii.recentCopies') }}</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('ascii.recentCopiesDesc') }}</p>
+            </div>
+            <button
+              @click="clearCopyHistory"
+              class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              {{ t('ascii.clearCopies') }}
+            </button>
+          </div>
+          <div class="flex gap-2 overflow-x-auto pb-1">
+            <div
+              v-for="entry in copyHistory"
+              :key="entry.id"
+              class="min-w-48 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-2"
+            >
+              <button
+                @click="copyHistoryEntry(entry)"
+                class="w-full text-left"
+                :title="entry.desc"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400">0x{{ entry.hex }}</span>
+                  <span class="text-xs text-slate-500 dark:text-slate-400">{{ entry.dec }}</span>
+                </div>
+                <div class="mt-1 truncate font-mono text-sm text-slate-800 dark:text-slate-200">{{ entry.char }}</div>
+                <div class="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">{{ entry.desc }}</div>
+              </button>
+              <button
+                @click="removeCopyHistoryEntry(entry.id)"
+                class="mt-2 text-xs text-slate-400 hover:text-red-500"
+              >
+                {{ t('ascii.removeCopy') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex-1 min-h-0 flex flex-col bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
         
         <!-- Table Header -->
         <div class="grid grid-cols-6 md:grid-cols-12 gap-4 px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wider shrink-0 select-none">
@@ -221,6 +321,7 @@ const copyRow = async (item: AsciiEntry) => {
             <Search class="w-8 h-8 mb-3 opacity-50" />
             <p>{{ t('ascii.noResults') }}</p>
           </div>
+        </div>
         </div>
       </div>
     </div>

@@ -349,6 +349,10 @@ export const zhCN = {
     action: '操作',
     copied: '已复制',
     copyRow: '复制该行',
+    recentCopies: '最近复制',
+    recentCopiesDesc: '快速复用刚复制过的 ASCII 行',
+    clearCopies: '清空',
+    removeCopy: '移除',
     noResults: '未找到匹配的字符结果',
   },
   converter: {

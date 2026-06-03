@@ -349,6 +349,10 @@ export const enUS = {
     action: 'Action',
     copied: 'Copied',
     copyRow: 'Copy row',
+    recentCopies: 'Recent Copies',
+    recentCopiesDesc: 'Quickly reuse recently copied ASCII rows',
+    clearCopies: 'Clear',
+    removeCopy: 'Remove',
     noResults: 'No matching characters found',
   },
   converter: {

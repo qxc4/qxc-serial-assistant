@@ -77,7 +77,7 @@
 | Shell 环境变量 | done | 支持命令引用。 |
 | Chart 实时数据采集 | done | ECharts 按需导入。 |
 | Chart 通道配置/回放 | done | 支持通道配置、回放、数据导出，以及图表工作区配置 JSON 导入/导出；配置归一化逻辑已抽到 feature 模块。 |
-| ASCII 表 | done | 工具页可用。 |
+| ASCII 表 | done | 支持搜索、排序、复制行和最近复制记录复用/删除/清空，并持久化到 `qxc-serial-ascii-copy-history`。 |
 | 数制转换 | done | 支持复制结果、最近转换记录复用/删除/清空，并持久化到 `qxc-serial-converter-history`。 |
 
 ## Settings / Profile / Global
@@ -127,4 +127,5 @@
 - 当前轮次：Shell 命令收藏闭环，支持常用命令收藏、点击填入、移除、JSON 导入/导出和 `qxc-serial-shell-favorites` 本地持久化。
 - 当前轮次：数制转换最近记录闭环，支持有效转换自动记录、点击复用、删除/清空和 `qxc-serial-converter-history` 本地持久化。
 - 当前轮次：开发者 Profile 页面优化，抽出 profile feature 内容模型，重构为更清晰的作者摘要、联系入口、专注方向、技术栈和项目展示结构。
+- 当前轮次：ASCII 工具页最近复制闭环，支持复制行自动记录、快速复用、删除/清空和 `qxc-serial-ascii-copy-history` 本地持久化。
 - 当前轮次：项目清理移除重复 agent 指南 `CLAUDE.md`、本地工具目录 `.claude/`，并清理本地产物 `dist/`、`coverage/`、`.superpowers/`。
