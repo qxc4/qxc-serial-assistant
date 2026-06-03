@@ -23,6 +23,7 @@ import type { ModbusParseResult, ModbusMode } from '../types/modbus'
 import {
   bytesToHexInput,
   createModbusPollingTask,
+  createModbusPollingHealthSummary,
   doesModbusResponseMatchTask,
   duplicateModbusPollingTask,
   estimateModbusResponseGap,
@@ -142,6 +143,7 @@ const taskPollingSummary = computed(() => ({
   activeTaskId: activePollingTaskId.value,
   cycle: pollingTaskCycle.value,
 }))
+const pollingHealthSummary = computed(() => createModbusPollingHealthSummary(pollingTasks.value))
 const filteredPollingResults = computed(() => filterModbusPollingResults(pollingResults.value, pollingResultFilter.value))
 const activeParseResult = computed(() => {
   return parseResults.value.find(item => item.id === expandedResult.value) || parseResults.value[0] || null
@@ -922,6 +924,7 @@ function formatTimestamp(timestamp: number): string {
         :active-polling-task-id="activePollingTaskId"
         :polling-task-cycle="pollingTaskCycle"
         :task-polling-summary="taskPollingSummary"
+        :polling-health-summary="pollingHealthSummary"
         :data-type-options="dataTypeOptions"
         :byte-order-options="byteOrderOptions"
         :t="t"

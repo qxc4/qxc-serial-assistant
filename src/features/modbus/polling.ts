@@ -73,6 +73,18 @@ export interface ModbusPollingTaskImportResult {
   error?: string
 }
 
+export interface ModbusPollingHealthSummary {
+  tone: 'idle' | 'ok' | 'warn' | 'error'
+  label: string
+  detail: string
+  totalSent: number
+  successRate: number
+  failingTaskCount: number
+  worstTaskName: string
+  worstTaskFailureRate: number
+  lastError: string
+}
+
 export interface ModbusPollingResultFilter {
   taskName?: string
   status?: ModbusPollingResult['status'] | 'all'
@@ -236,6 +248,43 @@ export function summarizeModbusPollingTasks(tasks: ModbusPollingTask[]): ModbusP
     sent,
     success,
     failed,
+    lastError: lastErrorTask?.lastError ?? '',
+  }
+}
+
+export function createModbusPollingHealthSummary(tasks: ModbusPollingTask[]): ModbusPollingHealthSummary {
+  const totalSent = tasks.reduce((sum, task) => sum + task.sent, 0)
+  const totalSuccess = tasks.reduce((sum, task) => sum + task.success, 0)
+  const successRate = totalSent > 0 ? (totalSuccess / totalSent) * 100 : 0
+  const failingTasks = tasks.filter(task => task.failed > 0)
+  const worstTask = failingTasks
+    .map(task => ({
+      task,
+      failureRate: task.sent > 0 ? (task.failed / task.sent) * 100 : 0,
+    }))
+    .sort((left, right) => right.failureRate - left.failureRate)[0]
+  const lastErrorTask = [...tasks]
+    .filter(task => task.lastError)
+    .sort((left, right) => (right.lastRunAt ?? 0) - (left.lastRunAt ?? 0))[0]
+  const tone: ModbusPollingHealthSummary['tone'] = totalSent === 0
+    ? 'idle'
+    : successRate >= 95
+      ? 'ok'
+      : successRate >= 80
+        ? 'warn'
+        : 'error'
+
+  return {
+    tone,
+    label: totalSent === 0 ? '等待轮询' : `成功率 ${successRate.toFixed(1)}%`,
+    detail: worstTask
+      ? `最差任务: ${worstTask.task.name}，失败率 ${worstTask.failureRate.toFixed(1)}%`
+      : '所有已发送任务暂无失败',
+    totalSent,
+    successRate,
+    failingTaskCount: failingTasks.length,
+    worstTaskName: worstTask?.task.name ?? '',
+    worstTaskFailureRate: worstTask?.failureRate ?? 0,
     lastError: lastErrorTask?.lastError ?? '',
   }
 }

@@ -5,6 +5,7 @@ import {
   duplicateModbusPollingTask,
   filterModbusPollingResults,
   formatModbusPollingProgress,
+  createModbusPollingHealthSummary,
   parseModbusPollingTasksImport,
   resetModbusPollingTaskStats,
   serializeModbusPollingTasks,
@@ -101,6 +102,52 @@ describe('modbus polling helpers', () => {
     expect(summary.success).toBe(1)
     expect(summary.failed).toBe(1)
     expect(summary.lastError).toBe('响应超时')
+  })
+
+  test('creates a health summary for polling task failures', () => {
+    const stableTask = {
+      ...createModbusPollingTask({
+        name: '温度读取',
+        address: 1,
+        functionCode: 3,
+        startAddress: 0,
+        quantity: 2,
+        writeValue: '',
+      }, 0, 1000),
+      sent: 10,
+      success: 9,
+      failed: 1,
+      status: 'success' as const,
+      lastRunAt: 2000,
+    }
+    const failingTask = {
+      ...createModbusPollingTask({
+        name: '压力读取',
+        address: 2,
+        functionCode: 4,
+        startAddress: 16,
+        quantity: 2,
+        writeValue: '',
+      }, 1, 1000),
+      sent: 5,
+      success: 1,
+      failed: 4,
+      status: 'timeout' as const,
+      lastError: '响应超时',
+      lastRunAt: 2500,
+    }
+
+    expect(createModbusPollingHealthSummary([stableTask, failingTask])).toEqual({
+      tone: 'error',
+      label: '成功率 66.7%',
+      detail: '最差任务: 压力读取，失败率 80.0%',
+      totalSent: 15,
+      successRate: 66.66666666666666,
+      failingTaskCount: 2,
+      worstTaskName: '压力读取',
+      worstTaskFailureRate: 80,
+      lastError: '响应超时',
+    })
   })
 
   test('serializes polling tasks with metadata', () => {

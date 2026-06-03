@@ -41,6 +41,17 @@ function mountPanel() {
       activePollingTaskId: '',
       pollingTaskCycle: 0,
       taskPollingSummary: { sent: 0, success: 0, failed: 0 },
+      pollingHealthSummary: {
+        tone: 'idle',
+        label: '等待轮询',
+        detail: '所有已发送任务暂无失败',
+        totalSent: 0,
+        successRate: 0,
+        failingTaskCount: 0,
+        worstTaskName: '',
+        worstTaskFailureRate: 0,
+        lastError: '',
+      },
       dataTypeOptions: [{ value: 'uint16', label: 'uint16', bytes: 2 }],
       byteOrderOptions: [{ value: 'ABCD', label: 'ABCD' }],
       t: (key: string) => key,
@@ -112,6 +123,29 @@ describe('ModbusRequestPanel', () => {
 
     expect(wrapper.emitted('duplicatePollingTask')?.[0]).toEqual(['task-1'])
     expect(wrapper.emitted('clearPollingTaskStats')?.[0]).toEqual(['task-1'])
+  })
+
+  it('shows polling health summary', () => {
+    const wrapper = mount(ModbusRequestPanel, {
+      props: {
+        ...mountPanel().props(),
+        pollingHealthSummary: {
+          tone: 'error',
+          label: '成功率 66.7%',
+          detail: '最差任务: 压力读取，失败率 80.0%',
+          totalSent: 15,
+          successRate: 66.7,
+          failingTaskCount: 2,
+          worstTaskName: '压力读取',
+          worstTaskFailureRate: 80,
+          lastError: '响应超时',
+        },
+      },
+    })
+
+    expect(wrapper.text()).toContain('成功率 66.7%')
+    expect(wrapper.text()).toContain('最差任务: 压力读取')
+    expect(wrapper.text()).toContain('最近错误: 响应超时')
   })
 
   it('emits polling result filter updates', async () => {

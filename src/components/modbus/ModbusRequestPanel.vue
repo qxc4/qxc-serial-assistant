@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Copy, Send } from 'lucide-vue-next'
-import type { ByteOrder, DataType, ModbusPollingResult, ModbusPollingResultFilter, ModbusPollingTask } from '../../features/modbus'
+import type { ByteOrder, DataType, ModbusPollingHealthSummary, ModbusPollingResult, ModbusPollingResultFilter, ModbusPollingTask } from '../../features/modbus'
 
 interface BuildSettings {
   address: number
@@ -53,6 +53,7 @@ defineProps<{
     success: number
     failed: number
   }
+  pollingHealthSummary: ModbusPollingHealthSummary
   dataTypeOptions: Array<{ value: DataType; label: string; bytes: number }>
   byteOrderOptions: Array<{ value: ByteOrder; label: string }>
   t: (key: string) => string
@@ -307,6 +308,26 @@ defineEmits<{
           <div class="rounded bg-red-50 py-1 dark:bg-red-950/30">
             <div class="font-mono text-red-600 dark:text-red-300">{{ taskPollingSummary.failed }}</div>
             <div class="text-slate-400">失败</div>
+          </div>
+        </div>
+
+        <div
+          class="mt-2 rounded-lg border px-2 py-1.5 text-[10px]"
+          :class="pollingHealthSummary.tone === 'error'
+            ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
+            : pollingHealthSummary.tone === 'warn'
+              ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300'
+              : pollingHealthSummary.tone === 'ok'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
+                : 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-400'"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-medium">{{ pollingHealthSummary.label }}</span>
+            <span v-if="pollingHealthSummary.failingTaskCount > 0">{{ pollingHealthSummary.failingTaskCount }} 个任务有失败</span>
+          </div>
+          <div class="mt-0.5 truncate" :title="pollingHealthSummary.detail">{{ pollingHealthSummary.detail }}</div>
+          <div v-if="pollingHealthSummary.lastError" class="mt-0.5 truncate" :title="pollingHealthSummary.lastError">
+            最近错误: {{ pollingHealthSummary.lastError }}
           </div>
         </div>
 
