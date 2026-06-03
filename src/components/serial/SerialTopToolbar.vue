@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Maximize, PanelBottom, PanelLeft, PanelRight, Search, Usb, XCircle } from 'lucide-vue-next'
+import { Maximize, PanelBottom, PanelLeft, PanelRight, Power, Search, Usb, XCircle } from 'lucide-vue-next'
 import SerialSessionStrip from './SerialSessionStrip.vue'
 import type { SerialSessionDescriptor, SerialSessionDiagnostics } from '../../features/serial'
 
@@ -31,6 +31,7 @@ const emit = defineEmits<{
   addSession: []
   removeSession: [id: string]
   setActiveSession: [id: string]
+  toggleActiveConnection: []
 }>()
 
 const localSearchQuery = computed({
@@ -127,6 +128,17 @@ function maximizeView() {
       >
         {{ activeSerialSession.connectionLabel }}
       </div>
+      <button
+        @click="emit('toggleActiveConnection')"
+        class="inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-medium transition-colors"
+        :class="isConnected
+          ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300'
+          : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300'"
+        :title="isConnected ? t('serial.disconnect') : t('serial.connect')"
+      >
+        <Power class="h-3.5 w-3.5" />
+        {{ isConnected ? t('serial.disconnect') : t('serial.connect') }}
+      </button>
     </div>
   </div>
 </template>

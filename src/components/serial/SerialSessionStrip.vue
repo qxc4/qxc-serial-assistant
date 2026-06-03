@@ -30,7 +30,7 @@ const emit = defineEmits<{
     >
       <span
         class="h-1.5 w-1.5 shrink-0 rounded-full"
-        :class="session.isDefault && isConnected ? 'bg-green-400' : 'bg-slate-300 dark:bg-slate-600'"
+        :class="(session.isDefault && isConnected) || (!session.isDefault && session.connectionLabel !== '未连接') ? 'bg-green-400' : 'bg-slate-300 dark:bg-slate-600'"
       />
       <span class="min-w-0 flex-1">
         <span class="block truncate font-medium">{{ session.name }}</span>

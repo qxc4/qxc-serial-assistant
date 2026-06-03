@@ -14,7 +14,7 @@ import {
   previewLineEndingValue,
   resolveLineEndingValue,
   summarizeSerialSession,
-  useSerialSessions,
+  useSerialMultiSession,
   useSerialReplay,
   useQuickCommands,
   useSerialParsePanel,
@@ -98,7 +98,7 @@ watch(searchQuery, (value) => {
 
 /** 根据显示模式和搜索关键词过滤接收数据（优化版） */
 const filteredReceivedData = computed(() => {
-  const data = receivedData.value
+  const data = activeSessionLogs.value
   const mode = displayMode.value
   const query = debouncedSearchQuery.value.toLowerCase().trim()
   const hasSearch = query.length > 0
@@ -157,7 +157,7 @@ const connectionSummary = computed(() => {
 })
 const serialDiagnosticNow = ref(Date.now())
 let serialDiagnosticTimer: ReturnType<typeof setInterval> | null = null
-const serialSessionDiagnostics = computed(() => summarizeSerialSession(receivedData.value, serialDiagnosticNow.value))
+const serialSessionDiagnostics = computed(() => summarizeSerialSession(activeSessionLogs.value, serialDiagnosticNow.value))
 const serialResponseState = computed(() => {
   if (serialSessionDiagnostics.value.txEntries === 0) return '等待发送'
   return serialSessionDiagnostics.value.receiveAfterLastTx ? '最近有响应' : '等待响应'
@@ -171,16 +171,66 @@ const {
   serialSessions,
   activeSerialSessionId,
   activeSerialSession,
+  activeRuntime,
+  activeSessionLogs,
+  isActiveSessionConnected,
   addSerialSessionSlot,
   removeSerialSessionSlot,
   setActiveSerialSession,
-} = useSerialSessions({
+  connectActiveSerialSession,
+  disconnectActiveSerialSession,
+  sendActiveSerialSession,
+  clearActiveSessionLogs,
+} = useSerialMultiSession({
+  defaultLogs: receivedData,
   txBytes,
   rxBytes,
   dataCount,
   isConnected,
+  serialOptions: () => ({
+    baudRate: baudRate.value,
+    dataBits: dataBits.value as 7 | 8,
+    stopBits: stopBits.value as 1 | 2,
+    parity: parity.value as 'none' | 'even' | 'odd',
+  }),
   showToast: message => settingsStore.showToast(message),
 })
+const activeDataCount = computed(() => activeSessionLogs.value.length)
+const activeConnectionSummary = computed(() => {
+  if (!activeRuntime.value) return connectionSummary.value
+  if (activeRuntime.value.state.isConnected) return activeRuntime.value.state.connectionLabel
+  return t('serial.waitingConnect')
+})
+
+function clearActiveSerialData(): void {
+  if (activeRuntime.value) {
+    clearActiveSessionLogs()
+    return
+  }
+  clearData()
+}
+
+function exportActiveSerialData(): void {
+  if (!activeRuntime.value) {
+    exportData()
+    return
+  }
+  const dataArray = activeSessionLogs.value
+  if (!dataArray.length) return
+  const logContent = dataArray.map(item => {
+    const direction = item.direction === 'rx' ? 'RX' : 'TX'
+    return `[${formatTimestamp(item.timestamp)}] ${direction}: ${item.data}`
+  }).join('\n')
+  const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `serial_session_${activeSerialSessionId.value}_${Date.now()}.txt`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
 
 // ==================== 数据解析功能 ====================
 
@@ -227,13 +277,61 @@ const statusIconMap: Record<CommandStatus, { icon: any; color: string; labelKey:
   skipped: { icon: ChevronRight, color: 'text-slate-400', labelKey: 'serial.statusSkipped' }
 }
 
+function encodeActiveSessionPayload(data: string, isHex: boolean): Uint8Array {
+  if (isHex) {
+    const hexData = data.replace(/\s+/g, '')
+    const bytes = new Uint8Array(Math.ceil(hexData.length / 2))
+    for (let i = 0; i < bytes.length; i++) {
+      const value = parseInt(hexData.slice(i * 2, i * 2 + 2), 16)
+      bytes[i] = Number.isNaN(value) ? 0 : value
+    }
+    return bytes
+  }
+  if (sendEncoding.value === 'ascii') {
+    const bytes = new Uint8Array(data.length)
+    for (let i = 0; i < data.length; i++) {
+      bytes[i] = data.charCodeAt(i) & 0x7F
+    }
+    return bytes
+  }
+  return new TextEncoder().encode(data)
+}
+
+async function sendViaActiveSession(data: string, isHex = false): Promise<void> {
+  if (!activeRuntime.value) {
+    await send(data, isHex)
+    return
+  }
+  await sendActiveSerialSession(encodeActiveSessionPayload(data, isHex))
+}
+
+async function toggleActiveSessionConnection(): Promise<void> {
+  if (!activeRuntime.value) {
+    if (isConnected.value) {
+      await disconnect()
+      if (isLooping.value) toggleLoopSend()
+    } else if (canReconnect.value) {
+      await reconnect()
+    } else {
+      await connect()
+    }
+    return
+  }
+
+  if (activeRuntime.value.state.isConnected) {
+    await disconnectActiveSerialSession()
+  } else {
+    await connectActiveSerialSession()
+  }
+}
+
 /**
  * 执行指令组（将串口发送函数传入）
  */
 async function executeCommandGroup() {
-  if (!isConnected.value) return
+  if (!isActiveSessionConnected.value) return
   await cg.executeGroup(async (data, isHex) => {
-    await send(data, isHex)
+    await sendViaActiveSession(data, isHex)
   })
 }
 
@@ -391,8 +489,8 @@ const {
   startSessionReplay,
   stopSessionReplay,
 } = useSerialReplay({
-  send,
-  isConnected,
+  send: sendViaActiveSession,
+  isConnected: isActiveSessionConnected,
   createSnapshot: () => createSerialSessionSnapshot({
     baudRate: baudRate.value,
     dataBits: dataBits.value,
@@ -423,8 +521,8 @@ const {
   toggleLoopSend,
   cleanupQuickCommands,
 } = useQuickCommands({
-  send,
-  isConnected,
+  send: sendViaActiveSession,
+  isConnected: isActiveSessionConnected,
   showToast: message => settingsStore.showToast(message),
   measureSync,
 })
@@ -440,7 +538,7 @@ const isCustomBaudRate = ref(false)
 const customBaudRateInput = ref('')
 
 // Watchers & Handlers
-watch(receivedData, async () => {
+watch(activeSessionLogs, async () => {
   if (autoScroll.value && virtualListRef.value) {
     await nextTick()
     virtualListRef.value.scrollToBottom()
@@ -450,7 +548,7 @@ watch(receivedData, async () => {
 const handleSend = () => {
   if (sendInput.value.trim() === '') return
   
-  if (!isConnected.value) {
+  if (!isActiveSessionConnected.value) {
     settingsStore.showToast(t('serial.notConnected'))
     return
   }
@@ -471,7 +569,7 @@ const handleSend = () => {
   }
   
   try {
-    send(data, isHexSend.value)
+    void sendViaActiveSession(data, isHexSend.value)
   } catch (e) {
     const errorMsg = e instanceof Error ? e.message : '发送失败'
     settingsStore.showToast(t('serial.sendFailed') + ': ' + errorMsg)
@@ -538,7 +636,7 @@ function handleKeyboardShortcuts(event: KeyboardEvent) {
   
   if (matchesShortcutFast(event, cached.clearData)) {
     event.preventDefault()
-    clearData()
+    clearActiveSerialData()
     keyResponseTimer.end()
     return
   }
@@ -625,14 +723,7 @@ const domUpdater = new BatchDOMUpdater()
  */
 const toggleConnect = () => {
   measureSync('toggleConnect', () => {
-    if (isConnected.value) {
-      disconnect()
-      if (isLooping.value) toggleLoopSend()
-    } else if (canReconnect.value) {
-      reconnect()
-    } else {
-      connect()
-    }
+    void toggleActiveSessionConnection()
   })
 }
 
@@ -704,10 +795,10 @@ onUnmounted(cleanupButtonOptimizations)
           v-model:show-left-panel="showLeftPanel"
           v-model:show-bottom-panel="showBottomPanel"
           v-model:show-right-panel="showRightPanel"
-          :is-connected="isConnected"
-          :connection-summary="connectionSummary"
+          :is-connected="isActiveSessionConnected"
+          :connection-summary="activeConnectionSummary"
           :filtered-count="filteredReceivedData.length"
-          :data-count="dataCount"
+          :data-count="activeDataCount"
           :serial-response-state="serialResponseState"
           :serial-session-diagnostics="serialSessionDiagnostics"
           :serial-sessions="serialSessions"
@@ -719,6 +810,7 @@ onUnmounted(cleanupButtonOptimizations)
           @add-session="addSerialSessionSlot"
           @remove-session="removeSerialSessionSlot"
           @set-active-session="setActiveSerialSession"
+          @toggle-active-connection="toggleActiveSessionConnection"
         />
 
         <SerialLogPanel
@@ -750,11 +842,11 @@ onUnmounted(cleanupButtonOptimizations)
           v-model:send-encoding="sendEncoding"
           v-model:show-timestamp="showTimestamp"
           v-model:auto-scroll="autoScroll"
-          :data-count="dataCount"
+          :data-count="activeDataCount"
           :toolbar-expanded="toolbarExpanded"
           :t="t"
-          @export-data="exportData"
-          @clear-data="clearData"
+          @export-data="exportActiveSerialData"
+          @clear-data="clearActiveSerialData"
           @clear-tx="sendInput = ''"
         />
 
@@ -762,7 +854,7 @@ onUnmounted(cleanupButtonOptimizations)
           v-model:send-input="sendInput"
           v-model:is-hex-send="isHexSend"
           :visible="showBottomPanel"
-          :is-connected="isConnected"
+          :is-connected="isActiveSessionConnected"
           :line-ending-config="lineEndingConfig"
           :line-ending-options="lineEndingOptions"
           :line-ending-preview="getLineEndingPreview()"

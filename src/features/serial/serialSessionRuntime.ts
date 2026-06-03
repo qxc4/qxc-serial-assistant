@@ -53,6 +53,11 @@ export interface SerialSessionManager {
   removeRuntime(sessionId: string): boolean
 }
 
+export interface MockSerialSessionTransport extends SerialSessionTransport {
+  sent: Uint8Array[]
+  emit(bytes: number[]): void
+}
+
 function cloneBytes(bytes: Uint8Array): Uint8Array {
   return new Uint8Array(bytes)
 }
@@ -75,6 +80,12 @@ function appendRuntimeLog(state: SerialSessionRuntimeState, direction: SerialSes
   }
 }
 
+function syncRuntimeSession(session: SerialSessionDescriptor, state: SerialSessionRuntimeState): void {
+  session.stats = { ...state.stats }
+  session.connectionLabel = state.connectionLabel
+  session.updatedAt = new Date().toISOString()
+}
+
 export function createSerialSessionRuntime(
   session: SerialSessionDescriptor,
   transport: SerialSessionTransport,
@@ -92,18 +103,17 @@ export function createSerialSessionRuntime(
     async connect() {
       const connection = await transport.connect(bytes => {
         appendRuntimeLog(state, 'rx', bytes)
+        syncRuntimeSession(session, state)
       })
       state.isConnected = true
       state.connectionLabel = connection.label
-      session.connectionLabel = connection.label
-      session.updatedAt = new Date().toISOString()
+      syncRuntimeSession(session, state)
     },
     async disconnect() {
       await transport.disconnect()
       state.isConnected = false
       state.connectionLabel = '未连接'
-      session.connectionLabel = '未连接'
-      session.updatedAt = new Date().toISOString()
+      syncRuntimeSession(session, state)
     },
     async send(bytes) {
       if (!state.isConnected) {
@@ -111,6 +121,29 @@ export function createSerialSessionRuntime(
       }
       await transport.send(bytes)
       appendRuntimeLog(state, 'tx', bytes)
+      syncRuntimeSession(session, state)
+    },
+  }
+}
+
+export function createMockSerialSessionTransport(label = 'Mock Serial'): MockSerialSessionTransport {
+  let onData: ((bytes: Uint8Array) => void) | null = null
+  const sent: Uint8Array[] = []
+
+  return {
+    sent,
+    async connect(nextOnData) {
+      onData = nextOnData
+      return { label }
+    },
+    async disconnect() {
+      onData = null
+    },
+    async send(bytes) {
+      sent.push(cloneBytes(bytes))
+    },
+    emit(bytes) {
+      onData?.(new Uint8Array(bytes))
     },
   }
 }

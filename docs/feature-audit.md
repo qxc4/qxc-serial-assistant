@@ -25,7 +25,7 @@
 | 快捷命令 | done | 支持启用、HEX、延迟、批量发送、循环发送。 |
 | 指令组/版本/恢复点 | done | 功能完整；指令组右侧 UI 已拆为 `SerialCommandGroupPanel`，页面只保留事件连线。 |
 | 快捷键帮助和自定义快捷键 | done | 与设置页联动。 |
-| 多串口会话架构 | experimental | 已新增 `SerialSessionController`、Serial 顶部会话栏、独立 `SerialSessionRuntime`、mock transport 和 Web Serial transport；默认主流程仍使用稳定单例连接。 |
+| 多串口会话架构 | done | 支持默认单例会话和最多 4 个真实 Web Serial 会话；非默认会话拥有独立连接、日志、TX/RX 统计、发送、清空和导出路径。 |
 | SerialView 架构拆分 | done | 已抽出会话、录制回放、快捷命令、解析面板 composable，并拆出连接抽屉、顶部工具栏、日志、发送区、中间工具栏、快捷命令、指令组和解析结果组件；真实多串口仍按独立架构项跟踪。 |
 | 蓝牙串口 | missing | 当前仅显示 coming soon。 |
 
@@ -128,4 +128,5 @@
 - 当前轮次：数制转换最近记录闭环，支持有效转换自动记录、点击复用、删除/清空和 `qxc-serial-converter-history` 本地持久化。
 - 当前轮次：开发者 Profile 页面优化，抽出 profile feature 内容模型，重构为更清晰的作者摘要、联系入口、专注方向、技术栈和项目展示结构。
 - 当前轮次：ASCII 工具页最近复制闭环，支持复制行自动记录、快速复用、删除/清空和 `qxc-serial-ascii-copy-history` 本地持久化。
+- 当前轮次：Serial 真实多端口连接完成，新增 `useSerialMultiSession` 统一默认单例和独立 Web Serial runtime，会话条支持连接/断开、日志隔离、激活会话发送、清空和导出。
 - 当前轮次：项目清理移除重复 agent 指南 `CLAUDE.md`、本地工具目录 `.claude/`，并清理本地产物 `dist/`、`coverage/`、`.superpowers/`。
