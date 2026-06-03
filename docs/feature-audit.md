@@ -25,7 +25,7 @@
 | 快捷命令 | done | 支持启用、HEX、延迟、批量发送、循环发送。 |
 | 指令组/版本/恢复点 | done | 功能完整；指令组右侧 UI 已拆为 `SerialCommandGroupPanel`，页面只保留事件连线。 |
 | 快捷键帮助和自定义快捷键 | done | 与设置页联动。 |
-| 多串口会话架构 | experimental | 已新增 `SerialSessionController` 和 Serial 顶部会话栏，可管理最多 4 个会话槽；真实多端口 Web Serial 连接迁移仍待后续阶段。 |
+| 多串口会话架构 | experimental | 已新增 `SerialSessionController`、Serial 顶部会话栏、独立 `SerialSessionRuntime`、mock transport 和 Web Serial transport；默认主流程仍使用稳定单例连接。 |
 | SerialView 架构拆分 | done | 已抽出会话、录制回放、快捷命令、解析面板 composable，并拆出连接抽屉、顶部工具栏、日志、发送区、中间工具栏、快捷命令、指令组和解析结果组件；真实多串口仍按独立架构项跟踪。 |
 | 蓝牙串口 | missing | 当前仅显示 coming soon。 |
 
@@ -121,4 +121,5 @@
 - 当前轮次：Modbus 高级调度体验增强，支持覆盖/追加导入策略、复制任务、单任务统计清零和轮询历史状态/关键字筛选。
 - 当前轮次：RTT 顶部工作台拆为 `RttWorkbenchHeader`，保留纯 WebUSB 路线、J-Link 诊断、SEGGER RTT 下载、硬件自检和 Flash dry-run/verify 能力。
 - 当前轮次：RTT 硬件验收报告增强，支持失败原因分组和一键复制诊断摘要，方便远程定位 WebUSB/探针/RTT 扫描问题。
+- 当前轮次：Serial 多串口预研推进到运行时层，新增独立会话 runtime、mock transport、Web Serial transport 和最多 4 会话 manager 测试。
 - 当前轮次：项目清理移除重复 agent 指南 `CLAUDE.md`、本地工具目录 `.claude/`，并清理本地产物 `dist/`、`coverage/`、`.superpowers/`。
