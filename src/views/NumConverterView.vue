@@ -2,6 +2,14 @@
 import { ref, computed, watch } from 'vue'
 import { useI18n } from '../composables/useI18n'
 import { ArrowRightLeft, Copy, Check, RotateCcw, AlertCircle } from 'lucide-vue-next'
+import {
+  addConverterHistoryEntry,
+  clearConverterHistory,
+  parseConverterHistory,
+  removeConverterHistoryEntry,
+  serializeConverterHistory,
+  type ConverterHistoryEntry,
+} from '../features/tools'
 
 const { t } = useI18n()
 
@@ -28,6 +36,37 @@ const resultValue = ref('')
 const errorMessage = ref('')
 /** 复制成功标记 */
 const copied = ref(false)
+/** 最近转换记录 */
+const conversionHistory = ref<ConverterHistoryEntry[]>([])
+let lastRecordedSignature = ''
+
+function persistConversionHistory(): void {
+  localStorage.setItem('qxc-serial-converter-history', serializeConverterHistory(conversionHistory.value))
+}
+
+function loadConversionHistory(): void {
+  const raw = localStorage.getItem('qxc-serial-converter-history')
+  if (!raw) return
+  const result = parseConverterHistory(raw)
+  if (result.success) {
+    conversionHistory.value = result.entries
+  }
+}
+
+function recordConversion(input: string, result: string): void {
+  const signature = `${sourceBase.value}:${targetBase.value}:${input}:${result}`
+  if (signature === lastRecordedSignature) return
+  lastRecordedSignature = signature
+  conversionHistory.value = addConverterHistoryEntry(conversionHistory.value, {
+    id: `converter-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    sourceBase: sourceBase.value,
+    targetBase: targetBase.value,
+    input,
+    result,
+    createdAt: new Date().toISOString(),
+  })
+  persistConversionHistory()
+}
 
 /**
  * 验证输入是否符合指定数制
@@ -96,6 +135,7 @@ function convert(): void {
     }
     
     resultValue.value = result
+    recordConversion(trimmed, result)
   } catch (e) {
     errorMessage.value = t('converter.convertError')
     resultValue.value = ''
@@ -142,6 +182,36 @@ function reset(): void {
   errorMessage.value = ''
   copied.value = false
 }
+
+function useHistoryEntry(entry: ConverterHistoryEntry): void {
+  sourceBase.value = entry.sourceBase
+  targetBase.value = entry.targetBase
+  inputValue.value = entry.input
+  resultValue.value = entry.result
+}
+
+function removeHistoryEntry(id: string): void {
+  conversionHistory.value = removeConverterHistoryEntry(conversionHistory.value, id)
+  persistConversionHistory()
+}
+
+function clearHistory(): void {
+  conversionHistory.value = clearConverterHistory(conversionHistory.value)
+  persistConversionHistory()
+}
+
+function formatHistoryTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--'
+  return date.toLocaleString(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+loadConversionHistory()
 
 /** 监听输入变化自动转换 */
 watch([inputValue, sourceBase, targetBase], () => {
@@ -311,6 +381,53 @@ const allBaseResults = computed(() => {
             >
               <div class="text-xs text-slate-500 dark:text-slate-400 mb-1">{{ baseConfig[key].label }}</div>
               <div class="font-mono text-sm text-slate-800 dark:text-slate-200 break-all">{{ value }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent History -->
+        <div v-if="conversionHistory.length" class="mt-6 bg-white dark:bg-slate-800 rounded-xl shadow-sm border dark:border-slate-700 p-6">
+          <div class="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-sm font-medium text-slate-700 dark:text-slate-300">{{ t('converter.recentHistory') }}</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('converter.recentHistoryDesc') }}</p>
+            </div>
+            <button
+              @click="clearHistory"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700"
+            >
+              {{ t('converter.clearHistory') }}
+            </button>
+          </div>
+          <div class="space-y-2 max-h-72 overflow-auto pr-1">
+            <div
+              v-for="entry in conversionHistory"
+              :key="entry.id"
+              class="grid grid-cols-[1fr_auto] gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/60 p-3"
+            >
+              <button
+                @click="useHistoryEntry(entry)"
+                class="min-w-0 text-left"
+                :title="`${t('converter.reuseHistory')}: ${entry.input} -> ${entry.result}`"
+              >
+                <div class="flex flex-wrap items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <span>{{ baseConfig[entry.sourceBase].label }}</span>
+                  <span>→</span>
+                  <span>{{ baseConfig[entry.targetBase].label }}</span>
+                  <span class="text-slate-400 dark:text-slate-500">{{ formatHistoryTime(entry.createdAt) }}</span>
+                </div>
+                <div class="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-2 font-mono text-sm">
+                  <span class="truncate text-slate-700 dark:text-slate-200">{{ entry.input }}</span>
+                  <span class="text-slate-400">=</span>
+                  <span class="truncate text-green-700 dark:text-green-300">{{ entry.result }}</span>
+                </div>
+              </button>
+              <button
+                @click="removeHistoryEntry(entry.id)"
+                class="self-center px-2 py-1 rounded-md text-xs text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800"
+              >
+                {{ t('converter.deleteHistory') }}
+              </button>
             </div>
           </div>
         </div>

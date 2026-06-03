@@ -78,7 +78,7 @@
 | Chart 实时数据采集 | done | ECharts 按需导入。 |
 | Chart 通道配置/回放 | done | 支持通道配置、回放、数据导出，以及图表工作区配置 JSON 导入/导出；配置归一化逻辑已抽到 feature 模块。 |
 | ASCII 表 | done | 工具页可用。 |
-| 数制转换 | done | 工具页可用。 |
+| 数制转换 | done | 支持复制结果、最近转换记录复用/删除/清空，并持久化到 `qxc-serial-converter-history`。 |
 
 ## Settings / Profile / Global
 
@@ -125,4 +125,5 @@
 - 当前轮次：Serial 多串口预研推进到运行时层，新增独立会话 runtime、mock transport、Web Serial transport 和最多 4 会话 manager 测试。
 - 当前轮次：Chart 工作区配置闭环，支持导出/导入图表类型、采样配置和通道解析规则，并对导入 JSON 做字段归一化。
 - 当前轮次：Shell 命令收藏闭环，支持常用命令收藏、点击填入、移除、JSON 导入/导出和 `qxc-serial-shell-favorites` 本地持久化。
+- 当前轮次：数制转换最近记录闭环，支持有效转换自动记录、点击复用、删除/清空和 `qxc-serial-converter-history` 本地持久化。
 - 当前轮次：项目清理移除重复 agent 指南 `CLAUDE.md`、本地工具目录 `.claude/`，并清理本地产物 `dist/`、`coverage/`、`.superpowers/`。
