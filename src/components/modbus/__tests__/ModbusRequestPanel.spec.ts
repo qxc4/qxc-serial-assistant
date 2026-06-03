@@ -57,4 +57,12 @@ describe('ModbusRequestPanel', () => {
 
     expect(wrapper.text()).toContain('暂无任务')
   })
+
+  it('emits import polling tasks from the task toolbar', async () => {
+    const wrapper = mountPanel()
+
+    await wrapper.get('[data-testid="modbus-import-polling-tasks"]').trigger('click')
+
+    expect(wrapper.emitted('importPollingTasks')).toHaveLength(1)
+  })
 })

@@ -3,6 +3,7 @@ import {
   createModbusPollingTask,
   doesModbusResponseMatchTask,
   formatModbusPollingProgress,
+  parseModbusPollingTasksImport,
   serializeModbusPollingTasks,
   summarizeModbusPollingTasks,
   normalizeModbusPollingSettings,
@@ -112,5 +113,60 @@ describe('modbus polling helpers', () => {
     expect(parsed.version).toBe(1)
     expect(parsed.tasks).toHaveLength(1)
     expect(parsed.tasks[0].address).toBe(1)
+  })
+
+  test('imports exported polling tasks and resets runtime state', () => {
+    const exportedTask = {
+      ...createModbusPollingTask({
+        name: '温度读取',
+        address: 1,
+        functionCode: 3,
+        startAddress: 0,
+        quantity: 2,
+        writeValue: '',
+        intervalMs: 500,
+        timeoutMs: 1500,
+        retries: 2,
+        failurePolicy: 'stop',
+      }, 0, 1000),
+      sent: 20,
+      success: 18,
+      failed: 2,
+      status: 'failed',
+      lastError: 'old error',
+      lastRunAt: 2000,
+    }
+
+    const result = parseModbusPollingTasksImport(JSON.stringify({
+      version: 1,
+      tasks: [exportedTask],
+    }), 3000)
+
+    expect(result.success).toBe(true)
+    expect(result.tasks).toHaveLength(1)
+    expect(result.tasks[0]).toMatchObject({
+      id: 'poll-3000-0',
+      name: '温度读取',
+      address: 1,
+      functionCode: 3,
+      startAddress: 0,
+      quantity: 2,
+      intervalMs: 500,
+      timeoutMs: 1500,
+      retries: 2,
+      failurePolicy: 'stop',
+      sent: 0,
+      success: 0,
+      failed: 0,
+      status: 'idle',
+      lastError: '',
+      lastRunAt: null,
+    })
+  })
+
+  test('rejects invalid polling task imports', () => {
+    expect(parseModbusPollingTasksImport('not json').success).toBe(false)
+    expect(parseModbusPollingTasksImport(JSON.stringify({ version: 1, tasks: [] })).success).toBe(false)
+    expect(parseModbusPollingTasksImport(JSON.stringify({ version: 1, tasks: 'bad' })).success).toBe(false)
   })
 })

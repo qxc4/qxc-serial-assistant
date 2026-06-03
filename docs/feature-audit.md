@@ -42,7 +42,7 @@
 | 流水线诊断 | done | 显示响应总数、成功率、失败数、异常帧和轮询响应差值。 |
 | 历史导出 TXT/CSV | done | CSV 兼容 Excel。 |
 | 串口直发 Modbus 帧 | done | Modbus 页可复用当前 Web Serial 连接发送构建帧。 |
-| 批量轮询/定时请求 | done | 支持多请求任务列表、串行发送、响应匹配、超时、失败重试、任务导出；复杂导入和高级调度后续扩展。 |
+| 批量轮询/定时请求 | done | 支持多请求任务列表、串行发送、响应匹配、超时、失败重试、任务导出/导入；高级调度后续扩展。 |
 
 ## RTT / Debug
 
@@ -117,5 +117,6 @@
 - 当前轮次：Serial 多会话 UI 接入，顶部会话栏显示默认真实连接和占位会话槽，默认会话统计跟随当前 Web Serial 单例。
 - 当前轮次：`useCommandGroup` 抽出纯模型 helper，覆盖空组/空指令、旧数据 version 归一化、执行统计和进度计算。
 - 当前轮次：Modbus 请求构建器拆为 `ModbusRequestPanel`，保留构帧、当前串口发送、单帧轮询、多任务队列和响应流水线闭环。
+- 当前轮次：Modbus 多请求轮询补齐任务导入，支持读取导出的 JSON、字段归一化、重置运行统计和非法文件诊断。
 - 当前轮次：RTT 顶部工作台拆为 `RttWorkbenchHeader`，保留纯 WebUSB 路线、J-Link 诊断、SEGGER RTT 下载、硬件自检和 Flash dry-run/verify 能力。
 - 当前轮次：项目清理移除重复 agent 指南 `CLAUDE.md`、本地工具目录 `.claude/`，并清理本地产物 `dist/`、`coverage/`、`.superpowers/`。

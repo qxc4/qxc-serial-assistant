@@ -60,6 +60,7 @@ defineEmits<{
   addCurrentRequestAsPollingTask: []
   startTaskPolling: []
   stopTaskPolling: []
+  importPollingTasks: []
   exportPollingTasks: []
   togglePollingTask: [taskId: string]
   removePollingTask: [taskId: string]
@@ -228,7 +229,7 @@ defineEmits<{
           </span>
         </div>
 
-        <div class="grid grid-cols-3 gap-1.5">
+        <div class="grid grid-cols-4 gap-1.5">
           <button
             @click="$emit('addCurrentRequestAsPollingTask')"
             :disabled="isTaskPolling"
@@ -250,6 +251,14 @@ defineEmits<{
             class="rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] font-medium text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
           >
             停止队列
+          </button>
+          <button
+            data-testid="modbus-import-polling-tasks"
+            @click="$emit('importPollingTasks')"
+            :disabled="isTaskPolling"
+            class="rounded-lg border border-slate-200 px-2 py-1.5 text-[10px] text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            导入
           </button>
           <button
             @click="$emit('exportPollingTasks')"

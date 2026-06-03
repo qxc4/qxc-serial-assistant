@@ -29,6 +29,7 @@ import {
   getEnabledModbusPollingTasks,
   normalizeModbusPollingSettings,
   parseCompleteModbusFrame,
+  parseModbusPollingTasksImport,
   parseRegisterData,
   serializeModbusPollingTasks,
   shouldContinueModbusPolling,
@@ -106,6 +107,7 @@ let pollingTimer: ReturnType<typeof setInterval> | null = null
 let isPollingTickInFlight = false
 const pollingTasks = ref<ModbusPollingTask[]>([])
 const pollingResults = ref<ModbusPollingResult[]>([])
+const pollingTaskImportInputRef = ref<HTMLInputElement | null>(null)
 const isTaskPolling = ref(false)
 const activePollingTaskId = ref('')
 const pollingTaskCycle = ref(0)
@@ -630,6 +632,36 @@ function exportPollingTasks(): void {
   settingsStore.showToast('轮询任务已导出')
 }
 
+function openPollingTaskImport(): void {
+  if (isTaskPolling.value) {
+    settingsStore.showToast('请先停止队列轮询')
+    return
+  }
+  pollingTaskImportInputRef.value?.click()
+}
+
+async function handlePollingTaskImportSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  try {
+    const raw = await file.text()
+    const result = parseModbusPollingTasksImport(raw)
+    if (!result.success) {
+      settingsStore.showToast(result.error || '轮询任务导入失败')
+      return
+    }
+
+    pollingTasks.value = result.tasks
+    pollingResults.value = []
+    settingsStore.showToast(`已导入 ${result.tasks.length} 个轮询任务`)
+  } catch (error) {
+    settingsStore.showToast(error instanceof Error ? error.message : '轮询任务导入失败')
+  }
+}
+
 const stopSerialDataListener = onDataReceive((data, direction) => {
   if (direction !== 'rx' || data.length === 0) return
 
@@ -827,6 +859,13 @@ function formatTimestamp(timestamp: number): string {
     </div>
 
     <div class="grid flex-1 min-h-0 grid-cols-[320px_minmax(0,1fr)_340px] overflow-hidden">
+      <input
+        ref="pollingTaskImportInputRef"
+        type="file"
+        accept="application/json,.json"
+        class="hidden"
+        @change="handlePollingTaskImportSelected"
+      />
       <ModbusRequestPanel
         v-model:build-settings="buildSettings"
         v-model:polling-settings="pollingSettings"
@@ -859,6 +898,7 @@ function formatTimestamp(timestamp: number): string {
         @add-current-request-as-polling-task="addCurrentRequestAsPollingTask"
         @start-task-polling="startTaskPolling"
         @stop-task-polling="stopTaskPolling"
+        @import-polling-tasks="openPollingTaskImport"
         @export-polling-tasks="exportPollingTasks"
         @toggle-polling-task="togglePollingTask"
         @remove-polling-task="removePollingTask"

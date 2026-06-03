@@ -67,12 +67,19 @@ export interface ModbusPollingSchedulerState {
   lastError: string
 }
 
+export interface ModbusPollingTaskImportResult {
+  success: boolean
+  tasks: ModbusPollingTask[]
+  error?: string
+}
+
 const MIN_INTERVAL_MS = 100
 const MAX_INTERVAL_MS = 60_000
 const MAX_CYCLES = 999_999
 const MIN_TIMEOUT_MS = 50
 const MAX_TIMEOUT_MS = 60_000
 const MAX_RETRIES = 10
+const MAX_IMPORT_TASKS = 200
 
 function clampInteger(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min
@@ -183,4 +190,59 @@ export function serializeModbusPollingTasks(tasks: ModbusPollingTask[]): string 
     exportedAt: new Date().toISOString(),
     tasks,
   }, null, 2)
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function readNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' ? value : fallback
+}
+
+function readString(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback
+}
+
+function readFailurePolicy(value: unknown): ModbusPollingFailurePolicy {
+  return value === 'stop' ? 'stop' : 'continue'
+}
+
+export function parseModbusPollingTasksImport(raw: string, now = Date.now()): ModbusPollingTaskImportResult {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return { success: false, tasks: [], error: '导入文件不是有效 JSON' }
+  }
+
+  if (!isObject(parsed) || !Array.isArray(parsed.tasks)) {
+    return { success: false, tasks: [], error: '导入文件缺少 tasks 数组' }
+  }
+
+  if (parsed.tasks.length === 0) {
+    return { success: false, tasks: [], error: '导入文件没有轮询任务' }
+  }
+
+  const tasks = parsed.tasks
+    .slice(0, MAX_IMPORT_TASKS)
+    .filter(isObject)
+    .map((task, index) => createModbusPollingTask({
+      name: readString(task.name, `导入任务 ${index + 1}`),
+      address: readNumber(task.address, 1),
+      functionCode: readNumber(task.functionCode, 3),
+      startAddress: readNumber(task.startAddress, 0),
+      quantity: readNumber(task.quantity, 1),
+      writeValue: readString(task.writeValue),
+      intervalMs: readNumber(task.intervalMs, 1000),
+      timeoutMs: readNumber(task.timeoutMs, 1000),
+      retries: readNumber(task.retries, 0),
+      failurePolicy: readFailurePolicy(task.failurePolicy),
+    }, index, now))
+
+  if (tasks.length === 0) {
+    return { success: false, tasks: [], error: '导入文件没有可用任务' }
+  }
+
+  return { success: true, tasks }
 }
