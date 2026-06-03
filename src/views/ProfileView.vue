@@ -1,11 +1,24 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from '../composables/useI18n'
-import { 
-  Github, Mail, MapPin, Calendar, Code2, 
-  Star, GitBranch, ExternalLink, 
-  Terminal
+import {
+  ArrowUpRight,
+  Calendar,
+  Code2,
+  Github,
+  Mail,
+  MapPin,
+  Sparkles,
+  Terminal,
 } from 'lucide-vue-next'
+import {
+  createExpertiseAreas,
+  createProfileLinks,
+  createProfileProjects,
+  createProfileStats,
+  createTechStack,
+  type TechStackItem,
+} from '../features/profile/profileContent'
 
 const { t } = useI18n()
 
@@ -14,223 +27,196 @@ const developerInfo = computed(() => ({
   title: t('profile.title'),
   bio: t('profile.bio'),
   location: t('profile.location'),
-  email: "2986427953@qq.com",
-  github: "https://gitee.com/qiao-xinchao"
+  devSince: t('profile.devSince'),
 }))
 
-const education = computed(() => [
-  {
-    degree: t('profile.educationDegree'),
-    school: t('profile.educationSchool'),
-    period: t('profile.educationPeriod'),
-    focus: t('profile.educationFocus')
-  }
-])
+const stats = computed(() => createProfileStats(t))
+const links = createProfileLinks()
+const expertiseAreas = computed(() => createExpertiseAreas(t))
+const projects = computed(() => createProfileProjects(t))
+const techStack = computed(() => createTechStack(t))
 
-const projects = computed(() => [
-  {
-    name: t('profile.project1Name'),
-    desc: t('profile.project1Desc'),
-    tech: ["Vue 3", "TypeScript", "Web Serial API", "Tailwind CSS"],
-    stars: 128,
-    forks: 32,
-    link: "https://gitee.com/qiao-xinchao/qxc-serial"
-  },
-  {
-    name: t('profile.project2Name'),
-    desc: t('profile.project2Desc'),
-    tech: [t('profile.embedded'), "C/C++", t('profile.sensor'), t('profile.iot')],
-    stars: 45,
-    forks: 12,
-    link: "https://gitee.com/qiao-xinchao"
-  },
-  {
-    name: t('profile.project3Name'),
-    desc: t('profile.project3Desc'),
-    tech: ["ESP32", "MQTT", "React Native", "Node.js"],
-    stars: 38,
-    forks: 8,
-    link: "https://gitee.com/qiao-xinchao"
+function techToneClass(tone: TechStackItem['tone']): string {
+  const classes: Record<TechStackItem['tone'], string> = {
+    blue: 'bg-blue-50 text-blue-700 border-blue-100 dark:bg-blue-500/10 dark:text-blue-300 dark:border-blue-500/20',
+    green: 'bg-emerald-50 text-emerald-700 border-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20',
+    violet: 'bg-violet-50 text-violet-700 border-violet-100 dark:bg-violet-500/10 dark:text-violet-300 dark:border-violet-500/20',
+    amber: 'bg-amber-50 text-amber-700 border-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:border-amber-500/20',
+    cyan: 'bg-cyan-50 text-cyan-700 border-cyan-100 dark:bg-cyan-500/10 dark:text-cyan-300 dark:border-cyan-500/20',
+    slate: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700',
   }
-])
+  return classes[tone]
+}
 
-const stats = computed(() => [
-  { label: t('profile.statProjects'), value: "6+", icon: Terminal },
-  { label: t('profile.statCommits'), value: "500+", icon: Code2 },
-  { label: t('profile.statStars'), value: "200+", icon: Star }
-])
+function linkIcon(kind: string) {
+  if (kind === 'email') return Mail
+  return Github
+}
 </script>
 
 <template>
-  <div class="h-full min-h-0 overflow-y-auto bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
-    <div class="max-w-5xl mx-auto p-6 md:p-8">
-      
-      <div class="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 shadow-sm p-6 mb-6">
-        <div class="flex flex-col md:flex-row gap-6 items-start">
-          <div class="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg flex-shrink-0">
-            <img 
-              src="https://ui-avatars.com/api/?name=鑫超&background=4f46e5&color=ffffff&size=128&font-size=0.4&length=2" 
-              alt="Avatar" 
-              class="w-full h-full object-cover"
-            >
-          </div>
-          
-          <div class="flex-1 min-w-0">
-            <div class="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 mb-3">
-              <h1 class="text-2xl font-bold text-slate-900 dark:text-slate-100">{{ developerInfo.name }}</h1>
-              <span class="text-sm font-medium text-blue-600 dark:text-blue-400">{{ developerInfo.title }}</span>
+  <div class="h-full min-h-0 overflow-y-auto bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div class="mx-auto flex w-full max-w-6xl flex-col gap-5 p-4 sm:p-6 lg:p-8">
+      <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div class="grid gap-0 lg:grid-cols-[1.35fr_0.65fr]">
+          <div class="p-5 sm:p-7">
+            <div class="flex flex-col gap-5 sm:flex-row sm:items-start">
+              <div class="flex h-20 w-20 shrink-0 items-center justify-center rounded-3xl border border-slate-200 bg-slate-950 text-2xl font-semibold text-white shadow-sm dark:border-slate-700 dark:bg-white dark:text-slate-950">
+                QX
+              </div>
+
+              <div class="min-w-0 flex-1">
+                <div class="mb-3 flex flex-wrap items-center gap-2">
+                  <span class="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300">
+                    {{ t('profile.authorBadge') }}
+                  </span>
+                  <span class="rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
+                    {{ t('profile.productBadge') }}
+                  </span>
+                </div>
+
+                <h1 class="text-2xl font-semibold tracking-normal text-slate-950 dark:text-white sm:text-3xl">
+                  {{ developerInfo.name }}
+                </h1>
+                <p class="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                  {{ developerInfo.title }}
+                </p>
+                <p class="mt-4 max-w-2xl text-sm leading-6 text-slate-600 dark:text-slate-400">
+                  {{ developerInfo.bio }}
+                </p>
+
+                <div class="mt-5 flex flex-wrap gap-2 text-sm">
+                  <a
+                    v-for="link in links"
+                    :key="link.label"
+                    :href="link.href"
+                    target="_blank"
+                    rel="noreferrer"
+                    class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  >
+                    <component :is="linkIcon(link.kind)" class="h-4 w-4" />
+                    {{ link.label }}
+                    <ArrowUpRight v-if="link.kind !== 'email'" class="h-3.5 w-3.5 text-slate-400" />
+                  </a>
+                </div>
+              </div>
             </div>
-            
-            <p class="text-sm text-slate-600 dark:text-slate-400 mb-4 leading-relaxed">
-              {{ developerInfo.bio }}
-            </p>
-            
-            <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-600 dark:text-slate-400">
+          </div>
+
+          <aside class="border-t border-slate-200 bg-slate-50/70 p-5 dark:border-slate-800 dark:bg-slate-950/60 lg:border-l lg:border-t-0">
+            <div class="grid grid-cols-3 gap-2 lg:grid-cols-1">
+              <div
+                v-for="stat in stats"
+                :key="stat.label"
+                class="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+              >
+                <div class="text-lg font-semibold text-slate-950 dark:text-white">{{ stat.value }}</div>
+                <div class="mt-1 text-xs text-slate-500 dark:text-slate-400">{{ stat.label }}</div>
+              </div>
+            </div>
+            <div class="mt-4 space-y-2 text-sm text-slate-600 dark:text-slate-400">
               <div class="flex items-center gap-2">
-                <MapPin class="w-4 h-4 text-slate-400" />
+                <MapPin class="h-4 w-4 text-slate-400" />
                 <span>{{ developerInfo.location }}</span>
               </div>
               <div class="flex items-center gap-2">
-                <Mail class="w-4 h-4 text-slate-400" />
-                <a :href="'mailto:' + developerInfo.email" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                  {{ developerInfo.email }}
-                </a>
+                <Calendar class="h-4 w-4 text-slate-400" />
+                <span>{{ developerInfo.devSince }}</span>
               </div>
-              <div class="flex items-center gap-2">
-                <Calendar class="w-4 h-4 text-slate-400" />
-                <span>{{ t('profile.devSince') }}</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="grid gap-5 lg:grid-cols-[0.85fr_1.15fr]">
+        <div class="space-y-5">
+          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h2 class="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-white">
+              <Sparkles class="h-4 w-4 text-blue-500" />
+              {{ t('profile.focusAreas') }}
+            </h2>
+            <div class="mt-4 space-y-3">
+              <div
+                v-for="area in expertiseAreas"
+                :key="area.key"
+                class="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/60"
+              >
+                <div class="text-sm font-semibold text-slate-800 dark:text-slate-100">{{ area.title }}</div>
+                <p class="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{{ area.desc }}</p>
               </div>
             </div>
           </div>
-          
-          <div class="flex flex-col gap-2 flex-shrink-0">
-            <a 
-              :href="developerInfo.github" 
-              target="_blank" 
-              class="px-4 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl flex items-center gap-2 transition-colors font-medium text-sm"
-            >
-              <Github class="w-4 h-4" /> 
-              Gitee
-            </a>
-            <a 
-              href="https://github.com/qxc4" 
-              target="_blank" 
-              class="px-4 py-2 bg-slate-800 hover:bg-slate-700 dark:bg-slate-600 dark:hover:bg-slate-500 text-white rounded-xl flex items-center gap-2 transition-colors font-medium text-sm"
-            >
-              <Github class="w-4 h-4" /> 
-              GitHub
-            </a>
+
+          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h2 class="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-white">
+              <Terminal class="h-4 w-4 text-emerald-500" />
+              {{ t('profile.techStack') }}
+            </h2>
+            <div class="mt-4 flex flex-wrap gap-2">
+              <span
+                v-for="item in techStack"
+                :key="item.label"
+                class="rounded-lg border px-2.5 py-1.5 text-xs font-medium"
+                :class="techToneClass(item.tone)"
+              >
+                {{ item.label }}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
-      
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div 
-          v-for="stat in stats" 
-          :key="stat.label"
-          class="bg-white dark:bg-slate-800 rounded-xl border dark:border-slate-700 shadow-sm p-4 flex items-center gap-4"
-        >
-          <div class="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center">
-            <component :is="stat.icon" class="w-5 h-5 text-blue-500" />
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h2 class="flex items-center gap-2 text-sm font-semibold text-slate-950 dark:text-white">
+              <Code2 class="h-4 w-4 text-violet-500" />
+              {{ t('profile.openSourceProjects') }}
+            </h2>
+            <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              {{ t('profile.projectsCount', { n: projects.length }) }}
+            </span>
           </div>
-          <div>
-            <div class="text-lg font-bold text-slate-900 dark:text-slate-100">{{ stat.value }}</div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">{{ stat.label }}</div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div class="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 shadow-sm p-6">
-          <h3 class="text-base font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-            <Calendar class="w-4 h-4 text-blue-500" />
-            {{ t('profile.education') }}
-          </h3>
-          
+
           <div class="space-y-3">
-            <div v-for="edu in education" :key="edu.degree" class="flex items-start gap-3">
-              <div class="w-2 h-2 rounded-full bg-blue-500 mt-2 flex-shrink-0"></div>
-              <div>
-                <div class="text-sm font-semibold text-slate-800 dark:text-slate-200">{{ edu.degree }}</div>
-                <div class="text-xs text-slate-500 dark:text-slate-400">{{ edu.school }} · {{ edu.period }}</div>
-                <div class="text-xs text-slate-400 dark:text-slate-500 mt-1">{{ edu.focus }}</div>
+            <a
+              v-for="project in projects"
+              :key="project.name"
+              :href="project.link"
+              target="_blank"
+              rel="noreferrer"
+              class="group block rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:border-blue-200 hover:bg-white dark:border-slate-800 dark:bg-slate-950/60 dark:hover:border-blue-500/30 dark:hover:bg-slate-900"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="font-semibold text-slate-900 transition group-hover:text-blue-600 dark:text-slate-100 dark:group-hover:text-blue-300">
+                      {{ project.name }}
+                    </h3>
+                    <span class="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+                      {{ project.status }}
+                    </span>
+                  </div>
+                  <p class="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-400">{{ project.desc }}</p>
+                </div>
+                <ArrowUpRight class="mt-1 h-4 w-4 shrink-0 text-slate-400 transition group-hover:text-blue-500" />
               </div>
-            </div>
-          </div>
-        </div>
-        
-        <div class="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 shadow-sm p-6">
-          <h3 class="text-base font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-            <Terminal class="w-4 h-4 text-green-500" />
-            {{ t('profile.techStack') }}
-          </h3>
-          
-          <div class="flex flex-wrap gap-2">
-            <span class="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-medium">Vue 3</span>
-            <span class="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg text-sm font-medium">TypeScript</span>
-            <span class="px-3 py-1.5 bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-lg text-sm font-medium">C/C++</span>
-            <span class="px-3 py-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg text-sm font-medium">{{ t('profile.embedded') }}</span>
-            <span class="px-3 py-1.5 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg text-sm font-medium">Python</span>
-            <span class="px-3 py-1.5 bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400 rounded-lg text-sm font-medium">{{ t('profile.iot') }}</span>
-          </div>
-        </div>
-      </div>
-      
-      <div class="bg-white dark:bg-slate-800 rounded-2xl border dark:border-slate-700 shadow-sm p-6">
-        <h3 class="text-base font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
-          <Code2 class="w-4 h-4 text-indigo-500" />
-          {{ t('profile.openSourceProjects') }}
-          <span class="text-xs font-normal text-slate-500 dark:text-slate-400 ml-auto">{{ projects.length }} {{ t('profile.projectsCount') }}</span>
-        </h3>
-        
-        <div class="space-y-4">
-          <a 
-            v-for="project in projects" 
-            :key="project.name"
-            :href="project.link"
-            target="_blank"
-            class="block p-4 rounded-xl border dark:border-slate-700 hover:border-blue-200 dark:hover:border-blue-800 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all group"
-          >
-            <div class="flex items-start justify-between mb-2">
-              <h4 class="font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                {{ project.name }}
-              </h4>
-              <ExternalLink class="w-4 h-4 text-slate-400 group-hover:text-blue-500 transition-colors flex-shrink-0" />
-            </div>
-            
-            <p class="text-sm text-slate-500 dark:text-slate-400 mb-3 leading-relaxed">
-              {{ project.desc }}
-            </p>
-            
-            <div class="flex items-center justify-between">
-              <div class="flex flex-wrap gap-1.5">
-                <span 
-                  v-for="tag in project.tech" 
-                  :key="tag" 
-                  class="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded text-xs"
+
+              <div class="mt-3 flex flex-wrap gap-1.5">
+                <span
+                  v-for="tag in project.tech"
+                  :key="tag"
+                  class="rounded-md bg-white px-2 py-1 text-xs text-slate-500 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700"
                 >
                   {{ tag }}
                 </span>
               </div>
-              
-              <div class="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 flex-shrink-0 ml-4">
-                <span class="flex items-center gap-1">
-                  <Star class="w-3.5 h-3.5 text-amber-500" /> 
-                  {{ project.stars }}
-                </span>
-                <span class="flex items-center gap-1">
-                  <GitBranch class="w-3.5 h-3.5 text-blue-500" /> 
-                  {{ project.forks }}
-                </span>
-              </div>
-            </div>
-          </a>
+            </a>
+          </div>
         </div>
-      </div>
-      
-      <div class="mt-8 text-center text-xs text-slate-400 dark:text-slate-500">
+      </section>
+
+      <footer class="pb-2 text-center text-xs text-slate-400 dark:text-slate-500">
         {{ t('profile.copyright') }}
-      </div>
+      </footer>
     </div>
   </div>
 </template>
