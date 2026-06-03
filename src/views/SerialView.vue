@@ -14,6 +14,7 @@ import {
   previewLineEndingValue,
   resolveLineEndingValue,
   summarizeSerialSession,
+  filterSerialLogEntries,
   useSerialMultiSession,
   useSerialReplay,
   useQuickCommands,
@@ -98,23 +99,7 @@ watch(searchQuery, (value) => {
 
 /** 根据显示模式和搜索关键词过滤接收数据（优化版） */
 const filteredReceivedData = computed(() => {
-  const data = activeSessionLogs.value
-  const mode = displayMode.value
-  const query = debouncedSearchQuery.value.toLowerCase().trim()
-  const hasSearch = query.length > 0
-  const isRxMode = mode === 'rx'
-  const isTxMode = mode === 'tx'
-  
-  if (!isRxMode && !isTxMode && !hasSearch) {
-    return data
-  }
-  
-  return data.filter(item => {
-    if (isRxMode && item.direction !== 'rx') return false
-    if (isTxMode && item.direction !== 'tx') return false
-    if (hasSearch && !item.data.toLowerCase().includes(query)) return false
-    return true
-  })
+  return filterSerialLogEntries(activeSessionLogs.value, debouncedSearchQuery.value, displayMode.value)
 })
 
 /** 处理虚拟滚动事件（使用 raf 节流） */
@@ -820,6 +805,7 @@ onUnmounted(cleanupButtonOptimizations)
         <SerialLogPanel
           ref="virtualListRef"
           :items="filteredReceivedData"
+          :search-query="debouncedSearchQuery"
           :show-timestamp="showTimestamp"
           :format-timestamp="formatTimestamp"
           @scroll="handleVirtualScroll"

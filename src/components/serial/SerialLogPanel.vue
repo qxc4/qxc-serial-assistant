@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import VirtualList from '../VirtualList.vue'
-import { createSerialLogRows } from '../../features/serial'
+import { createSerialLogRows, createSerialSearchSegments } from '../../features/serial'
 
 export interface SerialLogEntry {
   id: number
@@ -13,6 +13,7 @@ export interface SerialLogEntry {
 
 const props = defineProps<{
   items: SerialLogEntry[]
+  searchQuery: string
   showTimestamp: boolean
   formatTimestamp: (timestamp: number) => string
 }>()
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 
 const virtualListRef = ref<InstanceType<typeof VirtualList> | null>(null)
 const displayRows = computed(() => createSerialLogRows(props.items))
+const normalizedSearchQuery = computed(() => props.searchQuery.trim())
 
 function scrollToBottom() {
   virtualListRef.value?.scrollToBottom()
@@ -49,7 +51,16 @@ defineExpose({ scrollToBottom })
           </span>
           <span v-else-if="showTimestamp" class="inline-block w-[15.5rem] shrink-0 select-none"></span>
           <span :class="item.direction === 'rx' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'">
-            {{ item.data }}
+            <template v-if="normalizedSearchQuery">
+              <span
+                v-for="(segment, segmentIndex) in createSerialSearchSegments(item.data, normalizedSearchQuery)"
+                :key="`${item.id}:match:${segmentIndex}`"
+                :class="segment.matched ? 'rounded bg-yellow-200 px-0.5 text-slate-950 dark:bg-yellow-400/80 dark:text-slate-950' : ''"
+              >
+                {{ segment.text }}
+              </span>
+            </template>
+            <template v-else>{{ item.data }}</template>
           </span>
         </div>
       </template>

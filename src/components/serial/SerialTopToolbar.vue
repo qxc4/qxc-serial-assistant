@@ -72,6 +72,7 @@ function maximizeView() {
           v-model="localSearchQuery"
           type="text"
           :placeholder="t('serial.searchPlaceholder')"
+          title="支持多关键词 AND、dir:rx、dir:tx、hex:AA55"
           class="w-full pl-9 pr-7 py-1.5 text-xs border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 transition-shadow"
         />
         <button
