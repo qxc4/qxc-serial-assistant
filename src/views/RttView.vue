@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed, onUnmounted } from 'vue'
+import { ref, watch, watchEffect, nextTick, computed, onUnmounted } from 'vue'
 import { useWebUsbRtt } from '../composables/useWebUsbRtt'
 import { useRttDebugWorkbench } from '../composables/useRttDebugWorkbench'
 import { useI18n } from '../composables/useI18n'
@@ -17,7 +17,9 @@ import {
   rttBackendOptions,
   rttFrequencyOptions,
   rttLevelOptions,
+  summarizeBreakpointSlots,
 } from '../features/rtt'
+import { buildRttDiagnostics, setModuleDiagnostics } from '../features/diagnostics/globalDiagnostics'
 import VirtualList from '../components/VirtualList.vue'
 import RttDebugControls from '../components/rtt/RttDebugControls.vue'
 import RttFlashProgrammerPanel from '../components/rtt/RttFlashProgrammerPanel.vue'
@@ -336,6 +338,46 @@ const {
   },
   parseHexAddress,
   formatHexAddress,
+})
+const breakpointSlotDiagnostic = computed(() =>
+  summarizeBreakpointSlots(breakpointSlotStatus.value, hardwareBreakpoints.value.length, isConnected.value)
+)
+const hardwareSelfCheckDiagnostic = computed(() => {
+  if (hardwareCheckError.value) {
+    return {
+      tone: 'error' as const,
+      title: t('diagnostics.rtt.selfCheck.title'),
+      detail: hardwareCheckError.value,
+    }
+  }
+
+  if (!hardwareCheckReport.value) return null
+
+  if (hardwareCheckReport.value.summary.failed > 0) {
+    return {
+      tone: 'error' as const,
+      title: t('diagnostics.rtt.selfCheck.title'),
+      detail: createRttHardwareCheckSummaryText(hardwareCheckReport.value),
+    }
+  }
+
+  return {
+    tone: 'ok' as const,
+    title: t('diagnostics.rtt.selfCheck.title'),
+    detail: createRttHardwareCheckSummaryText(hardwareCheckReport.value),
+  }
+})
+watchEffect(() => {
+  setModuleDiagnostics('rtt', buildRttDiagnostics({
+    isSupported: webUsbRtt.isSupported.value,
+    isConnected: isConnected.value,
+    selfCheckTone: hardwareSelfCheckDiagnostic.value?.tone ?? null,
+    selfCheckTitle: hardwareSelfCheckDiagnostic.value?.title,
+    selfCheckDetail: hardwareSelfCheckDiagnostic.value?.detail,
+    breakpointTone: breakpointSlotDiagnostic.value.tone,
+    breakpointTitle: breakpointSlotDiagnostic.value.label,
+    breakpointDetail: breakpointSlotDiagnostic.value.detail,
+  }, t))
 })
 const currentPcValue = computed(() => coreRegisterItems.value.find(item => item.name === 'PC')?.value ?? 0)
 const variableImageSummary = computed(() =>

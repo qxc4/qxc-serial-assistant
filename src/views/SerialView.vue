@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted, computed, shallowRef } from 'vue'
+import { ref, watch, watchEffect, nextTick, onMounted, onUnmounted, computed, shallowRef } from 'vue'
 import { useSerial } from '../composables/useSerial'
 import { useCommandGroup } from '../composables/useCommandGroup'
 import { useSettingsStore } from '../stores/settings'
@@ -29,6 +29,7 @@ import SerialTopToolbar from '../components/serial/SerialTopToolbar.vue'
 import SerialConnectionDrawer from '../components/serial/SerialConnectionDrawer.vue'
 import SerialQuickCommandPanel from '../components/serial/SerialQuickCommandPanel.vue'
 import SerialCommandGroupPanel from '../components/serial/SerialCommandGroupPanel.vue'
+import { buildSerialDiagnostics, setModuleDiagnostics } from '../features/diagnostics/globalDiagnostics'
 import { 
   matchesShortcutFast, 
   preparseShortcuts,
@@ -74,7 +75,8 @@ const {
   clearData,
   exportData,
   redecodeAllData,
-  onDataReceive
+  onDataReceive,
+  lastSerialError
 } = useSerial()
 
 // Layout & View states - 从 store 获取持久化状态
@@ -228,6 +230,17 @@ const {
   }),
   showToast: message => settingsStore.showToast(message),
 })
+watchEffect(() => {
+  setModuleDiagnostics('serial', buildSerialDiagnostics({
+    isSupported: isSupported.value,
+    isConnected: isConnected.value || isActiveSessionConnected.value,
+    canReconnect: canReconnect.value,
+    isReconnecting: isReconnecting.value,
+    session: serialSessionDiagnostics.value,
+    lastError: lastSerialError.value,
+    now: serialDiagnosticNow.value,
+  }, t))
+})
 const activeDataCount = computed(() => activeSessionLogs.value.length)
 const activeConnectionSummary = computed(() => {
   if (!activeRuntime.value) return connectionSummary.value
@@ -341,6 +354,8 @@ async function sendViaActiveSession(data: string, isHex = false): Promise<void> 
 }
 
 async function toggleActiveSessionConnection(): Promise<void> {
+  const wasConnected = activeRuntime.value?.state.isConnected ?? isConnected.value
+
   if (!activeRuntime.value) {
     if (isConnected.value) {
       await disconnect()
@@ -350,13 +365,15 @@ async function toggleActiveSessionConnection(): Promise<void> {
     } else {
       await connect()
     }
-    return
-  }
-
-  if (activeRuntime.value.state.isConnected) {
+  } else if (activeRuntime.value.state.isConnected) {
     await disconnectActiveSerialSession()
   } else {
     await connectActiveSerialSession()
+  }
+
+  const isNowConnected = activeRuntime.value?.state.isConnected ?? isConnected.value
+  if (!wasConnected && isNowConnected) {
+    showLeftPanel.value = false
   }
 }
 

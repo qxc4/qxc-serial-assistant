@@ -628,6 +628,173 @@ export const zhCN = {
     fc15: '0x0F - 写多个线圈',
     fc16: '0x10 - 写多个寄存器',
   },
+  diagnostics: {
+    title: '全局诊断',
+    close: '关闭诊断',
+    empty: '暂无诊断项',
+    idleModule: {
+      title: '{module} 等待诊断',
+      detail: '进入该页面后开始采集诊断，不会自动连接设备或弹出权限请求。',
+    },
+    summary: {
+      ok: '所有已访问模块状态正常',
+      idle: '部分模块等待进入后采集诊断',
+      warn: '{count} 个建议需要关注',
+      error: '{count} 个问题需要处理',
+    },
+    actions: {
+      open: '查看',
+      openSerial: '打开串口',
+      openModbus: '打开 Modbus',
+      openRtt: '打开 RTT',
+      openShell: '打开 Shell',
+      openChart: '打开图表',
+    },
+    platform: {
+      serialUnsupported: {
+        title: '浏览器不支持 Web Serial',
+        detail: '串口连接需要 Chrome 或 Edge 等支持 Web Serial API 的桌面浏览器。',
+      },
+      usbUnsupported: {
+        title: '浏览器不支持 WebUSB',
+        detail: 'RTT 探针连接依赖 WebUSB，不支持时只能使用串口等其他调试方式。',
+      },
+      ready: {
+        title: '平台能力可用',
+        detail: '当前浏览器已提供串口和 USB 调试所需的关键能力。',
+      },
+    },
+    serial: {
+      unsupported: {
+        title: '无法使用串口能力',
+        detail: '当前浏览器不支持 Web Serial API，串口连接入口不可用。',
+      },
+      disconnected: {
+        title: '串口未连接',
+        detail: '进入串口页后选择设备并连接，诊断不会自动弹出授权窗口。',
+      },
+      reconnectAvailable: {
+        title: '可重新启用上次串口',
+        detail: '存在已选择过的串口引用，可在串口页尝试重新启用。',
+      },
+      reconnecting: {
+        title: '正在自动重连',
+        detail: '检测到串口连接异常，正在按重连策略尝试恢复。',
+      },
+      lastError: {
+        title: '最近串口连接错误',
+        detail: '最近一次串口连接或重新启用失败。',
+      },
+      noResponse: {
+        title: '发送后暂未收到响应',
+        detail: '最近一次发送已等待约 {seconds} 秒，但还没有后续 RX 数据。',
+      },
+      silent: {
+        title: '串口长时间静默',
+        detail: '串口已约 {seconds} 秒没有新的收发数据，请检查设备是否仍在输出。',
+      },
+      active: {
+        title: '串口状态正常',
+        detail: '串口可用状态与最近收发活动未发现明显异常。',
+      },
+    },
+    modbus: {
+      responseGap: {
+        title: '请求响应数量不匹配',
+        detail: '已发送请求比解析到的响应多 {count} 条，可能存在超时或设备未响应。',
+      },
+      parseFailed: {
+        title: '存在解析失败',
+        detail: '最近解析管线中有 {count} 条帧未成功解析。',
+      },
+      exceptionFrame: {
+        title: '收到异常响应帧',
+        detail: '解析结果中包含 {count} 条 Modbus 异常帧，请检查功能码、地址或权限。',
+      },
+      lowSuccessRate: {
+        title: '轮询成功率偏低',
+        detail: '当前解析成功率约 {rate}%，建议检查从站地址、波特率和轮询间隔。',
+      },
+      active: {
+        title: 'Modbus 解析正常',
+        detail: '最近 Modbus 管线未发现响应缺口、异常帧或解析失败。',
+      },
+      idle: {
+        title: 'Modbus 尚未采集诊断',
+        detail: '进入 Modbus 页并解析或发送帧后会显示更具体的诊断。',
+      },
+    },
+    rtt: {
+      unsupported: {
+        title: '浏览器不支持 WebUSB',
+        detail: 'RTT 探针连接需要 WebUSB 支持，请使用桌面 Chrome 或 Edge。',
+      },
+      disconnected: {
+        title: 'RTT 探针未连接',
+        detail: '进入 RTT 页后选择调试探针并连接，诊断不会主动请求权限。',
+      },
+      experimental: {
+        title: 'RTT 能力为实验功能',
+        detail: '不同探针和固件兼容性可能不同，建议先运行硬件自检。',
+      },
+      breakpoints: {
+        title: '断点槽位需要关注',
+        detail: '当前断点配置可能接近硬件槽位限制。',
+      },
+      selfCheck: {
+        title: '硬件自检未通过',
+        detail: '最近一次 RTT 硬件自检存在失败项。',
+      },
+    },
+    shell: {
+      serialDisconnected: {
+        title: 'Shell 串口未连接',
+        detail: 'Shell 命令发送依赖串口连接，请先在串口页连接设备。',
+      },
+      outputPaused: {
+        title: 'Shell 输出已暂停',
+        detail: '输出暂停时新数据不会自动滚动显示，可能误以为设备无响应。',
+      },
+      dangerousCommand: {
+        title: '危险命令等待确认',
+        detail: 'Shell 检测到潜在危险命令，执行前需要手动确认。',
+      },
+      lastError: {
+        title: 'Shell 最近有错误输出',
+        detail: '最近终端输出中包含错误信息。',
+      },
+      ready: {
+        title: 'Shell 状态正常',
+        detail: 'Shell 未发现暂停、待确认命令或错误输出。',
+      },
+    },
+    chart: {
+      notCollecting: {
+        title: '图表未采集',
+        detail: '当前未处于采集状态，图表不会持续追加新数据。',
+      },
+      noEnabledChannel: {
+        title: '没有启用通道',
+        detail: '至少启用一个通道后，采集数据才能显示在图表中。',
+      },
+      serialDisconnected: {
+        title: '串口数据源未连接',
+        detail: '图表通道使用串口数据源，但当前串口未连接。',
+      },
+      emptyData: {
+        title: '采集中但没有数据点',
+        detail: '采集已启动但数据点仍为空，请检查解析规则和输入数据。',
+      },
+      replaying: {
+        title: '图表正在回放',
+        detail: '当前显示的是回放数据，实时采集状态可能与图表内容不同。',
+      },
+      active: {
+        title: '图表状态正常',
+        detail: '图表通道和数据点状态未发现明显异常。',
+      },
+    },
+  },
   rtt: {
     connect: '连接',
     disconnect: '断开',

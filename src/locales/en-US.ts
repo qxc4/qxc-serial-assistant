@@ -628,6 +628,173 @@ export const enUS = {
     fc15: '0x0F - Write Multiple Coils',
     fc16: '0x10 - Write Multiple Registers',
   },
+  diagnostics: {
+    title: 'Global Diagnostics',
+    close: 'Close diagnostics',
+    empty: 'No diagnostics yet',
+    idleModule: {
+      title: '{module} waiting for diagnostics',
+      detail: 'Open this page to start collecting diagnostics. No device connection or permission prompt is triggered automatically.',
+    },
+    summary: {
+      ok: 'All visited modules look healthy',
+      idle: 'Some modules will report after you open them',
+      warn: '{count} suggestions need attention',
+      error: '{count} issues need attention',
+    },
+    actions: {
+      open: 'View',
+      openSerial: 'Open Serial',
+      openModbus: 'Open Modbus',
+      openRtt: 'Open RTT',
+      openShell: 'Open Shell',
+      openChart: 'Open Chart',
+    },
+    platform: {
+      serialUnsupported: {
+        title: 'Web Serial is not supported',
+        detail: 'Serial connections require a desktop browser with Web Serial support, such as Chrome or Edge.',
+      },
+      usbUnsupported: {
+        title: 'WebUSB is not supported',
+        detail: 'RTT probe access depends on WebUSB. Use serial or another debug path when it is unavailable.',
+      },
+      ready: {
+        title: 'Platform capabilities available',
+        detail: 'This browser exposes the key capabilities required for serial and USB debugging.',
+      },
+    },
+    serial: {
+      unsupported: {
+        title: 'Serial capability unavailable',
+        detail: 'This browser does not support the Web Serial API, so serial connection controls are unavailable.',
+      },
+      disconnected: {
+        title: 'Serial is disconnected',
+        detail: 'Open the Serial page to choose and connect a device. Diagnostics will not request permission automatically.',
+      },
+      reconnectAvailable: {
+        title: 'Previous serial port can be resumed',
+        detail: 'A previously selected port reference is available and can be resumed from the Serial page.',
+      },
+      reconnecting: {
+        title: 'Automatic reconnect in progress',
+        detail: 'A connection interruption was detected and the reconnect policy is trying to recover.',
+      },
+      lastError: {
+        title: 'Recent serial connection error',
+        detail: 'The latest serial connection or resume attempt failed.',
+      },
+      noResponse: {
+        title: 'No response after send',
+        detail: 'The latest send has waited about {seconds} seconds with no later RX data.',
+      },
+      silent: {
+        title: 'Serial has been quiet',
+        detail: 'There has been no serial activity for about {seconds} seconds. Check whether the device is still outputting.',
+      },
+      active: {
+        title: 'Serial looks healthy',
+        detail: 'Serial capability and recent traffic do not show an obvious issue.',
+      },
+    },
+    modbus: {
+      responseGap: {
+        title: 'Request and response counts differ',
+        detail: '{count} more requests were sent than parsed responses. Timeouts or missing device replies are likely.',
+      },
+      parseFailed: {
+        title: 'Parse failures detected',
+        detail: '{count} frames failed in the recent Modbus parsing pipeline.',
+      },
+      exceptionFrame: {
+        title: 'Exception response frames received',
+        detail: '{count} Modbus exception frames were parsed. Check function codes, addresses, or permissions.',
+      },
+      lowSuccessRate: {
+        title: 'Polling success rate is low',
+        detail: 'The current parse success rate is about {rate}%. Check slave address, baud rate, and polling interval.',
+      },
+      active: {
+        title: 'Modbus looks healthy',
+        detail: 'Recent Modbus activity shows no response gaps, exception frames, or parse failures.',
+      },
+      idle: {
+        title: 'Modbus diagnostics not collected yet',
+        detail: 'Open the Modbus page and parse or send frames to collect more specific diagnostics.',
+      },
+    },
+    rtt: {
+      unsupported: {
+        title: 'WebUSB is not supported',
+        detail: 'RTT probe access requires WebUSB support. Use desktop Chrome or Edge.',
+      },
+      disconnected: {
+        title: 'RTT probe disconnected',
+        detail: 'Open the RTT page to choose and connect a debug probe. Diagnostics will not request permission automatically.',
+      },
+      experimental: {
+        title: 'RTT is experimental',
+        detail: 'Compatibility varies by probe and firmware. Run the hardware self-check before relying on it.',
+      },
+      breakpoints: {
+        title: 'Breakpoint slots need attention',
+        detail: 'The current breakpoint configuration may be close to the hardware slot limit.',
+      },
+      selfCheck: {
+        title: 'Hardware self-check failed',
+        detail: 'The latest RTT hardware self-check contains failed checks.',
+      },
+    },
+    shell: {
+      serialDisconnected: {
+        title: 'Shell serial is disconnected',
+        detail: 'Shell command sending depends on a serial connection. Connect a device from the Serial page first.',
+      },
+      outputPaused: {
+        title: 'Shell output is paused',
+        detail: 'Paused output will not auto-scroll with new data, which can look like the device stopped responding.',
+      },
+      dangerousCommand: {
+        title: 'Dangerous command awaiting confirmation',
+        detail: 'Shell detected a potentially dangerous command and needs manual confirmation before running it.',
+      },
+      lastError: {
+        title: 'Recent Shell error output',
+        detail: 'Recent terminal output contains an error line.',
+      },
+      ready: {
+        title: 'Shell looks healthy',
+        detail: 'Shell has no paused output, pending confirmation, or recent error output.',
+      },
+    },
+    chart: {
+      notCollecting: {
+        title: 'Chart is not collecting',
+        detail: 'Collection is stopped, so the chart will not append new live data.',
+      },
+      noEnabledChannel: {
+        title: 'No enabled channels',
+        detail: 'Enable at least one channel before collected data can appear on the chart.',
+      },
+      serialDisconnected: {
+        title: 'Serial data source disconnected',
+        detail: 'A chart channel uses the serial data source, but serial is not connected.',
+      },
+      emptyData: {
+        title: 'Collecting with no data points',
+        detail: 'Collection has started but the data point list is still empty. Check parse rules and input data.',
+      },
+      replaying: {
+        title: 'Chart is replaying data',
+        detail: 'The chart is showing replay data, so live collection state may differ from what you see.',
+      },
+      active: {
+        title: 'Chart looks healthy',
+        detail: 'Chart channel and data point state do not show an obvious issue.',
+      },
+    },
+  },
   rtt: {
     connect: 'Connect',
     disconnect: 'Disconnect',

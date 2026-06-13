@@ -104,6 +104,7 @@ export function useSerialMultiSession(options: UseSerialMultiSessionOptions) {
   function refreshRuntimeSessionStats(runtime: SerialSessionRuntime): void {
     serialSessionController.updateSessionStats(runtime.session.id, runtime.state.stats)
     runtime.session.connectionLabel = runtime.state.connectionLabel
+    runtimeRevision.value++
     syncSerialSessionState()
   }
 

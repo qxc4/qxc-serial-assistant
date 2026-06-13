@@ -4,6 +4,21 @@ import { useSettingsStore } from '../stores/settings'
 /** 校验位类型 */
 type ParityType = 'none' | 'even' | 'odd'
 
+export type SerialErrorCode =
+  | 'unsupported'
+  | 'connect-failed'
+  | 'reconnect-unavailable'
+  | 'reconnect-port-missing'
+  | 'reconnect-failed'
+  | 'auto-reconnect-failed'
+
+export interface SerialError {
+  code: SerialErrorCode
+  message: string
+  detail?: string
+  timestamp: number
+}
+
 /** 最大保留数据条数（环形缓冲区容量） */
 const MAX_DATA_ENTRIES = 10000
 
@@ -146,6 +161,17 @@ let lastConnectConfig: { baudRate: number; dataBits: number; stopBits: number; p
 const lastSelectedPort = ref<SerialPort | null>(null)
 /** 是否有可重新启用的串口 */
 const canReconnect = ref(false)
+const lastSerialError = ref<SerialError | null>(null)
+
+function getErrorDetail(error: unknown): string | undefined {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return undefined
+}
+
+function clearSerialError(): void {
+  lastSerialError.value = null
+}
 
 /** 清空发送队列并拒绝所有待发送请求 */
 function rejectPendingSends(reason: string): void {
@@ -170,6 +196,16 @@ export function useSerial() {
     stopBits.value = newDefaults.stopBits
     parity.value = newDefaults.parity
   }, { deep: true })
+
+  function recordSerialError(code: SerialErrorCode, message: string, detail?: string): void {
+    lastSerialError.value = {
+      code,
+      message,
+      detail,
+      timestamp: Date.now(),
+    }
+    store.showToast(message)
+  }
 
   /**
    * 根据编码模式解码字节数据（优化版）
@@ -305,11 +341,15 @@ export function useSerial() {
    */
   const connect = async () => {
     if (!isSupported.value) {
-      alert('您的浏览器不支持 Web Serial API。请使用较新版本的 Chrome 或 Edge。')
+      recordSerialError(
+        'unsupported',
+        '您的浏览器不支持 Web Serial API。请使用较新版本的 Chrome 或 Edge。'
+      )
       return
     }
 
     try {
+      clearSerialError()
       port.value = await navigator.serial.requestPort()
       await port.value.open({ 
         baudRate: baudRate.value,
@@ -338,7 +378,11 @@ export function useSerial() {
       readLoop()
     } catch (error) {
       console.error('连接串口失败:', error)
-      alert('连接失败，请检查串口是否被占用或未授权')
+      recordSerialError(
+        'connect-failed',
+        '连接失败，请检查串口是否被占用或未授权',
+        getErrorDetail(error)
+      )
     }
   }
 
@@ -390,15 +434,16 @@ export function useSerial() {
    */
   const reconnect = async () => {
     if (!lastSelectedPort.value) {
-      alert('没有可重新启用的串口')
+      recordSerialError('reconnect-unavailable', '没有可重新启用的串口')
       return
     }
 
     try {
+      clearSerialError()
       // 检查串口是否仍然可用
       const ports = await navigator.serial.getPorts()
       if (!ports.includes(lastSelectedPort.value)) {
-        alert('之前的串口设备已断开，请重新选择')
+        recordSerialError('reconnect-port-missing', '之前的串口设备已断开，请重新选择')
         lastSelectedPort.value = null
         canReconnect.value = false
         return
@@ -435,7 +480,11 @@ export function useSerial() {
       readLoop()
     } catch (error) {
       console.error('重新启用串口失败:', error)
-      alert('重新启用失败，请重新选择串口')
+      recordSerialError(
+        'reconnect-failed',
+        '重新启用失败，请重新选择串口',
+        getErrorDetail(error)
+      )
       canReconnect.value = false
     }
   }
@@ -513,6 +562,7 @@ export function useSerial() {
           const reconnected = await attemptReconnect()
           if (!reconnected) {
             console.error('自动重连失败')
+            recordSerialError('auto-reconnect-failed', '自动重连失败，请重新连接串口')
           }
           return
         }
@@ -696,6 +746,8 @@ export function useSerial() {
     reconnect,
     send,
     clearData,
+    lastSerialError,
+    clearSerialError,
     exportData,
     redecodeAllData,
     onDataReceive
