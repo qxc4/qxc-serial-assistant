@@ -24,3 +24,13 @@ export function createSerialLogRows(items: SerialLogSourceEntry[]): SerialLogDis
     }))
   })
 }
+
+export function serializeSerialLogEntries(
+  items: SerialLogSourceEntry[],
+  formatTimestamp: (timestamp: number) => string,
+): string {
+  return items.map(item => {
+    const direction = item.direction === 'rx' ? 'RX' : 'TX'
+    return `[${formatTimestamp(item.timestamp)}] ${direction}: ${item.data}`
+  }).join('\n')
+}

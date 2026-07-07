@@ -15,6 +15,7 @@ import {
   resolveLineEndingValue,
   summarizeSerialSession,
   filterSerialLogEntries,
+  serializeSerialLogEntries,
   updateSerialSearchHistory,
   useSerialMultiSession,
   useSerialReplay,
@@ -265,10 +266,7 @@ function exportActiveSerialData(): void {
   }
   const dataArray = activeSessionLogs.value
   if (!dataArray.length) return
-  const logContent = dataArray.map(item => {
-    const direction = item.direction === 'rx' ? 'RX' : 'TX'
-    return `[${formatTimestamp(item.timestamp)}] ${direction}: ${item.data}`
-  }).join('\n')
+  const logContent = serializeSerialLogEntries(dataArray, formatTimestamp)
   const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -480,6 +478,13 @@ const formatTimestamp = (timestamp: number) => {
   return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}.${date.getMilliseconds().toString().padStart(3, '0')}`
 }
 
+async function copyActiveSerialData(): Promise<void> {
+  const logContent = serializeSerialLogEntries(activeSessionLogs.value, formatTimestamp)
+  if (!logContent) return
+  await navigator.clipboard.writeText(logContent)
+  settingsStore.showToast(t('settings.copied'))
+}
+
 // Send Panel states
 const sendInput = ref('')
 const isHexSend = ref(false)
@@ -671,6 +676,13 @@ function handleKeyboardShortcuts(event: KeyboardEvent) {
   const activeTag = (document.activeElement as HTMLElement)?.tagName
   const isInputFocused = activeTag ? INPUT_TAGS.has(activeTag) : false
   const cached = cachedShortcuts.value
+
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'a') {
+    event.preventDefault()
+    void copyActiveSerialData()
+    keyResponseTimer.end()
+    return
+  }
   
   if (matchesShortcutFast(event, cached.send)) {
     event.preventDefault()
