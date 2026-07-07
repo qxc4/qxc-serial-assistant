@@ -59,6 +59,25 @@ describe('useSerialMultiSession', () => {
     expect(session.activeSessionLogs.value).toEqual(defaultLogs.value)
   })
 
+  it('refreshes active runtime connection state after connect and disconnect', async () => {
+    const session = useSerialMultiSession({
+      defaultLogs,
+      ...defaultStats,
+      isConnected: ref(false),
+      showToast: () => undefined,
+      createTransport: () => createMockSerialSessionTransport('Mock 2'),
+    })
+
+    session.addSerialSessionSlot()
+    expect(session.isActiveSessionConnected.value).toBe(false)
+
+    await session.connectActiveSerialSession()
+    expect(session.isActiveSessionConnected.value).toBe(true)
+
+    await session.disconnectActiveSerialSession()
+    expect(session.isActiveSessionConnected.value).toBe(false)
+  })
+
   it('removes runtime sessions without removing the default session', () => {
     const session = useSerialMultiSession({
       defaultLogs,

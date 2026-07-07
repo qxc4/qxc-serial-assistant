@@ -16,6 +16,7 @@ import {
   Settings,
   SquareTerminal,
   Search,
+  Stethoscope,
   Sun,
   Terminal,
   User,
@@ -26,6 +27,15 @@ import {
 import { useSettingsStore } from './stores/settings'
 import { useI18n } from './composables/useI18n'
 import DonateModal from './components/DonateModal.vue'
+import GlobalDiagnosticCard from './components/GlobalDiagnosticCard.vue'
+import {
+  buildPlatformDiagnostics,
+  createDiagnosticSnapshot,
+  setModuleDiagnostics,
+  useGlobalDiagnostics,
+  type DiagnosticItem,
+  type DiagnosticModule,
+} from './features/diagnostics/globalDiagnostics'
 
 type NavItem = {
   path: string
@@ -62,9 +72,11 @@ const { t, setLocale } = useI18n()
 
 const showDonateModal = ref(false)
 const showCommandPalette = ref(false)
+const showDiagnostics = ref(false)
 const commandQuery = ref('')
 const selectedCommandIndex = ref(0)
 const commandSearchInputRef = ref<HTMLInputElement | null>(null)
+const globalDiagnostics = useGlobalDiagnostics()
 
 const navGroups: NavGroup[] = [
   {
@@ -114,6 +126,77 @@ const capabilityChips = computed<CapabilityChip[]>(() => [
   },
 ])
 
+const diagnosticRoutes: Record<Exclude<DiagnosticModule, 'platform'>, string> = {
+  serial: '/',
+  modbus: '/modbus',
+  rtt: '/rtt',
+  shell: '/shell',
+  chart: '/chart',
+}
+
+const diagnosticActionKeys: Record<Exclude<DiagnosticModule, 'platform'>, string> = {
+  serial: 'diagnostics.actions.openSerial',
+  modbus: 'diagnostics.actions.openModbus',
+  rtt: 'diagnostics.actions.openRtt',
+  shell: 'diagnostics.actions.openShell',
+  chart: 'diagnostics.actions.openChart',
+}
+
+const diagnosticModuleLabels = computed<Record<DiagnosticModule, string>>(() => ({
+  platform: t('shell.capabilities'),
+  serial: t('nav.serial'),
+  modbus: t('nav.modbus'),
+  rtt: t('nav.rtt'),
+  shell: t('nav.shell'),
+  chart: t('nav.chart'),
+}))
+
+const platformDiagnostics = computed(() => {
+  const serialSupported = capabilityChips.value.find(chip => chip.key === 'web-serial')?.supported ?? false
+  const usbSupported = capabilityChips.value.find(chip => chip.key === 'web-usb')?.supported ?? false
+  return buildPlatformDiagnostics({ serialSupported, usbSupported }, t)
+})
+
+watch(platformDiagnostics, items => {
+  setModuleDiagnostics('platform', items)
+}, { immediate: true })
+
+const diagnosticSnapshot = computed(() => {
+  const baseSnapshot = globalDiagnostics.snapshot.value
+  const reportedModules = new Set(baseSnapshot.items.map(item => item.module))
+  const idleItems = (Object.keys(diagnosticRoutes) as Array<Exclude<DiagnosticModule, 'platform'>>)
+    .filter(module => !reportedModules.has(module))
+    .map<DiagnosticItem>(module => ({
+      id: `${module}-unvisited`,
+      module,
+      tone: 'idle',
+      title: t('diagnostics.idleModule.title', { module: diagnosticModuleLabels.value[module] }),
+      detail: t('diagnostics.idleModule.detail'),
+      actionLabel: t(diagnosticActionKeys[module]),
+      route: diagnosticRoutes[module],
+      priority: 0,
+    }))
+
+  return createDiagnosticSnapshot([...baseSnapshot.items, ...idleItems], baseSnapshot.generatedAt)
+})
+
+const diagnosticIssueCount = computed(() =>
+  diagnosticSnapshot.value.items.filter(item => item.tone === 'error' || item.tone === 'warn').length
+)
+
+const diagnosticSummaryText = computed(() => {
+  if (diagnosticSnapshot.value.highestTone === 'error') {
+    return t('diagnostics.summary.error', { count: diagnosticIssueCount.value })
+  }
+  if (diagnosticSnapshot.value.highestTone === 'warn') {
+    return t('diagnostics.summary.warn', { count: diagnosticIssueCount.value })
+  }
+  if (diagnosticSnapshot.value.highestTone === 'idle') {
+    return t('diagnostics.summary.idle')
+  }
+  return t('diagnostics.summary.ok')
+})
+
 const themeIcon = computed(() => {
   if (settingsStore.config.theme === 'dark') return Moon
   if (settingsStore.config.theme === 'light') return Sun
@@ -132,6 +215,17 @@ const commandItems = computed<CommandPaletteItem[]>(() => [
       closeCommandPalette()
     },
   })),
+  {
+    id: 'diagnostics',
+    title: t('diagnostics.title'),
+    description: diagnosticSummaryText.value,
+    icon: Stethoscope,
+    keywords: `${t('diagnostics.title')} diagnostics health status`,
+    action: () => {
+      showDiagnostics.value = true
+      closeCommandPalette()
+    },
+  },
   {
     id: 'theme',
     title: t('shell.toggleTheme'),
@@ -191,6 +285,11 @@ function cycleTheme(): void {
 
 function toggleLanguage(): void {
   setLocale(settingsStore.config.language === 'zh-CN' ? 'en-US' : 'zh-CN')
+}
+
+function handleDiagnosticNavigate(targetRoute: string): void {
+  router.push(targetRoute)
+  showDiagnostics.value = false
 }
 
 function openCommandPalette(): void {
@@ -375,6 +474,14 @@ onUnmounted(() => {
               </span>
             </span>
           </div>
+
+          <GlobalDiagnosticCard
+            v-model="showDiagnostics"
+            :snapshot="diagnosticSnapshot"
+            :module-labels="diagnosticModuleLabels"
+            :t="t"
+            @navigate="handleDiagnosticNavigate"
+          />
 
           <div class="apple-chip flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800">
             <button

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted, watchEffect } from 'vue'
 import { 
   FileCode, 
   Trash2, 
@@ -47,6 +47,7 @@ import {
   type ModbusPollingTask,
   type RegisterValue,
 } from '../features/modbus'
+import { buildModbusDiagnostics, setModuleDiagnostics } from '../features/diagnostics/globalDiagnostics'
 
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
@@ -144,6 +145,17 @@ const taskPollingSummary = computed(() => ({
   cycle: pollingTaskCycle.value,
 }))
 const pollingHealthSummary = computed(() => createModbusPollingHealthSummary(pollingTasks.value))
+watchEffect(() => {
+  setModuleDiagnostics('modbus', buildModbusDiagnostics({
+    pipeline: pipelineDiagnostics.value,
+    responseGap: pollingResponseGap.value,
+    pollingHealth: {
+      tone: pollingHealthSummary.value.tone,
+      title: pollingHealthSummary.value.label,
+      detail: pollingHealthSummary.value.detail,
+    },
+  }, t))
+})
 const filteredPollingResults = computed(() => filterModbusPollingResults(pollingResults.value, pollingResultFilter.value))
 const activeParseResult = computed(() => {
   return parseResults.value.find(item => item.id === expandedResult.value) || parseResults.value[0] || null

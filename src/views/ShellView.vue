@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, watchEffect } from 'vue'
 import { useShell, type TerminalLine } from '../composables/useShell'
 import { useSerial } from '../composables/useSerial'
 import { useI18n } from '../composables/useI18n'
@@ -9,6 +9,7 @@ import {
   removeShellFavoriteCommand,
   serializeShellFavoriteCommands,
 } from '../features/shell'
+import { buildShellDiagnostics, setModuleDiagnostics } from '../features/diagnostics/globalDiagnostics'
 
 const {
   lines,
@@ -38,6 +39,18 @@ const {
 
 const { isConnected, connect, disconnect, baudRate, onDataReceive } = useSerial()
 const { t } = useI18n()
+const lastShellErrorLine = computed(() => {
+  return [...lines.value].reverse().find(line => line.type === 'error')?.text
+})
+
+watchEffect(() => {
+  setModuleDiagnostics('shell', buildShellDiagnostics({
+    isSerialConnected: isConnected.value,
+    outputPaused: outputPaused.value,
+    hasPendingDangerousCommand: Boolean(pendingConfirmation.value),
+    lastErrorLine: lastShellErrorLine.value,
+  }, t))
+})
 
 /** 命令输入 */
 const commandInput = ref('')

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onUnmounted, computed, shallowRef } from 'vue'
+import { ref, watch, watchEffect, nextTick, onMounted, onUnmounted, computed, shallowRef } from 'vue'
 import { useSerial } from '../composables/useSerial'
 import { useCommandGroup } from '../composables/useCommandGroup'
 import { useSettingsStore } from '../stores/settings'
@@ -15,6 +15,7 @@ import {
   resolveLineEndingValue,
   summarizeSerialSession,
   filterSerialLogEntries,
+  serializeSerialLogEntries,
   updateSerialSearchHistory,
   useSerialMultiSession,
   useSerialReplay,
@@ -29,6 +30,7 @@ import SerialTopToolbar from '../components/serial/SerialTopToolbar.vue'
 import SerialConnectionDrawer from '../components/serial/SerialConnectionDrawer.vue'
 import SerialQuickCommandPanel from '../components/serial/SerialQuickCommandPanel.vue'
 import SerialCommandGroupPanel from '../components/serial/SerialCommandGroupPanel.vue'
+import { buildSerialDiagnostics, setModuleDiagnostics } from '../features/diagnostics/globalDiagnostics'
 import { 
   matchesShortcutFast, 
   preparseShortcuts,
@@ -74,7 +76,8 @@ const {
   clearData,
   exportData,
   redecodeAllData,
-  onDataReceive
+  onDataReceive,
+  lastSerialError
 } = useSerial()
 
 // Layout & View states - 从 store 获取持久化状态
@@ -228,6 +231,17 @@ const {
   }),
   showToast: message => settingsStore.showToast(message),
 })
+watchEffect(() => {
+  setModuleDiagnostics('serial', buildSerialDiagnostics({
+    isSupported: isSupported.value,
+    isConnected: isConnected.value || isActiveSessionConnected.value,
+    canReconnect: canReconnect.value,
+    isReconnecting: isReconnecting.value,
+    session: serialSessionDiagnostics.value,
+    lastError: lastSerialError.value,
+    now: serialDiagnosticNow.value,
+  }, t))
+})
 const activeDataCount = computed(() => activeSessionLogs.value.length)
 const activeConnectionSummary = computed(() => {
   if (!activeRuntime.value) return connectionSummary.value
@@ -252,10 +266,7 @@ function exportActiveSerialData(): void {
   }
   const dataArray = activeSessionLogs.value
   if (!dataArray.length) return
-  const logContent = dataArray.map(item => {
-    const direction = item.direction === 'rx' ? 'RX' : 'TX'
-    return `[${formatTimestamp(item.timestamp)}] ${direction}: ${item.data}`
-  }).join('\n')
+  const logContent = serializeSerialLogEntries(dataArray, formatTimestamp)
   const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -341,6 +352,8 @@ async function sendViaActiveSession(data: string, isHex = false): Promise<void> 
 }
 
 async function toggleActiveSessionConnection(): Promise<void> {
+  const wasConnected = activeRuntime.value?.state.isConnected ?? isConnected.value
+
   if (!activeRuntime.value) {
     if (isConnected.value) {
       await disconnect()
@@ -350,13 +363,15 @@ async function toggleActiveSessionConnection(): Promise<void> {
     } else {
       await connect()
     }
-    return
-  }
-
-  if (activeRuntime.value.state.isConnected) {
+  } else if (activeRuntime.value.state.isConnected) {
     await disconnectActiveSerialSession()
   } else {
     await connectActiveSerialSession()
+  }
+
+  const isNowConnected = activeRuntime.value?.state.isConnected ?? isConnected.value
+  if (!wasConnected && isNowConnected) {
+    showLeftPanel.value = false
   }
 }
 
@@ -461,6 +476,13 @@ function handleLoadGroup(groupId: string) {
 const formatTimestamp = (timestamp: number) => {
   const date = new Date(timestamp)
   return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}.${date.getMilliseconds().toString().padStart(3, '0')}`
+}
+
+async function copyActiveSerialData(): Promise<void> {
+  const logContent = serializeSerialLogEntries(activeSessionLogs.value, formatTimestamp)
+  if (!logContent) return
+  await navigator.clipboard.writeText(logContent)
+  settingsStore.showToast(t('settings.copied'))
 }
 
 // Send Panel states
@@ -654,6 +676,13 @@ function handleKeyboardShortcuts(event: KeyboardEvent) {
   const activeTag = (document.activeElement as HTMLElement)?.tagName
   const isInputFocused = activeTag ? INPUT_TAGS.has(activeTag) : false
   const cached = cachedShortcuts.value
+
+  if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'a') {
+    event.preventDefault()
+    void copyActiveSerialData()
+    keyResponseTimer.end()
+    return
+  }
   
   if (matchesShortcutFast(event, cached.send)) {
     event.preventDefault()

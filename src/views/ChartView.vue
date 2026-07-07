@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, computed, watch, watchEffect } from 'vue'
 import { 
   LineChart, 
   BarChart3, 
@@ -24,11 +24,12 @@ import { samplingFrequencyOptions, playbackSpeedOptions } from '../types/chart'
 import type { ChartChannelConfig } from '../stores/settings'
 import { measureSync, measureAsync } from '../composables/usePerformanceMonitor'
 import { exportChartWorkspaceConfig, parseChartWorkspaceConfigImport } from '../features/chart'
+import { buildChartDiagnostics, setModuleDiagnostics } from '../features/diagnostics/globalDiagnostics'
 
 const settingsStore = useSettingsStore()
 const { t } = useI18n()
 const chart = useChart()
-const { onDataReceive } = useSerial()
+const { onDataReceive, isConnected: isSerialConnected } = useSerial()
 
 /** 图表容器引用 */
 const chartContainer = ref<HTMLElement | null>(null)
@@ -79,6 +80,17 @@ const byteOrderOptions = computed(() => [
 const chartChannels = computed({
   get: () => settingsStore.config.chartChannels,
   set: (val) => { settingsStore.config.chartChannels = val }
+})
+
+watchEffect(() => {
+  setModuleDiagnostics('chart', buildChartDiagnostics({
+    isCollecting: chart.isCollecting.value,
+    enabledChannels: chartChannels.value.filter(channel => channel.enabled).length,
+    totalDataPoints: chart.dataPointCount.value,
+    source: chart.samplingConfig.value.dataSource,
+    isSerialConnected: isSerialConnected.value,
+    isReplaying: chart.isPlaying.value,
+  }, t))
 })
 
 /** 同步通道配置到图表 */
