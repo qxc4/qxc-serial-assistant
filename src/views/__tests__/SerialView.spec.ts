@@ -90,6 +90,12 @@ const BasicStub = {
   template: '<div />',
 }
 
+const SerialMiddleToolbarStub = {
+  inheritAttrs: false,
+  emits: ['copyData'],
+  template: '<button data-testid="copy-log" @click="$emit(\'copyData\')">copy</button>',
+}
+
 const mountedWrappers: ReturnType<typeof shallowMount>[] = []
 
 function installMatchMediaMock() {
@@ -126,7 +132,7 @@ function mountSerialView() {
         SerialTopToolbar: BasicStub,
         SerialLogPanel: BasicStub,
         SerialParseResultsPanel: BasicStub,
-        SerialMiddleToolbar: BasicStub,
+        SerialMiddleToolbar: SerialMiddleToolbarStub,
         SerialSendPanel: BasicStub,
         SerialQuickCommandPanel: BasicStub,
         SerialCommandGroupPanel: BasicStub,
@@ -192,5 +198,90 @@ describe('SerialView connection drawer', () => {
     expect(copied).toContain('TX: packet-80')
     expect(copied).not.toContain('connect')
     expect(copied.split('\n')).toHaveLength(80)
+  })
+
+  it('copies only complete serial logs when Ctrl+A is pressed outside inputs', async () => {
+    serialMock.receivedData.value = Array.from({ length: 80 }, (_, index) => ({
+      id: index + 1,
+      timestamp: 1_700_000_000_000 + index,
+      data: `packet-${index + 1}`,
+      direction: index % 2 === 0 ? 'rx' : 'tx',
+    }))
+    mountSerialView()
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'a',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    window.dispatchEvent(event)
+    await flushPromises()
+
+    const writeText = vi.mocked(navigator.clipboard.writeText)
+    expect(event.defaultPrevented).toBe(true)
+    expect(writeText).toHaveBeenCalledTimes(1)
+    const copied = writeText.mock.calls[0]?.[0] ?? ''
+    expect(copied).toContain('RX: packet-1')
+    expect(copied).toContain('TX: packet-80')
+    expect(copied).not.toContain('connect')
+    expect(copied.split('\n')).toHaveLength(80)
+  })
+
+  it('keeps Ctrl+A available for focused text inputs', async () => {
+    mountSerialView()
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+
+    const event = new KeyboardEvent('keydown', {
+      key: 'a',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    window.dispatchEvent(event)
+    await flushPromises()
+
+    expect(event.defaultPrevented).toBe(false)
+    expect(navigator.clipboard.writeText).not.toHaveBeenCalled()
+    document.body.removeChild(input)
+  })
+
+  it('copies only complete serial logs from the toolbar copy button', async () => {
+    serialMock.receivedData.value = Array.from({ length: 80 }, (_, index) => ({
+      id: index + 1,
+      timestamp: 1_700_000_000_000 + index,
+      data: `packet-${index + 1}`,
+      direction: index % 2 === 0 ? 'rx' : 'tx',
+    }))
+    const wrapper = mountSerialView()
+
+    await wrapper.get('[data-testid="copy-log"]').trigger('click')
+    await flushPromises()
+
+    const writeText = vi.mocked(navigator.clipboard.writeText)
+    expect(writeText).toHaveBeenCalledTimes(1)
+    const copied = writeText.mock.calls[0]?.[0] ?? ''
+    expect(copied).toContain('RX: packet-1')
+    expect(copied).toContain('TX: packet-80')
+    expect(copied).not.toContain('copy')
+    expect(copied.split('\n')).toHaveLength(80)
+  })
+
+  it('exposes complete serial logs in a hidden AI-readable textarea', () => {
+    serialMock.receivedData.value = Array.from({ length: 80 }, (_, index) => ({
+      id: index + 1,
+      timestamp: 1_700_000_000_000 + index,
+      data: `packet-${index + 1}`,
+      direction: index % 2 === 0 ? 'rx' : 'tx',
+    }))
+    const wrapper = mountSerialView()
+
+    const aiLog = wrapper.get<HTMLTextAreaElement>('[data-testid="serial-ai-log"]').element
+    expect(aiLog.value).toContain('RX: packet-1')
+    expect(aiLog.value).toContain('TX: packet-80')
+    expect(aiLog.value).not.toContain('copy')
+    expect(aiLog.value.split('\n')).toHaveLength(80)
   })
 })

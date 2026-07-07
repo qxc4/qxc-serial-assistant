@@ -187,6 +187,7 @@ export const zhCN = {
     resumeGroup: '继续',
     clearRx: '清空接收',
     clearTx: '清除发送',
+    copyLog: '复制日志',
     exportLog: '导出日志',
     displayMode: '显示模式',
     modeRx: '仅接收',

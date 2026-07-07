@@ -187,6 +187,7 @@ export const enUS = {
     resumeGroup: 'Resume',
     clearRx: 'Clear RX',
     clearTx: 'Clear TX',
+    copyLog: 'Copy Log',
     exportLog: 'Export Log',
     displayMode: 'Display Mode',
     modeRx: 'RX Only',

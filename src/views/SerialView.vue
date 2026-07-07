@@ -478,8 +478,10 @@ const formatTimestamp = (timestamp: number) => {
   return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:${date.getSeconds().toString().padStart(2, '0')}.${date.getMilliseconds().toString().padStart(3, '0')}`
 }
 
+const serializedActiveSerialData = computed(() => serializeSerialLogEntries(activeSessionLogs.value, formatTimestamp))
+
 async function copyActiveSerialData(): Promise<void> {
-  const logContent = serializeSerialLogEntries(activeSessionLogs.value, formatTimestamp)
+  const logContent = serializedActiveSerialData.value
   if (!logContent) return
   await navigator.clipboard.writeText(logContent)
   settingsStore.showToast(t('settings.copied'))
@@ -683,6 +685,13 @@ function handleKeyboardShortcuts(event: KeyboardEvent) {
     keyResponseTimer.end()
     return
   }
+
+  if (event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'a' && !isInputFocused) {
+    event.preventDefault()
+    void copyActiveSerialData()
+    keyResponseTimer.end()
+    return
+  }
   
   if (matchesShortcutFast(event, cached.send)) {
     event.preventDefault()
@@ -814,6 +823,15 @@ onUnmounted(cleanupButtonOptimizations)
 
 <template>
   <div class="apple-workbench flex flex-col h-full min-h-0 w-full overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans text-sm transition-colors">
+    <textarea
+      data-testid="serial-ai-log"
+      class="sr-only"
+      tabindex="-1"
+      aria-hidden="true"
+      readonly
+      :value="serializedActiveSerialData"
+    ></textarea>
+
     <!-- Toast Notification -->
     <div 
       v-if="settingsStore.toastVisible" 
@@ -919,6 +937,7 @@ onUnmounted(cleanupButtonOptimizations)
           :data-count="activeDataCount"
           :toolbar-expanded="toolbarExpanded"
           :t="t"
+          @copy-data="copyActiveSerialData"
           @export-data="exportActiveSerialData"
           @clear-data="clearActiveSerialData"
           @clear-tx="sendInput = ''"

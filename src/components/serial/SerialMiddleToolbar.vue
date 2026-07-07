@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ChevronRight, Columns, Download, Mic, Send, Trash2 } from 'lucide-vue-next'
+import { ChevronRight, Columns, Copy, Download, Mic, Send, Trash2 } from 'lucide-vue-next'
 
 type DisplayMode = 'rx' | 'tx' | 'mixed'
 type EncodingMode = 'utf8' | 'ascii' | 'gbk' | 'hex'
@@ -26,6 +26,7 @@ const emit = defineEmits<{
   'update:sendEncoding': [value: EncodingMode]
   'update:showTimestamp': [value: boolean]
   'update:autoScroll': [value: boolean]
+  copyData: []
   exportData: []
   clearData: []
   clearTx: []
@@ -164,6 +165,15 @@ const localAutoScroll = computed({
           </button>
           <button class="px-3 py-1.5 rounded border dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:bg-slate-700 text-xs flex items-center gap-1" @click="emit('exportData')">
             <Download class="w-3 h-3" /> {{ t('serial.exportLog') }}
+          </button>
+          <button
+            data-testid="serial-copy-log"
+            class="px-3 py-1.5 rounded border dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:bg-slate-700 text-xs flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
+            :disabled="dataCount === 0"
+            :title="t('serial.copyLog')"
+            @click="emit('copyData')"
+          >
+            <Copy class="w-3 h-3" /> {{ t('serial.copyLog') }}
           </button>
         </div>
       </Transition>
